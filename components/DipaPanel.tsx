@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { clsx } from "clsx";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Slider } from "@/components/ui/slider";
 import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 import type { TParsedQuery } from "@/app/api/query/schema";
+import logoDipam from "@/assets/logo_dipam.avif";
 import {
   Area,
   AreaChart,
@@ -136,6 +136,7 @@ const CATEGORIES = [
 ] as const;
 
 const MONTHS = ["2025-09", "2025-10", "2025-11", "2025-12"] as const;
+const DEFAULT_MONTH: (typeof MONTHS)[number] = "2025-11";
 const USE_LLM = process.env.NEXT_PUBLIC_USE_LLM === "true";
 
 function seededRandom(seed: number) {
@@ -766,7 +767,13 @@ function QuickExamples({ onSelect }: { onSelect: (example: string) => void }) {
   return (
     <div className="flex flex-wrap gap-2">
       {EXAMPLES.map((example) => (
-        <Button key={example} variant="outline" size="sm" onClick={() => onSelect(example)}>
+        <Button
+          key={example}
+          variant="outline"
+          size="sm"
+          className="border-sky-400/40 bg-slate-900/40 text-sky-100 hover:bg-slate-900/60"
+          onClick={() => onSelect(example)}
+        >
           {example}
         </Button>
       ))}
@@ -780,14 +787,7 @@ export default function DipaPanel() {
   const [busy, setBusy] = useState(false);
   const [activeResult, setActiveResult] = useState<QueryResult | undefined>();
   const [activeInsightIndex, setActiveInsightIndex] = useState<number | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<(typeof MONTHS)[number]>("2025-11");
-  const [selectedConsultor, setSelectedConsultor] = useState<string>("S1");
-  const [targetAdjustment, setTargetAdjustment] = useState(0);
-  const [scenarioGrowth, setScenarioGrowth] = useState(3);
-  const [scenarioDiscount, setScenarioDiscount] = useState(5);
   const [secondaryQuestionQueued, setSecondaryQuestionQueued] = useState(false);
-
-  const consultoresOptions = useMemo(() => DATA.sellers.map((seller) => ({ value: seller.id, label: seller.name })), []);
   const assistantInsights = useMemo(() => {
     return answers
       .map((message, index) => ({ message, index }))
@@ -807,7 +807,7 @@ export default function DipaPanel() {
   const ask = async (input: string) => {
     if (!input.trim()) return;
 
-    const fallbackMonth = extractMonth(input, selectedMonth);
+    const fallbackMonth = extractMonth(input, DEFAULT_MONTH);
     const fallbackIntent = intentFromQuery(input);
 
     setBusy(true);
@@ -902,80 +902,73 @@ export default function DipaPanel() {
     }
   }, [activeInsightIndex, assistantInsights]);
 
-  const handleScenarioUpdate = () => {
-    const seller = DATA.sellers.find((item) => item.id === selectedConsultor);
-    if (!seller) return;
-    const delta = seller.monthlyTarget * (targetAdjustment / 100);
-    const message = `Novo alvo para ${seller.name}: ${formatCurrency(seller.monthlyTarget + delta)} (${targetAdjustment.toFixed(
-      0
-    )}% vs atual).`;
-    setAnswers((state) => [...state, { role: "assistant", text: message }]);
-  };
-
-  const handleWhatIf = () => {
-    const message = `Cenário what-if: crescimento ${scenarioGrowth}% com desconto médio ${scenarioDiscount}%.`;
-    setAnswers((state) => [...state, { role: "assistant", text: message }]);
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-sky-50">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-3 pb-8">
-          <span className="inline-flex w-fit items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-emerald-700">
-            DIPA • Assistente de IA
-          </span>
-          <div>
-            <h1 className="text-3xl font-semibold text-slate-900 sm:text-[2.4rem] sm:leading-tight">Painel de Performance Dipam</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600">
-              Compare metas vs. realizado, identifique oportunidades de cross-sell e rode simulações interativas usando nossa interface generativa.
-            </p>
+        <header className="flex flex-col gap-6 pb-10">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-lg ring-1 ring-sky-200">
+                <Image src={logoDipam} alt="Logotipo Dipam" className="h-12 w-12 object-contain" priority />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-sky-500">Assistente Generativo</p>
+                <h1 className="text-3xl font-semibold text-slate-900 sm:text-[2.4rem] sm:leading-tight">Painel de Performance Dipam</h1>
+              </div>
+            </div>
+            <div className="max-w-sm text-sm text-slate-600">
+              Combine prompts naturais com filtros estruturados para explorar metas, vendas e oportunidades comerciais em segundos.
+            </div>
           </div>
         </header>
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,480px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)]">
-          <div className="flex flex-col gap-6">
-            <Card className="border-transparent bg-white shadow-xl shadow-emerald-100/40">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,580px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,620px)_minmax(0,1fr)]">
+          <div className="flex flex-col">
+            <Card className="h-full border-transparent bg-slate-950 text-white shadow-2xl shadow-sky-200/40">
               <CardContent className="flex h-full flex-col gap-6">
-                <div className="space-y-1">
-                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-600">Interface generativa</p>
-                  <h2 className="text-xl font-semibold text-slate-900">Converse com o DIPA</h2>
-                  <p className="text-sm text-slate-500">
-                    Faça perguntas abertas, refine e combine filtros. Os resultados são exibidos ao lado e podem ser revisitados a qualquer momento.
-                  </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-sky-300">Laboratório de prompts</p>
+                    <h2 className="text-xl font-semibold text-white">Converse com o DIPA</h2>
+                    <p className="text-sm text-slate-300">
+                      Faça perguntas abertas, refine filtros e acompanhe o preview ao lado em tempo real.
+                    </p>
+                  </div>
+                  <Sparkles className="h-5 w-5 text-sky-300" />
                 </div>
 
                 <div className="flex-1 space-y-3">
-                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-slate-500">
+                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-sky-200">
                     <span>Histórico</span>
                     <span>{answers.length} mensagens</span>
                   </div>
-                  <div className="relative h-[320px] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-                    <div className="space-y-3">
+                  <div className="relative h-[360px] overflow-y-auto rounded-2xl border border-sky-500/25 bg-slate-900/70 p-5">
+                    <div className="space-y-4">
                       {answers.length === 0 ? (
-                        <p className="text-sm text-slate-500">
-                          Nenhuma interação ainda. Use um exemplo abaixo ou descreva o insight que deseja gerar.
+                        <p className="text-sm text-slate-300">
+                          Nenhuma interação ainda. Use uma sugestão abaixo ou descreva o insight que deseja gerar.
                         </p>
                       ) : (
                         answers.map((message, index) => (
                           <div key={index} className={clsx("flex", message.role === "user" ? "justify-end" : "justify-start")}>
                             <div
                               className={clsx(
-                                "max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-sm transition",
+                                "max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-lg transition",
                                 message.role === "user"
-                                  ? "bg-emerald-600 text-white"
-                                  : "bg-white text-slate-700 ring-1 ring-inset ring-slate-200"
+                                  ? "bg-sky-500 text-white"
+                                  : "bg-slate-950/80 text-slate-100 ring-1 ring-sky-500/25"
                               )}
                             >
                               <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-[0.18em]">
-                                <span className={clsx(message.role === "user" ? "text-emerald-100" : "text-emerald-600")}>
+                                <span className={clsx(message.role === "user" ? "text-sky-100" : "text-sky-300")}>
                                   {message.role === "user" ? "Você" : "DIPA"}
                                 </span>
-                                <span className={clsx("text-slate-400", message.role === "user" ? "text-emerald-200/80" : "")}>•</span>
-                                <span className={clsx(message.role === "user" ? "text-emerald-100/80" : "text-slate-400")}>Agora</span>
+                                <span className={clsx("text-slate-500", message.role === "user" ? "text-sky-200/80" : "")}>•</span>
+                                <span className="text-slate-500">Agora</span>
                               </div>
                               <p className="leading-relaxed">{message.text}</p>
                               {message.role === "assistant" && message.result ? (
-                                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-300">
                                   <Button
                                     variant={index === activeInsightIndex ? "default" : "outline"}
                                     size="sm"
@@ -999,8 +992,8 @@ export default function DipaPanel() {
                       )}
                     </div>
                     {busy && (
-                      <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs text-slate-500 shadow">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-500" />
+                      <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center gap-2 rounded-full bg-slate-950/90 px-3 py-1 text-xs text-slate-300 shadow">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-300" />
                         Gerando insight...
                       </div>
                     )}
@@ -1008,7 +1001,7 @@ export default function DipaPanel() {
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Exemplos rápidos</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-sky-300">Sugestões</p>
                   <QuickExamples
                     onSelect={(value) => {
                       setQuestion(value);
@@ -1028,7 +1021,7 @@ export default function DipaPanel() {
                     value={question}
                     onChange={(event) => setQuestion(event.target.value)}
                     placeholder="Comparar meta vs realizado por vendedor em 2025-11 na Grande Porto Alegre"
-                    className="min-h-[120px] w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed shadow-inner focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                    className="min-h-[180px] w-full resize-y rounded-2xl border border-sky-500/30 bg-slate-950/80 px-4 py-3 text-sm leading-relaxed text-white shadow-inner placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300"
                   />
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <span className="text-xs text-slate-400">{question.length} caracteres</span>
@@ -1042,7 +1035,7 @@ export default function DipaPanel() {
                           void ask(example);
                         }}
                       >
-                        <Sparkles className="mr-2 h-4 w-4 text-emerald-500" />
+                        <Sparkles className="mr-2 h-4 w-4 text-sky-300" />
                         Sugestão
                       </Button>
                       <Button type="submit" disabled={busy} className="min-w-[140px]">
@@ -1063,118 +1056,17 @@ export default function DipaPanel() {
                 </form>
               </CardContent>
             </Card>
-
-            <Card className="border-transparent bg-white/90 shadow-sm shadow-emerald-100/40 backdrop-blur">
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Ajustes rápidos</p>
-                    <h2 className="text-lg font-semibold text-slate-900">Metas & What-if</h2>
-                  </div>
-                  <Sparkles className="h-5 w-5 text-emerald-500" />
-                </div>
-                <Tabs defaultValue="metas">
-                  <div className="space-y-4">
-                    <TabsList className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
-                      <TabsTrigger value="metas" className="rounded-lg bg-white text-sm font-medium text-slate-700 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-                        Metas
-                      </TabsTrigger>
-                      <TabsTrigger value="whatif" className="rounded-lg bg-white text-sm font-medium text-slate-700 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-                        What-if
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="metas" className="space-y-5">
-                      <div className="space-y-2">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Consultor</p>
-                        <select
-                          value={selectedConsultor}
-                          onChange={(event) => setSelectedConsultor(event.target.value)}
-                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        >
-                          {consultoresOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm text-slate-600">
-                          <span>Revisar meta (%)</span>
-                          <span className="font-semibold text-slate-800">{targetAdjustment}%</span>
-                        </div>
-                        <Slider defaultValue={[0]} max={25} step={1} onValueChange={([value]: number[]) => setTargetAdjustment(value)} />
-                      </div>
-                      <Button variant="outline" className="w-full" onClick={handleScenarioUpdate}>
-                        Atualizar meta
-                      </Button>
-                    </TabsContent>
-
-                    <TabsContent value="whatif" className="space-y-5">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm text-slate-600">
-                          <span>Crescimento projetado</span>
-                          <span className="font-semibold text-slate-800">{scenarioGrowth}%</span>
-                        </div>
-                        <Slider defaultValue={[scenarioGrowth]} max={20} step={1} onValueChange={([value]: number[]) => setScenarioGrowth(value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm text-slate-600">
-                          <span>Desconto médio</span>
-                          <span className="font-semibold text-slate-800">{scenarioDiscount}%</span>
-                        </div>
-                        <Slider defaultValue={[scenarioDiscount]} max={20} step={1} onValueChange={([value]: number[]) => setScenarioDiscount(value)} />
-                      </div>
-                      <Button variant="outline" className="w-full" onClick={handleWhatIf}>
-                        Simular cenário
-                      </Button>
-                    </TabsContent>
-                  </div>
-                </Tabs>
-              </CardContent>
-            </Card>
-
-            <Card className="border-transparent bg-white/90 shadow-sm shadow-emerald-100/40 backdrop-blur">
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Linha do tempo</p>
-                  <span className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white">
-                    Histórico
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {MONTHS.map((month) => (
-                    <Button
-                      key={month}
-                      variant={month === selectedMonth ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSelectedMonth(month)}
-                      className={clsx(
-                        "h-10 rounded-xl text-sm font-medium",
-                        month === selectedMonth ? "bg-emerald-600 hover:bg-emerald-700" : "border-slate-200 text-slate-600 hover:border-emerald-300 hover:text-emerald-600"
-                      )}
-                    >
-                      {month}
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-xs text-slate-500">
-                  Os resultados utilizam o mês destacado como referência padrão e podem ser ajustados pelo parser LLM quando informado no prompt.
-                </p>
-              </CardContent>
-            </Card>
           </div>
 
           <div className="flex flex-col gap-6">
-            <Card className="border-transparent bg-white shadow-lg shadow-emerald-100/60">
+            <Card className="border-transparent bg-white shadow-lg shadow-sky-100/70">
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-emerald-600">Insights gerados</p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-sky-600">Insights gerados</p>
                     <h2 className="text-lg font-semibold text-slate-900">Pré-visualização</h2>
                   </div>
-                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
                     {assistantInsights.length} ativos
                   </span>
                 </div>
@@ -1190,8 +1082,8 @@ export default function DipaPanel() {
                         className={clsx(
                           "rounded-full border px-3 py-1 text-xs font-medium transition",
                           entry.index === activeInsightIndex
-                            ? "border-transparent bg-emerald-600 text-white shadow"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-600"
+                            ? "border-transparent bg-sky-600 text-white shadow"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:text-sky-600"
                         )}
                       >
                         {entry.question.length > 48 ? `${entry.question.slice(0, 48)}…` : entry.question}
@@ -1212,7 +1104,7 @@ export default function DipaPanel() {
                         <h3 className="text-xl font-semibold text-slate-900">{INTENT_LABELS[activeResult.intent]}</h3>
                         <p className="mt-1 text-sm text-slate-500">{activeResult.narrative}</p>
                       </div>
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                      <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
                         {activeResult.month}
                       </span>
                     </div>
@@ -1224,11 +1116,11 @@ export default function DipaPanel() {
                 <ResultTable result={activeResult} />
               </div>
             ) : (
-              <Card className="border-dashed border-emerald-200 bg-white/70">
+              <Card className="border-dashed border-sky-200 bg-white/70">
                 <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-                  <Sparkles className="h-10 w-10 text-emerald-500" />
-                  <h2 className="text-lg font-semibold text-emerald-900">Nenhum insight selecionado</h2>
-                  <p className="max-w-md text-sm text-emerald-800">
+                  <Sparkles className="h-10 w-10 text-sky-500" />
+                  <h2 className="text-lg font-semibold text-sky-900">Nenhum insight selecionado</h2>
+                  <p className="max-w-md text-sm text-sky-800">
                     Gere um prompt no painel ao lado para visualizar KPIs, gráficos e detalhes tabulares aqui.
                   </p>
                   <Button onClick={() => void ask(question)} className="mt-2">
