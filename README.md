@@ -1,11 +1,27 @@
-# DIPA — Dipam Intelligence & Performance Assistant (Mockup)
 
-Este pacote contém:
-- **app/DipaPanel.tsx**: componente React (stub pronto para substituição pelo código do canvas).
-- **data/**: todos os CSVs mock gerados (dimensões e fatos) + README dos dados.
+# DIPA — Dipam Intelligence & Performance Assistant (Mockup Next.js)
 
-## Uso rápido
-1. Crie um projeto Next.js na Vercel.
-2. Copie `app/DipaPanel.tsx` para `app/page.tsx` (ou importe).
-3. Substitua o conteúdo do stub pelo código que está no canvas do ChatGPT (já desenvolvido).
-4. Os CSVs estão em `data/` para ingestão/ETL ou testes locais.
+Pronto para abrir no **Cursor** e publicar na **Vercel**.
+
+## Rodar local
+```bash
+npm i
+npm run dev
+```
+
+> O painel usa um conjunto mínimo de componentes (compatíveis com shadcn) já incluído em `components/ui`.
+> Gráficos com `recharts`. Não há dependência externa além das listadas no `package.json`.
+
+## Estrutura
+- `app/page.tsx` carrega o painel (`components/DipaPanel.tsx`).
+- `components/ui/*` componentes básicos (Card, Button, Input, Tabs, Select, Slider).
+- `components/queryParserLLM.ts` stub para parser LLM.
+- `styles/globals.css` + Tailwind.
+
+## Próximo passo (LLM parser real)
+- Trocar `queryParserLLM.ts` por implementação com **Function Calling** (OpenAI/Claude/Mistral) retornando JSON `{ intent, filters }`.
+- Guardrails: listar intents suportadas; validar campos; abortar operações perigosas.
+- (Opcional) API route `/api/query` para rodar no **Cloud Run** com streaming.
+
+## Dados
+Você pode usar os CSVs mock gerados anteriormente. Coloque-os em uma pasta `data/` na raiz ou sirva via API.
