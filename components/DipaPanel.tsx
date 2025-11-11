@@ -937,69 +937,6 @@ export default function DipaPanel() {
                   <Sparkles className="h-5 w-5 text-sky-300" />
                 </div>
 
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-sky-200">
-                    <span>Histórico</span>
-                    <span>{answers.length} mensagens</span>
-                  </div>
-                  <div className="relative h-[360px] overflow-y-auto rounded-2xl border border-sky-500/25 bg-slate-900/70 p-5">
-                    <div className="space-y-4">
-                      {answers.length === 0 ? (
-                        <p className="text-sm text-slate-300">
-                          Nenhuma interação ainda. Use uma sugestão abaixo ou descreva o insight que deseja gerar.
-                        </p>
-                      ) : (
-                        answers.map((message, index) => (
-                          <div key={index} className={clsx("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-                            <div
-                              className={clsx(
-                                "max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-lg transition",
-                                message.role === "user"
-                                  ? "bg-sky-500 text-white"
-                                  : "bg-slate-950/80 text-slate-100 ring-1 ring-sky-500/25"
-                              )}
-                            >
-                              <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-[0.18em]">
-                                <span className={clsx(message.role === "user" ? "text-sky-100" : "text-sky-300")}>
-                                  {message.role === "user" ? "Você" : "DIPA"}
-                                </span>
-                                <span className={clsx("text-slate-500", message.role === "user" ? "text-sky-200/80" : "")}>•</span>
-                                <span className="text-slate-500">Agora</span>
-                              </div>
-                              <p className="leading-relaxed">{message.text}</p>
-                              {message.role === "assistant" && message.result ? (
-                                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-300">
-                                  <Button
-                                    variant={index === activeInsightIndex ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => {
-                                      if (message.result) {
-                                        setActiveInsightIndex(index);
-                                        setActiveResult(message.result);
-                                      }
-                                    }}
-                                  >
-                                    {index === activeInsightIndex ? "Visualizando" : "Ver insight"}
-                                  </Button>
-                                  <span>{INTENT_LABELS[message.result.intent]}</span>
-                                  <span>•</span>
-                                  <span>{message.result.month}</span>
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    {busy && (
-                      <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center gap-2 rounded-full bg-slate-950/90 px-3 py-1 text-xs text-slate-300 shadow">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-300" />
-                        Gerando insight...
-                      </div>
-                    )}
-                  </div>
-                </div>
-
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.18em] text-sky-300">Sugestões</p>
                   <QuickExamples
@@ -1054,6 +991,69 @@ export default function DipaPanel() {
                     </div>
                   </div>
                 </form>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-sky-200">
+                    <span>Histórico</span>
+                    <span>{answers.length} mensagens</span>
+                  </div>
+                  <div className="relative h-[340px] overflow-y-auto rounded-2xl border border-sky-500/25 bg-slate-900/70 p-5">
+                    <div className="space-y-4">
+                      {answers.length === 0 ? (
+                        <p className="text-sm text-slate-300">
+                          Nenhuma interação ainda. Use uma sugestão acima ou descreva o insight que deseja gerar.
+                        </p>
+                      ) : (
+                        answers.map((message, index) => (
+                          <div key={index} className={clsx("flex", message.role === "user" ? "justify-end" : "justify-start")}>
+                            <div
+                              className={clsx(
+                                "max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-lg transition",
+                                message.role === "user"
+                                  ? "bg-sky-500 text-white"
+                                  : "bg-slate-950/80 text-slate-100 ring-1 ring-sky-500/25"
+                              )}
+                            >
+                              <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-[0.18em]">
+                                <span className={clsx(message.role === "user" ? "text-sky-100" : "text-sky-300")}>
+                                  {message.role === "user" ? "Você" : "DIPA"}
+                                </span>
+                                <span className={clsx("text-slate-500", message.role === "user" ? "text-sky-200/80" : "")}>•</span>
+                                <span className="text-slate-500">Agora</span>
+                              </div>
+                              <p className="leading-relaxed">{message.text}</p>
+                              {message.role === "assistant" && message.result ? (
+                                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                                  <Button
+                                    variant={index === activeInsightIndex ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => {
+                                      if (message.result) {
+                                        setActiveInsightIndex(index);
+                                        setActiveResult(message.result);
+                                      }
+                                    }}
+                                  >
+                                    {index === activeInsightIndex ? "Visualizando" : "Ver insight"}
+                                  </Button>
+                                  <span>{INTENT_LABELS[message.result.intent]}</span>
+                                  <span>•</span>
+                                  <span>{message.result.month}</span>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {busy && (
+                      <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center gap-2 rounded-full bg-slate-950/90 px-3 py-1 text-xs text-slate-300 shadow">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-300" />
+                        Gerando insight...
+                      </div>
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
