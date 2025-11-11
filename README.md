@@ -18,6 +18,9 @@ npm run dev
 - `components/queryParserLLM.ts` stub para parser LLM.
 - `styles/globals.css` + Tailwind.
 
+## Variáveis de ambiente
+- `NEXT_PUBLIC_USE_LLM=true` ativa o parser LLM no painel (requer `OPENAI_API_KEY` configurada no backend).
+
 ## Próximo passo (LLM parser real)
 - Trocar `queryParserLLM.ts` por implementação com **Function Calling** (OpenAI/Claude/Mistral) retornando JSON `{ intent, filters }`.
 - Guardrails: listar intents suportadas; validar campos; abortar operações perigosas.
