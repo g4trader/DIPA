@@ -21,7 +21,7 @@ const functions = [
             "sales_overview"
           ]
         },
-        month: { type: "string", description: "YYYY-MM (2025-09|10|11)" },
+        month: { type: "string", description: "YYYY-MM (2025-07|08|09|10|11)" },
         region: { type: "string" },
         brand: { type: "string" },
         sellerId: { type: "string" },

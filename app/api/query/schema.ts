@@ -10,7 +10,7 @@ export const ParsedQuery = z.object({
     "avg_ticket",
     "sales_overview"
   ]),
-  month: z.string().regex(/^2025-(09|10|11)$/).optional(),
+  month: z.string().regex(/^2025-(07|08|09|10|11)$/).optional(),
   region: z.string().optional(),
   brand: z.string().optional(),
   sellerId: z.string().optional(),

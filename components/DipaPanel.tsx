@@ -135,7 +135,7 @@ const CATEGORIES = [
   "Utensílios de limpeza"
 ] as const;
 
-const MONTHS = ["2025-09", "2025-10", "2025-11", "2025-12"] as const;
+const MONTHS = ["2025-07", "2025-08", "2025-09", "2025-10", "2025-11"] as const;
 const DEFAULT_MONTH: (typeof MONTHS)[number] = "2025-11";
 const USE_LLM = process.env.NEXT_PUBLIC_USE_LLM === "true";
 
@@ -220,7 +220,7 @@ const DATA = genData();
 const EXAMPLES = [
   "Comparar meta vs realizado de 2025-11 por vendedor",
   "Mostrar o mix de produtos promocionais em 2025-10",
-  "Quais são os top produtos por receita em 2025-12?",
+  "Quais são os top produtos por receita em 2025-08?",
   "Resumo geral de vendas para 2025-11",
   "Ticket médio por região em 2025-09"
 ];
@@ -234,15 +234,16 @@ function formatPercent(value: number) {
 }
 
 function extractMonth(query: string, fallback: string) {
-  const match = query.match(/2025-(0[1-9]|1[0-2])/);
+  const match = query.match(/2025-(07|08|09|10|11)/);
   if (match) return match[0];
-  const monthMatch = query.match(/\bsetembro\b|\boutubro\b|\bnovembro\b|\bdezembro\b/i);
+  const monthMatch = query.match(/\bjulho\b|\bagosto\b|\bsetembro\b|\boutubro\b|\bnovembro\b/i);
   if (monthMatch) {
     const map: Record<string, string> = {
+      julho: "2025-07",
+      agosto: "2025-08",
       setembro: "2025-09",
       outubro: "2025-10",
-      novembro: "2025-11",
-      dezembro: "2025-12"
+      novembro: "2025-11"
     };
     return map[monthMatch[0].toLowerCase()];
   }
@@ -913,11 +914,8 @@ export default function DipaPanel() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-sky-500">Assistente Generativo</p>
-                <h1 className="text-3xl font-semibold text-slate-900 sm:text-[2.4rem] sm:leading-tight">Painel de Performance Dipam</h1>
+                <h1 className="text-3xl font-semibold text-slate-900 sm:text-[2.4rem] sm:leading-tight">DIPA GenIA</h1>
               </div>
-            </div>
-            <div className="max-w-sm text-sm text-slate-600">
-              Combine prompts naturais com filtros estruturados para explorar metas, vendas e oportunidades comerciais em segundos.
             </div>
           </div>
         </header>
