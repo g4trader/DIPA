@@ -694,7 +694,7 @@ function ResultTable({ result }: { result: QueryResult }) {
   if (!result.table.length) return null;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
       <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
         <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
           <tr>
@@ -736,8 +736,8 @@ function ResultChart({ result }: { result?: QueryResult["chart"] }) {
   };
 
   return (
-    <Card className="border-slate-200 bg-white">
-      <CardContent className="h-80">
+    <Card className="min-w-0 border-slate-200 bg-white">
+      <CardContent className="h-80 w-full overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
           {result.type === "area" ? (
             <AreaChart data={result.data}>
@@ -921,9 +921,9 @@ export default function DipaPanel() {
         </header>
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,580px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,620px)_minmax(0,1fr)]">
-          <div className="flex flex-col">
+          <div className="flex min-w-0 flex-col">
             <Card className="h-full border-transparent bg-slate-950 text-white shadow-2xl shadow-sky-200/40">
-              <CardContent className="flex h-full flex-col gap-6">
+              <CardContent className="flex h-full min-w-0 flex-col gap-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.18em] text-sky-300">Laboratório de prompts</p>
@@ -1056,8 +1056,8 @@ export default function DipaPanel() {
             </Card>
           </div>
 
-          <div className="flex flex-col gap-6">
-            <Card className="border-transparent bg-white shadow-lg shadow-sky-100/70">
+          <div className="flex min-w-0 flex-col gap-6">
+            <Card className="min-w-0 border-transparent bg-white shadow-lg shadow-sky-100/70">
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -1094,7 +1094,7 @@ export default function DipaPanel() {
 
             {activeResult ? (
               <div className="space-y-6">
-                <Card className="border-transparent bg-white shadow-md shadow-slate-200/50">
+                <Card className="min-w-0 border-transparent bg-white shadow-md shadow-slate-200/50">
                   <CardContent className="space-y-3">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
@@ -1114,7 +1114,7 @@ export default function DipaPanel() {
                 <ResultTable result={activeResult} />
               </div>
             ) : (
-              <Card className="border-dashed border-sky-200 bg-white/70">
+              <Card className="min-w-0 border-dashed border-sky-200 bg-white/70">
                 <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
                   <Sparkles className="h-10 w-10 text-sky-500" />
                   <h2 className="text-lg font-semibold text-sky-900">Nenhum insight selecionado</h2>
