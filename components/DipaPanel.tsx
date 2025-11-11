@@ -766,8 +766,8 @@ function QuickExamples({ onSelect }: { onSelect: (example: string) => void }) {
 }
 
 export default function DipaPanel() {
-  const [question, setQuestion] = useState(EXAMPLES[0]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [question, setQuestion] = useState("Comparar meta vs realizado por vendedor em 2025-11 na Grande Porto Alegre");
+  const [answers, setAnswers] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
   const [activeResult, setActiveResult] = useState<QueryResult | undefined>();
   const [selectedMonth, setSelectedMonth] = useState<(typeof MONTHS)[number]>("2025-11");
@@ -775,6 +775,7 @@ export default function DipaPanel() {
   const [targetAdjustment, setTargetAdjustment] = useState(0);
   const [scenarioGrowth, setScenarioGrowth] = useState(3);
   const [scenarioDiscount, setScenarioDiscount] = useState(5);
+  const [secondaryQuestionQueued, setSecondaryQuestionQueued] = useState(false);
 
   const consultoresOptions = useMemo(() => DATA.sellers.map((seller) => ({ value: seller.id, label: seller.name })), []);
 
@@ -785,7 +786,7 @@ export default function DipaPanel() {
     const fallbackIntent = intentFromQuery(input);
 
     setBusy(true);
-    setMessages((state) => [...state, { role: "user", text: input }]);
+    setAnswers((state) => [...state, { role: "user", text: input }]);
 
     let result: QueryResult | undefined;
 
@@ -815,7 +816,7 @@ export default function DipaPanel() {
 
     if (result) {
       setActiveResult(result);
-      setMessages((state) => [
+      setAnswers((state) => [
         ...state,
         {
           role: "assistant",
@@ -829,11 +830,21 @@ export default function DipaPanel() {
   };
 
   useEffect(() => {
-    if (messages.length === 0) {
-      ask(EXAMPLES[3]);
+    if (answers.length === 0) {
+      void ask(question);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!secondaryQuestionQueued) {
+      const assistantMessages = answers.filter((message) => message.role === "assistant");
+      if (assistantMessages.length >= 1) {
+        setSecondaryQuestionQueued(true);
+        void ask("Quais as 3 marcas com maior share de receita em 2025-11?");
+      }
+    }
+  }, [answers, secondaryQuestionQueued]);
 
   const handleScenarioUpdate = () => {
     const seller = DATA.sellers.find((item) => item.id === selectedConsultor);
@@ -842,12 +853,12 @@ export default function DipaPanel() {
     const message = `Novo alvo para ${seller.name}: ${formatCurrency(seller.monthlyTarget + delta)} (${targetAdjustment.toFixed(
       0
     )}% vs atual).`;
-    setMessages((state) => [...state, { role: "assistant", text: message }]);
+    setAnswers((state) => [...state, { role: "assistant", text: message }]);
   };
 
   const handleWhatIf = () => {
     const message = `Cenário what-if: crescimento ${scenarioGrowth}% com desconto médio ${scenarioDiscount}%.`;
-    setMessages((state) => [...state, { role: "assistant", text: message }]);
+    setAnswers((state) => [...state, { role: "assistant", text: message }]);
   };
 
   return (
@@ -1006,12 +1017,12 @@ export default function DipaPanel() {
                   Interações recentes
                 </div>
                 <div className="space-y-3">
-                  {messages.length === 0 && (
+                  {answers.length === 0 && (
                     <p className="text-sm text-slate-500">
                       Inicie uma conversa selecionando um exemplo ou digitando sua pergunta sobre metas, performance e mix de produtos.
                     </p>
                   )}
-                  {messages.map((message, index) => (
+                  {answers.map((message, index) => (
                     <div
                       key={index}
                       className={clsx(
