@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { clsx } from "clsx";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { ArrowRight, Loader2, Sparkles } from "lucide-react";
@@ -77,6 +76,16 @@ type Intent =
   | "top_products"
   | "avg_ticket"
   | "sales_overview";
+
+const INTENT_LABELS: Record<Intent, string> = {
+  target_vs_actual: "Meta vs realizado",
+  seller_performance: "Performance de vendedores",
+  mix_products: "Mix de produtos",
+  promotion_mix: "Mix promocional",
+  top_products: "Top produtos",
+  avg_ticket: "Ticket médio",
+  sales_overview: "Visão geral"
+};
 
 type ChartConfig = {
   type: "area" | "bar";
@@ -770,6 +779,7 @@ export default function DipaPanel() {
   const [answers, setAnswers] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
   const [activeResult, setActiveResult] = useState<QueryResult | undefined>();
+  const [activeInsightIndex, setActiveInsightIndex] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<(typeof MONTHS)[number]>("2025-11");
   const [selectedConsultor, setSelectedConsultor] = useState<string>("S1");
   const [targetAdjustment, setTargetAdjustment] = useState(0);
@@ -778,6 +788,21 @@ export default function DipaPanel() {
   const [secondaryQuestionQueued, setSecondaryQuestionQueued] = useState(false);
 
   const consultoresOptions = useMemo(() => DATA.sellers.map((seller) => ({ value: seller.id, label: seller.name })), []);
+  const assistantInsights = useMemo(() => {
+    return answers
+      .map((message, index) => ({ message, index }))
+      .filter((entry) => entry.message.role === "assistant" && entry.message.result)
+      .map((entry) => {
+        const previousQuestion = answers
+          .slice(0, entry.index)
+          .reverse()
+          .find((item) => item.role === "user");
+        return {
+          ...entry,
+          question: previousQuestion?.text ?? "Insight gerado"
+        };
+      });
+  }, [answers]);
 
   const ask = async (input: string) => {
     if (!input.trim()) return;
@@ -815,15 +840,23 @@ export default function DipaPanel() {
     }
 
     if (result) {
+      let nextIndex: number | null = null;
+      setAnswers((state) => {
+        const newAnswers: Message[] = [
+          ...state,
+          {
+            role: "assistant",
+            text: result.narrative,
+            result
+          }
+        ];
+        nextIndex = newAnswers.length - 1;
+        return newAnswers;
+      });
       setActiveResult(result);
-      setAnswers((state) => [
-        ...state,
-        {
-          role: "assistant",
-          text: result.narrative,
-          result
-        }
-      ]);
+      if (nextIndex !== null) {
+        setActiveInsightIndex(nextIndex);
+      }
     }
 
     setBusy(false);
@@ -846,6 +879,29 @@ export default function DipaPanel() {
     }
   }, [answers, secondaryQuestionQueued]);
 
+  useEffect(() => {
+    if (assistantInsights.length === 0) {
+      setActiveInsightIndex(null);
+      setActiveResult(undefined);
+      return;
+    }
+    if (activeInsightIndex === null) {
+      const latest = assistantInsights[assistantInsights.length - 1];
+      setActiveInsightIndex(latest.index);
+      if (latest.message.result) {
+        setActiveResult(latest.message.result);
+      }
+    }
+  }, [assistantInsights, activeInsightIndex]);
+
+  useEffect(() => {
+    if (activeInsightIndex === null) return;
+    const active = assistantInsights.find((entry) => entry.index === activeInsightIndex);
+    if (active?.message.result) {
+      setActiveResult(active.message.result);
+    }
+  }, [activeInsightIndex, assistantInsights]);
+
   const handleScenarioUpdate = () => {
     const seller = DATA.sellers.find((item) => item.id === selectedConsultor);
     if (!seller) return;
@@ -863,127 +919,223 @@ export default function DipaPanel() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-3 pb-6">
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <header className="flex flex-col gap-3 pb-8">
           <span className="inline-flex w-fit items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-emerald-700">
             DIPA • Assistente de IA
           </span>
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Painel de Performance Dipam</h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">
-              Explore metas, resultados comerciais e simulações rápidas com dados mock construídos para análises em tempo real.
+            <h1 className="text-3xl font-semibold text-slate-900 sm:text-[2.4rem] sm:leading-tight">Painel de Performance Dipam</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              Compare metas vs. realizado, identifique oportunidades de cross-sell e rode simulações interativas usando nossa interface generativa.
             </p>
           </div>
         </header>
 
-        <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-          <div className="space-y-6">
-            <Card className="border-slate-200 bg-white/95">
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
-                  <Sparkles className="h-4 w-4 text-emerald-500" />
-                  Pergunte ao assistente
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,480px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)]">
+          <div className="flex flex-col gap-6">
+            <Card className="border-transparent bg-white shadow-xl shadow-emerald-100/40">
+              <CardContent className="flex h-full flex-col gap-6">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-600">Interface generativa</p>
+                  <h2 className="text-xl font-semibold text-slate-900">Converse com o DIPA</h2>
+                  <p className="text-sm text-slate-500">
+                    Faça perguntas abertas, refine e combine filtros. Os resultados são exibidos ao lado e podem ser revisitados a qualquer momento.
+                  </p>
                 </div>
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    ask(question);
-                  }}
-                  className="space-y-3"
-                >
-                  <Input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ex.: Comparar meta vs realizado" />
-                  <div className="flex gap-2">
-                    <Button type="submit" className="flex-1" disabled={busy}>
-                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Executar"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        const example = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
-                        setQuestion(example);
-                      }}
-                    >
-                      <Sparkles className="mr-2 h-4 w-4 text-emerald-500" />
-                      Surpreenda-me
-                    </Button>
+
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-slate-500">
+                    <span>Histórico</span>
+                    <span>{answers.length} mensagens</span>
                   </div>
-                </form>
+                  <div className="relative h-[320px] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                    <div className="space-y-3">
+                      {answers.length === 0 ? (
+                        <p className="text-sm text-slate-500">
+                          Nenhuma interação ainda. Use um exemplo abaixo ou descreva o insight que deseja gerar.
+                        </p>
+                      ) : (
+                        answers.map((message, index) => (
+                          <div key={index} className={clsx("flex", message.role === "user" ? "justify-end" : "justify-start")}>
+                            <div
+                              className={clsx(
+                                "max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-sm transition",
+                                message.role === "user"
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-white text-slate-700 ring-1 ring-inset ring-slate-200"
+                              )}
+                            >
+                              <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-[0.18em]">
+                                <span className={clsx(message.role === "user" ? "text-emerald-100" : "text-emerald-600")}>
+                                  {message.role === "user" ? "Você" : "DIPA"}
+                                </span>
+                                <span className={clsx("text-slate-400", message.role === "user" ? "text-emerald-200/80" : "")}>•</span>
+                                <span className={clsx(message.role === "user" ? "text-emerald-100/80" : "text-slate-400")}>Agora</span>
+                              </div>
+                              <p className="leading-relaxed">{message.text}</p>
+                              {message.role === "assistant" && message.result ? (
+                                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                                  <Button
+                                    variant={index === activeInsightIndex ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => {
+                                      if (message.result) {
+                                        setActiveInsightIndex(index);
+                                        setActiveResult(message.result);
+                                      }
+                                    }}
+                                  >
+                                    {index === activeInsightIndex ? "Visualizando" : "Ver insight"}
+                                  </Button>
+                                  <span>{INTENT_LABELS[message.result.intent]}</span>
+                                  <span>•</span>
+                                  <span>{message.result.month}</span>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {busy && (
+                      <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs text-slate-500 shadow">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-500" />
+                        Gerando insight...
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Exemplos rápidos</p>
                   <QuickExamples
                     onSelect={(value) => {
                       setQuestion(value);
-                      ask(value);
+                      void ask(value);
                     }}
                   />
                 </div>
+
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void ask(question);
+                  }}
+                  className="space-y-3"
+                >
+                  <textarea
+                    value={question}
+                    onChange={(event) => setQuestion(event.target.value)}
+                    placeholder="Comparar meta vs realizado por vendedor em 2025-11 na Grande Porto Alegre"
+                    className="min-h-[120px] w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed shadow-inner focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-xs text-slate-400">{question.length} caracteres</span>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          const example = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
+                          setQuestion(example);
+                          void ask(example);
+                        }}
+                      >
+                        <Sparkles className="mr-2 h-4 w-4 text-emerald-500" />
+                        Sugestão
+                      </Button>
+                      <Button type="submit" disabled={busy} className="min-w-[140px]">
+                        {busy ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Gerando...
+                          </>
+                        ) : (
+                          <>
+                            <ArrowRight className="mr-2 h-4 w-4" />
+                            Gerar insight
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </form>
               </CardContent>
             </Card>
 
-            <Card className="border-slate-200 bg-white/95">
-              <CardContent className="space-y-4">
+            <Card className="border-transparent bg-white/90 shadow-sm shadow-emerald-100/40 backdrop-blur">
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Ajustes rápidos</p>
+                    <h2 className="text-lg font-semibold text-slate-900">Metas & What-if</h2>
+                  </div>
+                  <Sparkles className="h-5 w-5 text-emerald-500" />
+                </div>
                 <Tabs defaultValue="metas">
-                  <TabsList className="flex gap-2 bg-slate-100 p-1">
-                    <TabsTrigger value="metas" className="flex-1 bg-white">
-                      Metas
-                    </TabsTrigger>
-                    <TabsTrigger value="whatif" className="flex-1 bg-white">
-                      What-if
-                    </TabsTrigger>
-                  </TabsList>
+                  <div className="space-y-4">
+                    <TabsList className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+                      <TabsTrigger value="metas" className="rounded-lg bg-white text-sm font-medium text-slate-700 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+                        Metas
+                      </TabsTrigger>
+                      <TabsTrigger value="whatif" className="rounded-lg bg-white text-sm font-medium text-slate-700 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+                        What-if
+                      </TabsTrigger>
+                    </TabsList>
 
-                  <TabsContent value="metas" className="space-y-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Consultor</p>
-                      <select
-                        value={selectedConsultor}
-                        onChange={(event) => setSelectedConsultor(event.target.value)}
-                        className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      >
-                        {consultoresOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between text-sm text-slate-600">
-                        <span>Revisar meta (%):</span>
-                        <span className="font-semibold text-slate-800">{targetAdjustment}%</span>
+                    <TabsContent value="metas" className="space-y-5">
+                      <div className="space-y-2">
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Consultor</p>
+                        <select
+                          value={selectedConsultor}
+                          onChange={(event) => setSelectedConsultor(event.target.value)}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                        >
+                          {consultoresOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <Slider defaultValue={[0]} max={25} step={1} onValueChange={([value]: number[]) => setTargetAdjustment(value)} />
-                    </div>
-                    <Button variant="outline" className="w-full" onClick={handleScenarioUpdate}>
-                      Atualizar meta
-                    </Button>
-                  </TabsContent>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm text-slate-600">
+                          <span>Revisar meta (%)</span>
+                          <span className="font-semibold text-slate-800">{targetAdjustment}%</span>
+                        </div>
+                        <Slider defaultValue={[0]} max={25} step={1} onValueChange={([value]: number[]) => setTargetAdjustment(value)} />
+                      </div>
+                      <Button variant="outline" className="w-full" onClick={handleScenarioUpdate}>
+                        Atualizar meta
+                      </Button>
+                    </TabsContent>
 
-                  <TabsContent value="whatif" className="space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between text-sm text-slate-600">
-                        <span>Crescimento projetado</span>
-                        <span className="font-semibold text-slate-800">{scenarioGrowth}%</span>
+                    <TabsContent value="whatif" className="space-y-5">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm text-slate-600">
+                          <span>Crescimento projetado</span>
+                          <span className="font-semibold text-slate-800">{scenarioGrowth}%</span>
+                        </div>
+                        <Slider defaultValue={[scenarioGrowth]} max={20} step={1} onValueChange={([value]: number[]) => setScenarioGrowth(value)} />
                       </div>
-                      <Slider defaultValue={[scenarioGrowth]} max={20} step={1} onValueChange={([value]: number[]) => setScenarioGrowth(value)} />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between text-sm text-slate-600">
-                        <span>Desconto médio</span>
-                        <span className="font-semibold text-slate-800">{scenarioDiscount}%</span>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm text-slate-600">
+                          <span>Desconto médio</span>
+                          <span className="font-semibold text-slate-800">{scenarioDiscount}%</span>
+                        </div>
+                        <Slider defaultValue={[scenarioDiscount]} max={20} step={1} onValueChange={([value]: number[]) => setScenarioDiscount(value)} />
                       </div>
-                      <Slider defaultValue={[scenarioDiscount]} max={20} step={1} onValueChange={([value]: number[]) => setScenarioDiscount(value)} />
-                    </div>
-                    <Button variant="outline" className="w-full" onClick={handleWhatIf}>
-                      Simular cenário
-                    </Button>
-                  </TabsContent>
+                      <Button variant="outline" className="w-full" onClick={handleWhatIf}>
+                        Simular cenário
+                      </Button>
+                    </TabsContent>
+                  </div>
                 </Tabs>
               </CardContent>
             </Card>
 
-            <Card className="border-slate-200 bg-white/95">
+            <Card className="border-transparent bg-white/90 shadow-sm shadow-emerald-100/40 backdrop-blur">
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Linha do tempo</p>
@@ -991,78 +1143,97 @@ export default function DipaPanel() {
                     Histórico
                   </span>
                 </div>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {MONTHS.map((month) => (
                     <Button
                       key={month}
                       variant={month === selectedMonth ? "default" : "outline"}
                       size="sm"
                       onClick={() => setSelectedMonth(month)}
-                      className={clsx("flex-1", month === selectedMonth ? "bg-emerald-600 hover:bg-emerald-700" : "text-slate-600")}
+                      className={clsx(
+                        "h-10 rounded-xl text-sm font-medium",
+                        month === selectedMonth ? "bg-emerald-600 hover:bg-emerald-700" : "border-slate-200 text-slate-600 hover:border-emerald-300 hover:text-emerald-600"
+                      )}
                     >
                       {month}
                     </Button>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500">Os resultados utilizam o mês destacado como referência padrão.</p>
+                <p className="text-xs text-slate-500">
+                  Os resultados utilizam o mês destacado como referência padrão e podem ser ajustados pelo parser LLM quando informado no prompt.
+                </p>
               </CardContent>
             </Card>
           </div>
 
-          <div className="space-y-6">
-            <Card className="border-slate-200 bg-white/95">
+          <div className="flex flex-col gap-6">
+            <Card className="border-transparent bg-white shadow-lg shadow-emerald-100/60">
               <CardContent className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
-                  <Sparkles className="h-4 w-4 text-emerald-500" />
-                  Interações recentes
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-emerald-600">Insights gerados</p>
+                    <h2 className="text-lg font-semibold text-slate-900">Pré-visualização</h2>
+                  </div>
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    {assistantInsights.length} ativos
+                  </span>
                 </div>
-                <div className="space-y-3">
-                  {answers.length === 0 && (
-                    <p className="text-sm text-slate-500">
-                      Inicie uma conversa selecionando um exemplo ou digitando sua pergunta sobre metas, performance e mix de produtos.
-                    </p>
-                  )}
-                  {answers.map((message, index) => (
-                    <div
-                      key={index}
-                      className={clsx(
-                        "rounded-2xl border px-4 py-3 text-sm",
-                        message.role === "user"
-                          ? "border-emerald-100 bg-emerald-50 text-emerald-900"
-                          : "border-slate-200 bg-slate-50 text-slate-700"
-                      )}
-                    >
-                      <p className="font-medium">{message.role === "user" ? "Você" : "DIPA"}</p>
-                      <p>{message.text}</p>
-                    </div>
-                  ))}
-                  {busy && (
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Processando...
-                    </div>
+                <div className="flex flex-wrap gap-2">
+                  {assistantInsights.length === 0 ? (
+                    <span className="text-xs text-slate-500">Envie uma pergunta para ver a lista de análises geradas.</span>
+                  ) : (
+                    assistantInsights.map((entry) => (
+                      <button
+                        key={entry.index}
+                        type="button"
+                        onClick={() => setActiveInsightIndex(entry.index)}
+                        className={clsx(
+                          "rounded-full border px-3 py-1 text-xs font-medium transition",
+                          entry.index === activeInsightIndex
+                            ? "border-transparent bg-emerald-600 text-white shadow"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-600"
+                        )}
+                      >
+                        {entry.question.length > 48 ? `${entry.question.slice(0, 48)}…` : entry.question}
+                      </button>
+                    ))
                   )}
                 </div>
               </CardContent>
             </Card>
 
             {activeResult ? (
-              <>
+              <div className="space-y-6">
+                <Card className="border-transparent bg-white shadow-md shadow-slate-200/50">
+                  <CardContent className="space-y-3">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Insight selecionado</p>
+                        <h3 className="text-xl font-semibold text-slate-900">{INTENT_LABELS[activeResult.intent]}</h3>
+                        <p className="mt-1 text-sm text-slate-500">{activeResult.narrative}</p>
+                      </div>
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                        {activeResult.month}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+
                 <KPIGrid items={activeResult.kpis} />
                 <ResultChart result={activeResult.chart} />
                 <ResultTable result={activeResult} />
-              </>
+              </div>
             ) : (
-              <Card className="border-dashed border-emerald-200 bg-emerald-50/50">
+              <Card className="border-dashed border-emerald-200 bg-white/70">
                 <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
                   <Sparkles className="h-10 w-10 text-emerald-500" />
-                  <h2 className="text-lg font-semibold text-emerald-900">Aguardando primeira consulta</h2>
+                  <h2 className="text-lg font-semibold text-emerald-900">Nenhum insight selecionado</h2>
                   <p className="max-w-md text-sm text-emerald-800">
-                    Peça um comparativo de metas, explore mix de produtos ou simule cenários de performance para ver KPIs, tabela e gráficos.
+                    Gere um prompt no painel ao lado para visualizar KPIs, gráficos e detalhes tabulares aqui.
                   </p>
-                  <Button onClick={() => ask(EXAMPLES[0])} className="mt-2">
+                  <Button onClick={() => void ask(question)} className="mt-2">
                     <ArrowRight className="mr-2 h-4 w-4" />
-                    Executar exemplo inicial
+                    Gerar insight inicial
                   </Button>
                 </CardContent>
               </Card>
