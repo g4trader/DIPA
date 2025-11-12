@@ -222,7 +222,8 @@ const EXAMPLES = [
   "Mostrar o mix de produtos promocionais em 2025-10",
   "Quais são os top produtos por receita em 2025-08?",
   "Resumo geral de vendas para 2025-11",
-  "Ticket médio por região em 2025-09"
+  "Ticket médio por região em 2025-09",
+  "Quanto foi vendido de Nissin Miojo Galinha Caipira neste mês"
 ];
 
 function formatCurrency(value: number) {
@@ -914,7 +915,7 @@ export default function DipaPanel() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-sky-500">Assistente Generativo</p>
-                <h1 className="text-3xl font-semibold text-slate-900 sm:text-[2.4rem] sm:leading-tight">DIPA GenIA</h1>
+                <h1 className="text-3xl font-semibold text-slate-900 sm:text-[2.4rem] sm:leading-tight">DIPA GenAI</h1>
               </div>
             </div>
           </div>
