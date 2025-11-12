@@ -75,7 +75,8 @@ type Intent =
   | "promotion_mix"
   | "top_products"
   | "avg_ticket"
-  | "sales_overview";
+  | "sales_overview"
+  | "brand_sales";
 
 const INTENT_LABELS: Record<Intent, string> = {
   target_vs_actual: "Meta vs realizado",
@@ -84,7 +85,8 @@ const INTENT_LABELS: Record<Intent, string> = {
   promotion_mix: "Mix promocional",
   top_products: "Top produtos",
   avg_ticket: "Ticket médio",
-  sales_overview: "Visão geral"
+  sales_overview: "Visão geral",
+  brand_sales: "Vendas por marca"
 };
 
 type ChartConfig = {
@@ -251,8 +253,17 @@ function extractMonth(query: string, fallback: string) {
   return fallback;
 }
 
+function detectBrandFromQuery(query: string): string | undefined {
+  const normalized = query.toLowerCase();
+  return BRANDS.find((brand) => normalized.includes(brand.toLowerCase()));
+}
+
 function intentFromQuery(query: string): Intent {
   const normalized = query.toLowerCase();
+  const hasBrand = BRANDS.some((brand) => normalized.includes(brand.toLowerCase()));
+  if (hasBrand && (normalized.includes("quanto") || normalized.includes("vendido") || normalized.includes("receita"))) {
+    return "brand_sales";
+  }
   if (normalized.includes("meta") || normalized.includes("alvo") || normalized.includes("target")) return "target_vs_actual";
   if (normalized.includes("vendedor") || normalized.includes("consultor") || normalized.includes("performance")) return "seller_performance";
   if (normalized.includes("mix") && normalized.includes("promo")) return "promotion_mix";
@@ -266,7 +277,7 @@ function revenueFromSale(sale: Sale) {
   return sale.qty * sale.unitPrice * (1 - sale.discount);
 }
 
-function runQuery(intent: Intent, month: string): QueryResult {
+function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> = {}): QueryResult {
   const monthSales = DATA.sales.filter((sale) => sale.month === month);
   const totalRevenue = monthSales.reduce((acc, sale) => acc + revenueFromSale(sale), 0);
   const totalUnits = monthSales.reduce((acc, sale) => acc + sale.qty, 0);
@@ -562,6 +573,65 @@ function runQuery(intent: Intent, month: string): QueryResult {
       return baseResult;
     }
 
+    case "brand_sales": {
+      const brand = filters.brand;
+      if (!brand) {
+        baseResult.narrative = `Marca não informada.`;
+        baseResult.kpis = [{ label: "Mensagem", value: "Selecione uma marca para visualizar os resultados." }];
+        return baseResult;
+      }
+
+      const productMap = DATA.products.reduce<Record<string, Product>>((acc, product) => ({ ...acc, [product.id]: product }), {});
+      const brandSales = monthSales.filter((sale) => productMap[sale.productId].brand.toLowerCase() === brand.toLowerCase());
+      const brandRevenue = brandSales.reduce((acc, sale) => acc + revenueFromSale(sale), 0);
+      const brandUnits = brandSales.reduce((acc, sale) => acc + sale.qty, 0);
+      const topItems = brandSales
+        .reduce<Record<string, { product: Product; revenue: number; units: number }>>((acc, sale) => {
+          const product = productMap[sale.productId];
+          acc[product.id] ||= { product, revenue: 0, units: 0 };
+          acc[product.id].revenue += revenueFromSale(sale);
+          acc[product.id].units += sale.qty;
+          return acc;
+        }, {});
+
+      const sortedItems = Object.values(topItems)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+
+      baseResult.kpis = [
+        { label: "Receita da marca", value: formatCurrency(brandRevenue) },
+        { label: "Unidades vendidas", value: brandUnits.toLocaleString("pt-BR") },
+        { label: "Participação na receita", value: formatPercent(brandRevenue / totalRevenue || 0) }
+      ];
+
+      baseResult.table = sortedItems.map((entry, index) => ({
+        columns: ["#", "Produto", "Receita", "Unidades"],
+        rows: [
+          index + 1,
+          entry.product.name,
+          formatCurrency(entry.revenue),
+          entry.units.toLocaleString("pt-BR")
+        ]
+      }));
+
+      baseResult.chart = {
+        type: "bar",
+        data: sortedItems.map((entry) => ({
+          name: entry.product.name,
+          Receita: Math.round(entry.revenue),
+          Unidades: entry.units
+        })),
+        xKey: "name",
+        series: [
+          { key: "Receita", label: "Receita", color: "#38bdf8" },
+          { key: "Unidades", label: "Unidades", color: "#94a3b8" }
+        ]
+      };
+
+      baseResult.narrative = `Receita e mix dos principais produtos da marca ${brand} em ${month}.`;
+      return baseResult;
+    }
+
     case "avg_ticket": {
       const byRegion = monthSales.reduce<Record<string, { revenue: number; orders: Set<string> }>>((acc, sale) => {
         acc[sale.region] ||= { revenue: 0, orders: new Set() };
@@ -672,7 +742,7 @@ function runQueryStructured(filters: TParsedQuery, fallbackMonth = "2025-11"): Q
   const syntheticQuestion = normalizedParts.join(" ");
   const month = filters.month ?? extractMonth(syntheticQuestion, fallbackMonth);
 
-  return runQuery(filters.intent, month);
+  return runQuery(filters.intent, month, filters);
 }
 
 function KPIGrid({ items }: { items: QueryResult["kpis"] }) {
@@ -811,6 +881,7 @@ export default function DipaPanel() {
 
     const fallbackMonth = extractMonth(input, DEFAULT_MONTH);
     const fallbackIntent = intentFromQuery(input);
+    const detectedBrand = detectBrandFromQuery(input);
 
     setBusy(true);
     setAnswers((state) => [...state, { role: "user", text: input }]);
@@ -834,11 +905,11 @@ export default function DipaPanel() {
         const payload = (await res.json()) as { data: TParsedQuery };
         result = runQueryStructured(payload.data, fallbackMonth);
       } else {
-        result = runQuery(fallbackIntent, fallbackMonth);
+        result = runQuery(fallbackIntent, fallbackMonth, detectedBrand ? { brand: detectedBrand } : undefined);
       }
     } catch (error) {
       console.error("LLM parser error. Falling back to heuristics.", error);
-      result = runQuery(fallbackIntent, fallbackMonth);
+      result = runQuery(fallbackIntent, fallbackMonth, detectedBrand ? { brand: detectedBrand } : undefined);
     }
 
     if (result) {
