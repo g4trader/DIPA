@@ -258,6 +258,27 @@ function detectBrandFromQuery(query: string): string | undefined {
   return BRANDS.find((brand) => normalized.includes(brand.toLowerCase()));
 }
 
+function extractProductNameFromQuery(query: string): string | undefined {
+  const brand = detectBrandFromQuery(query);
+  if (!brand) return undefined;
+
+  const lower = query.toLowerCase();
+  const brandLower = brand.toLowerCase();
+  const brandIndex = lower.indexOf(brandLower);
+  if (brandIndex === -1) return undefined;
+
+  const brandEnd = brandIndex + brand.length;
+  const remainder = query.slice(brandEnd);
+  const stopMatch = remainder.match(/\s+(?:neste|nesse|nesta|neste|no|na|em|para)\b/i);
+  const stopIndex = stopMatch ? brandEnd + (stopMatch.index ?? 0) : query.length;
+  const phrase = query
+    .slice(brandIndex, stopIndex)
+    .replace(/[?.,]+$/g, "")
+    .trim();
+
+  return phrase.length ? phrase : undefined;
+}
+
 function intentFromQuery(query: string): Intent {
   const normalized = query.toLowerCase();
   const hasBrand = BRANDS.some((brand) => normalized.includes(brand.toLowerCase()));
@@ -581,34 +602,54 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         return baseResult;
       }
 
+      const { productName } = filters as { productName?: string };
+      const productLabel = productName ?? brand;
       const productMap = DATA.products.reduce<Record<string, Product>>((acc, product) => ({ ...acc, [product.id]: product }), {});
       const brandSales = monthSales.filter((sale) => productMap[sale.productId].brand.toLowerCase() === brand.toLowerCase());
-      const brandRevenue = brandSales.reduce((acc, sale) => acc + revenueFromSale(sale), 0);
-      const brandUnits = brandSales.reduce((acc, sale) => acc + sale.qty, 0);
-      const topItems = brandSales
-        .reduce<Record<string, { product: Product; revenue: number; units: number }>>((acc, sale) => {
-          const product = productMap[sale.productId];
-          acc[product.id] ||= { product, revenue: 0, units: 0 };
-          acc[product.id].revenue += revenueFromSale(sale);
-          acc[product.id].units += sale.qty;
-          return acc;
-        }, {});
 
-      const sortedItems = Object.values(topItems)
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 10);
+      let relevantSales = brandSales;
+      if (productName) {
+        const normalizedProduct = productName.toLowerCase();
+        const productExact = brandSales.filter(
+          (sale) => productMap[sale.productId].name.toLowerCase() === normalizedProduct
+        );
+        if (productExact.length > 0) {
+          relevantSales = productExact;
+        }
+      }
+
+      if (relevantSales.length === 0) {
+        baseResult.kpis = [{ label: "Receita", value: formatCurrency(0) }];
+        baseResult.table = [];
+        baseResult.narrative = `Nenhuma venda encontrada para ${productLabel} em ${month}.`;
+        return baseResult;
+      }
+
+      const sellerMap = DATA.sellers.reduce<Record<string, Seller>>((acc, seller) => ({ ...acc, [seller.id]: seller }), {});
+      const bySeller = relevantSales.reduce<Record<string, { seller: Seller; revenue: number; units: number }>>((acc, sale) => {
+        const seller = sellerMap[sale.sellerId];
+        if (!seller) return acc;
+        acc[sale.sellerId] ||= { seller, revenue: 0, units: 0 };
+        acc[sale.sellerId].revenue += revenueFromSale(sale);
+        acc[sale.sellerId].units += sale.qty;
+        return acc;
+      }, {});
+
+      const sellerRows = Object.values(bySeller).sort((a, b) => b.revenue - a.revenue);
+      const totalProductRevenue = sellerRows.reduce((acc, row) => acc + row.revenue, 0);
+      const totalProductUnits = sellerRows.reduce((acc, row) => acc + row.units, 0);
 
       baseResult.kpis = [
-        { label: "Receita da marca", value: formatCurrency(brandRevenue) },
-        { label: "Unidades vendidas", value: brandUnits.toLocaleString("pt-BR") },
-        { label: "Participação na receita", value: formatPercent(brandRevenue / totalRevenue || 0) }
+        { label: "Receita do produto", value: formatCurrency(totalProductRevenue) },
+        { label: "Unidades vendidas", value: totalProductUnits.toLocaleString("pt-BR") },
+        { label: "Vendedores ativos", value: sellerRows.length.toString() }
       ];
 
-      baseResult.table = sortedItems.map((entry, index) => ({
-        columns: ["#", "Produto", "Receita", "Unidades"],
+      baseResult.table = sellerRows.map((entry, index) => ({
+        columns: ["#", "Vendedor", "Receita", "Unidades"],
         rows: [
           index + 1,
-          entry.product.name,
+          entry.seller.name,
           formatCurrency(entry.revenue),
           entry.units.toLocaleString("pt-BR")
         ]
@@ -616,19 +657,15 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
 
       baseResult.chart = {
         type: "bar",
-        data: sortedItems.map((entry) => ({
-          name: entry.product.name,
-          Receita: Math.round(entry.revenue),
-          Unidades: entry.units
+        data: sellerRows.map((entry) => ({
+          name: entry.seller.name,
+          Receita: Math.round(entry.revenue)
         })),
         xKey: "name",
-        series: [
-          { key: "Receita", label: "Receita", color: "#38bdf8" },
-          { key: "Unidades", label: "Unidades", color: "#94a3b8" }
-        ]
+        series: [{ key: "Receita", label: "Receita", color: "#38bdf8" }]
       };
 
-      baseResult.narrative = `Receita e mix dos principais produtos da marca ${brand} em ${month}.`;
+      baseResult.narrative = `Receita de ${productLabel} detalhada por vendedor em ${month}.`;
       return baseResult;
     }
 
@@ -729,7 +766,7 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
   }
 }
 
-function runQueryStructured(filters: TParsedQuery, fallbackMonth = "2025-11"): QueryResult {
+function runQueryStructured(filters: TParsedQuery, fallbackMonth = "2025-11", rawQuestion?: string): QueryResult {
   const normalizedParts = [
     `intent:${filters.intent}`,
     filters.month ? `month:${filters.month}` : undefined,
@@ -741,8 +778,13 @@ function runQueryStructured(filters: TParsedQuery, fallbackMonth = "2025-11"): Q
 
   const syntheticQuestion = normalizedParts.join(" ");
   const month = filters.month ?? extractMonth(syntheticQuestion, fallbackMonth);
+  const productName = filters.brand ? extractProductNameFromQuery(rawQuestion ?? "") : undefined;
+  const runtimeFilters: Partial<TParsedQuery> & { productName?: string } = { ...filters };
+  if (productName) {
+    runtimeFilters.productName = productName;
+  }
 
-  return runQuery(filters.intent, month, filters);
+  return runQuery(filters.intent, month, runtimeFilters);
 }
 
 function KPIGrid({ items }: { items: QueryResult["kpis"] }) {
@@ -882,6 +924,7 @@ export default function DipaPanel() {
     const fallbackMonth = extractMonth(input, DEFAULT_MONTH);
     const fallbackIntent = intentFromQuery(input);
     const detectedBrand = detectBrandFromQuery(input);
+    const detectedProduct = extractProductNameFromQuery(input);
 
     setBusy(true);
     setAnswers((state) => [...state, { role: "user", text: input }]);
@@ -903,13 +946,19 @@ export default function DipaPanel() {
         }
 
         const payload = (await res.json()) as { data: TParsedQuery };
-        result = runQueryStructured(payload.data, fallbackMonth);
+        result = runQueryStructured(payload.data, fallbackMonth, input);
       } else {
-        result = runQuery(fallbackIntent, fallbackMonth, detectedBrand ? { brand: detectedBrand } : undefined);
+        const heuristicFilters: Partial<TParsedQuery> & { productName?: string } = {};
+        if (detectedBrand) heuristicFilters.brand = detectedBrand;
+        if (detectedProduct) heuristicFilters.productName = detectedProduct;
+        result = runQuery(fallbackIntent, fallbackMonth, heuristicFilters);
       }
     } catch (error) {
       console.error("LLM parser error. Falling back to heuristics.", error);
-      result = runQuery(fallbackIntent, fallbackMonth, detectedBrand ? { brand: detectedBrand } : undefined);
+      const heuristicFilters: Partial<TParsedQuery> & { productName?: string } = {};
+      if (detectedBrand) heuristicFilters.brand = detectedBrand;
+      if (detectedProduct) heuristicFilters.productName = detectedProduct;
+      result = runQuery(fallbackIntent, fallbackMonth, heuristicFilters);
     }
 
     if (result) {
