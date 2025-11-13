@@ -23,20 +23,25 @@ export type ChartConfig = {
   series: ChartSeries[];
 };
 
-export type SellerContribution = {
+export type SummaryEntity = {
   name: string;
-  revenue: number;
-  units: number;
+  revenue?: number;
+  units?: number;
 };
 
-export type InsightSummary =
-  {
-    kind: "brand_sales";
-    productLabel: string;
-    totalRevenue: number;
-    totalUnits: number;
-    sellers: SellerContribution[];
-  };
+export type InsightSummary = {
+  subject: string;
+  action?: string;
+  totalRevenue?: number;
+  totalUnits?: number;
+  revenueLabel?: string;
+  unitsLabel?: string;
+  entityLabel?: string;
+  entityLabelPlural?: string;
+  entityGender?: "m" | "f";
+  best?: SummaryEntity;
+  worst?: SummaryEntity;
+};
 
 export type TableEntry = {
   columns: string[];

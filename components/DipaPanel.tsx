@@ -231,36 +231,104 @@ function extractProductNameFromQuery(query: string): string | undefined {
   return phrase.length ? phrase : undefined;
 }
 
-function buildBrandSalesSummaryView(result?: QueryResult) {
-  if (!result?.summary || result.summary.kind !== "brand_sales") {
+function formatUnits(value: number) {
+  return value.toLocaleString("pt-BR");
+}
+
+function buildInsightSummaryView(result?: QueryResult) {
+  const summary = result?.summary;
+  if (!summary) return null;
+
+  const {
+    subject,
+    action = "Consolidamos",
+    totalRevenue,
+    totalUnits,
+    revenueLabel = "receita",
+    unitsLabel = "unidades",
+    entityLabel = "indicador",
+    entityLabelPlural = `${entityLabel}s`,
+    entityGender = "m",
+    best,
+    worst
+  } = summary;
+
+  const paragraphs: React.ReactNode[] = [];
+
+  if (totalUnits !== undefined && totalRevenue !== undefined) {
+    paragraphs.push(
+      <p key="intro">
+        {action} <strong>{formatUnits(totalUnits)} {unitsLabel}</strong>
+        {subject ? ` ${subject}` : ""}, com {revenueLabel} total de <strong>{formatCurrency(totalRevenue)}</strong>.
+      </p>
+    );
+  } else if (totalRevenue !== undefined) {
+    paragraphs.push(
+      <p key="intro">
+        {action}{subject ? ` ${subject}` : ""}, com {revenueLabel} total de <strong>{formatCurrency(totalRevenue)}</strong>.
+      </p>
+    );
+  } else if (totalUnits !== undefined) {
+    paragraphs.push(
+      <p key="intro">
+        {action} <strong>{formatUnits(totalUnits)} {unitsLabel}</strong>{subject ? ` ${subject}` : ""}.
+      </p>
+    );
+  }
+
+  if (best) {
+    const article = entityGender === "f" ? "A melhor" : "O melhor";
+    const hasUnits = best.units !== undefined && unitsLabel;
+    const hasRevenue = best.revenue !== undefined;
+    paragraphs.push(
+      <p key="best">
+        {article} {entityLabel} foi <strong>{best.name}</strong>
+        {hasUnits ? (
+          <>
+            {" com "}
+            <strong>{formatUnits(best.units!)} {unitsLabel}</strong>
+          </>
+        ) : null}
+        {hasRevenue ? (
+          <>
+            {hasUnits ? " e " : " com "}
+            <strong>{formatCurrency(best.revenue!)}</strong>
+          </>
+        ) : null}
+        .
+      </p>
+    );
+  }
+
+  if (worst && (!best || best.name !== worst.name)) {
+    const article = entityGender === "f" ? "A" : "O";
+    const hasUnits = worst.units !== undefined && unitsLabel;
+    const hasRevenue = worst.revenue !== undefined;
+    paragraphs.push(
+      <p key="worst">
+        {article} {entityLabel} com menor resultado foi <strong>{worst.name}</strong>
+        {hasUnits ? (
+          <>
+            {" com "}
+            <strong>{formatUnits(worst.units!)} {unitsLabel}</strong>
+          </>
+        ) : null}
+        {hasRevenue ? (
+          <>
+            {hasUnits ? " e " : " com "}
+            <strong>{formatCurrency(worst.revenue!)}</strong>
+          </>
+        ) : null}
+        .
+      </p>
+    );
+  }
+
+  if (!paragraphs.length) {
     return null;
   }
 
-  const { productLabel, totalRevenue, totalUnits, sellers } = result.summary;
-  if (!sellers.length) {
-    return null;
-  }
-
-  const ordered = [...sellers].sort((a, b) => b.revenue - a.revenue);
-  const best = ordered[0];
-  const worst = ordered[ordered.length - 1];
-
-  return {
-    productLabel,
-    totalRevenueFormatted: formatCurrency(totalRevenue),
-    totalUnitsFormatted: totalUnits.toLocaleString("pt-BR"),
-    best: {
-      name: best.name,
-      revenueFormatted: formatCurrency(best.revenue),
-      unitsFormatted: best.units.toLocaleString("pt-BR")
-    },
-    worst: {
-      name: worst.name,
-      revenueFormatted: formatCurrency(worst.revenue),
-      unitsFormatted: worst.units.toLocaleString("pt-BR")
-    },
-    hasMultipleSellers: ordered.length > 1
-  };
+  return { paragraphs };
 }
 
 function intentFromQuery(query: string): Intent {
@@ -301,26 +369,29 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
   switch (intent) {
     case "target_vs_actual": {
       const sellerMap = DATA.sellers.reduce<Record<string, Seller>>((acc, seller) => ({ ...acc, [seller.id]: seller }), {});
+      const sellerUnitsMap = monthSales.reduce<Record<string, number>>((acc, sale) => {
+        acc[sale.sellerId] = (acc[sale.sellerId] || 0) + sale.qty;
+        return acc;
+      }, {});
       const bySeller = monthSales.reduce<Record<string, { seller: Seller; revenue: number }>>((acc, sale) => {
         acc[sale.sellerId] ||= { seller: sellerMap[sale.sellerId], revenue: 0 };
         acc[sale.sellerId].revenue += revenueFromSale(sale);
         return acc;
       }, {});
-
-      const rows = Object.values(bySeller)
+      const detailedRows = Object.values(bySeller)
         .map((entry) => {
           const attainment = entry.revenue / entry.seller.monthlyTarget;
           return {
-            seller: entry.seller.name,
+            seller: entry.seller,
             region: entry.seller.region,
             target: entry.seller.monthlyTarget,
             revenue: entry.revenue,
-            attainment
+            attainment,
+            units: sellerUnitsMap[entry.seller.id] ?? 0
           };
         })
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 12);
-
+        .sort((a, b) => b.revenue - a.revenue);
+      const rows = detailedRows.slice(0, 12);
       const totalTarget = rows.reduce((acc, row) => acc + row.target, 0);
 
       baseResult.kpis = [
@@ -329,10 +400,36 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         { label: "Cumprimento médio", value: formatPercent(rows.reduce((acc, row) => acc + row.attainment, 0) / rows.length) }
       ];
 
+      baseResult.summary = {
+        subject: `nos consultores de ${month}`,
+        action: "Consolidamos",
+        totalRevenue: detailedRows.reduce((acc, row) => acc + row.revenue, 0),
+        totalUnits,
+        revenueLabel: "receita",
+        unitsLabel: "unidades",
+        entityLabel: "consultor",
+        entityLabelPlural: "consultores",
+        entityGender: "m",
+        best: rows[0]
+          ? {
+              name: rows[0].seller.name,
+              revenue: rows[0].revenue,
+              units: rows[0].units
+            }
+          : undefined,
+        worst: rows.length > 1
+          ? {
+              name: rows[rows.length - 1].seller.name,
+              revenue: rows[rows.length - 1].revenue,
+              units: rows[rows.length - 1].units
+            }
+          : undefined
+      };
+
       baseResult.table = rows.map((row) => ({
         columns: ["Consultor", "Região", "Meta", "Realizado", "%"],
         rows: [
-          row.seller,
+          row.seller.name,
           row.region,
           formatCurrency(row.target),
           formatCurrency(row.revenue),
@@ -343,7 +440,7 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
       baseResult.chart = {
         type: "bar",
         data: rows.map((row) => ({
-          name: row.seller,
+          name: row.seller.name,
           Meta: Math.round(row.target),
           Realizado: Math.round(row.revenue)
         })),
@@ -370,6 +467,10 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
           acc[sale.sellerId] = (acc[sale.sellerId] || 0) + revenueFromSale(sale);
           return acc;
         }, {});
+      const sellerUnitsMap = monthSales.reduce<Record<string, number>>((acc, sale) => {
+        acc[sale.sellerId] = (acc[sale.sellerId] || 0) + sale.qty;
+        return acc;
+      }, {});
 
       const rows = monthSales
         .reduce<Record<string, { seller: Seller; revenue: number }>>((acc, sale) => {
@@ -383,7 +484,8 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
           const previous = prevMap[entry.seller.id] || 1;
           const delta = entry.revenue / previous - 1;
           return {
-            seller: entry.seller.name,
+            seller: entry.seller,
+            sellerId: entry.seller.id,
             region: entry.seller.region,
             revenue: entry.revenue,
             delta
@@ -398,11 +500,37 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         { label: "Melhor crescimento", value: formatPercent(Math.max(...ranking.map((row) => row.delta))) }
       ];
 
+      baseResult.summary = {
+        subject: `no desempenho dos consultores em ${month}`,
+        action: "Consolidamos",
+        totalRevenue,
+        totalUnits,
+        revenueLabel: "receita",
+        unitsLabel: "unidades",
+        entityLabel: "consultor",
+        entityLabelPlural: "consultores",
+        entityGender: "m",
+        best: ranking[0]
+          ? {
+              name: ranking[0].seller.name,
+              revenue: ranking[0].revenue,
+              units: sellerUnitsMap[ranking[0].sellerId]
+            }
+          : undefined,
+        worst: ranking.length > 1
+          ? {
+              name: ranking[ranking.length - 1].seller.name,
+              revenue: ranking[ranking.length - 1].revenue,
+              units: sellerUnitsMap[ranking[ranking.length - 1].sellerId]
+            }
+          : undefined
+      };
+
       baseResult.table = ranking.map((row, index) => ({
         columns: ["#", "Consultor", "Região", "Receita", "Crescimento"],
         rows: [
           index + 1,
-          row.seller,
+          row.seller.name,
           row.region,
           formatCurrency(row.revenue),
           formatPercent(row.delta)
@@ -412,7 +540,7 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
       baseResult.chart = {
         type: "bar",
         data: ranking.map((row) => ({
-          name: row.seller,
+          name: row.seller.name,
           Receita: Math.round(row.revenue),
           Crescimento: Number((row.delta * 100).toFixed(1))
         })),
@@ -449,6 +577,32 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         { label: "Receita total", value: formatCurrency(totalRevenue) },
         { label: "Unidades totais", value: totalUnits.toLocaleString("pt-BR") }
       ];
+
+      baseResult.summary = {
+        subject: `no mix de categorias em ${month}`,
+        action: "Consolidamos",
+        totalRevenue,
+        totalUnits,
+        revenueLabel: "receita",
+        unitsLabel: "unidades",
+        entityLabel: "categoria",
+        entityLabelPlural: "categorias",
+        entityGender: "f",
+        best: rows[0]
+          ? {
+              name: rows[0].category,
+              revenue: rows[0].revenue,
+              units: rows[0].units
+            }
+          : undefined,
+        worst: rows.length > 1
+          ? {
+              name: rows[rows.length - 1].category,
+              revenue: rows[rows.length - 1].revenue,
+              units: rows[rows.length - 1].units
+            }
+          : undefined
+      };
 
       baseResult.table = rows.map((row, index) => ({
         columns: ["#", "Categoria", "Receita", "Unidades", "Share"],
@@ -495,28 +649,61 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         }
       );
 
+      const segments = Object.entries(aggregated).map(([label, stats]) => ({
+        label,
+        revenue: stats.revenue,
+        units: stats.units
+      }));
+      const rankedSegments = [...segments].sort((a, b) => b.revenue - a.revenue);
+
       baseResult.kpis = [
         { label: "Receita total", value: formatCurrency(totalRevenue) },
         { label: "Share promocional", value: formatPercent(aggregated.Promocional.revenue / totalRevenue) },
         { label: "Unidades promocionais", value: aggregated.Promocional.units.toLocaleString("pt-BR") }
       ];
 
-      baseResult.table = Object.entries(aggregated).map(([label, stats]) => ({
+      baseResult.summary = {
+        subject: `entre os segmentos de promoção em ${month}`,
+        action: "Consolidamos",
+        totalRevenue,
+        totalUnits,
+        revenueLabel: "receita",
+        unitsLabel: "unidades",
+        entityLabel: "segmento",
+        entityLabelPlural: "segmentos",
+        entityGender: "m",
+        best: rankedSegments[0]
+          ? {
+              name: rankedSegments[0].label,
+              revenue: rankedSegments[0].revenue,
+              units: rankedSegments[0].units
+            }
+          : undefined,
+        worst: rankedSegments.length > 1
+          ? {
+              name: rankedSegments[rankedSegments.length - 1].label,
+              revenue: rankedSegments[rankedSegments.length - 1].revenue,
+              units: rankedSegments[rankedSegments.length - 1].units
+            }
+          : undefined
+      };
+
+      baseResult.table = segments.map((segment) => ({
         columns: ["Segmento", "Receita", "Unidades", "Participação"],
         rows: [
-          label,
-          formatCurrency(stats.revenue),
-          stats.units.toLocaleString("pt-BR"),
-          formatPercent(stats.revenue / totalRevenue)
+          segment.label,
+          formatCurrency(segment.revenue),
+          segment.units.toLocaleString("pt-BR"),
+          formatPercent(segment.revenue / totalRevenue)
         ]
       }));
 
       baseResult.chart = {
         type: "bar",
-        data: Object.entries(aggregated).map(([label, stats]) => ({
-          name: label,
-          Receita: Math.round(stats.revenue),
-          Unidades: stats.units
+        data: segments.map((segment) => ({
+          name: segment.label,
+          Receita: Math.round(segment.revenue),
+          Unidades: segment.units
         })),
         xKey: "name",
         series: [
@@ -549,6 +736,32 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         { label: "Produtos ativos", value: String(Object.keys(rows).length) },
         { label: "Receita top 5", value: formatCurrency(top.slice(0, 5).reduce((acc, row) => acc + row.revenue, 0)) }
       ];
+
+      baseResult.summary = {
+        subject: `no mix de produtos em ${month}`,
+        action: "Vendemos",
+        totalRevenue,
+        totalUnits,
+        revenueLabel: "receita",
+        unitsLabel: "unidades",
+        entityLabel: "produto",
+        entityLabelPlural: "produtos",
+        entityGender: "m",
+        best: top[0]
+          ? {
+              name: top[0].product.name,
+              revenue: top[0].revenue,
+              units: top[0].units
+            }
+          : undefined,
+        worst: top.length > 1
+          ? {
+              name: top[top.length - 1].product.name,
+              revenue: top[top.length - 1].revenue,
+              units: top[top.length - 1].units
+            }
+          : undefined
+      };
 
       baseResult.table = top.map((entry, index) => ({
         columns: ["#", "Produto", "Categoria", "Receita", "Unidades"],
@@ -631,15 +844,29 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
       ];
 
       baseResult.summary = {
-        kind: "brand_sales",
-        productLabel,
+        subject: `de ${productLabel} neste período`,
+        action: "Vendemos",
         totalRevenue: totalProductRevenue,
         totalUnits: totalProductUnits,
-        sellers: sellerRows.map((entry) => ({
-          name: entry.seller.name,
-          revenue: entry.revenue,
-          units: entry.units
-        }))
+        revenueLabel: "receita",
+        unitsLabel: "unidades",
+        entityLabel: "consultor",
+        entityLabelPlural: "consultores",
+        entityGender: "m",
+        best: sellerRows[0]
+          ? {
+              name: sellerRows[0].seller.name,
+              revenue: sellerRows[0].revenue,
+              units: sellerRows[0].units
+            }
+          : undefined,
+        worst: sellerRows.length > 1
+          ? {
+              name: sellerRows[sellerRows.length - 1].seller.name,
+              revenue: sellerRows[sellerRows.length - 1].revenue,
+              units: sellerRows[sellerRows.length - 1].units
+            }
+          : undefined
       };
 
       baseResult.table = sellerRows.map((entry, index) => ({
@@ -667,10 +894,11 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
     }
 
     case "avg_ticket": {
-      const byRegion = monthSales.reduce<Record<string, { revenue: number; orders: Set<string> }>>((acc, sale) => {
-        acc[sale.region] ||= { revenue: 0, orders: new Set() };
+      const byRegion = monthSales.reduce<Record<string, { revenue: number; orders: Set<string>; units: number }>>((acc, sale) => {
+        acc[sale.region] ||= { revenue: 0, orders: new Set(), units: 0 };
         acc[sale.region].revenue += revenueFromSale(sale);
         acc[sale.region].orders.add(sale.orderId);
+        acc[sale.region].units += sale.qty;
         return acc;
       }, {});
 
@@ -678,7 +906,9 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         .map(([region, stats]) => ({
           region,
           ticket: stats.revenue / stats.orders.size,
-          orders: stats.orders.size
+          orders: stats.orders.size,
+          revenue: stats.revenue,
+          units: stats.units
         }))
         .sort((a, b) => b.ticket - a.ticket);
 
@@ -687,6 +917,32 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         { label: "Pedidos no mês", value: totalOrders.toLocaleString("pt-BR") },
         { label: "Clientes ativos", value: uniqueClients.toLocaleString("pt-BR") }
       ];
+
+      baseResult.summary = {
+        subject: `no ticket médio por região em ${month}`,
+        action: "Consolidamos",
+        totalRevenue,
+        totalUnits: totalOrders,
+        revenueLabel: "ticket médio",
+        unitsLabel: "pedidos",
+        entityLabel: "região",
+        entityLabelPlural: "regiões",
+        entityGender: "f",
+        best: rows[0]
+          ? {
+              name: rows[0].region,
+              revenue: rows[0].ticket,
+              units: rows[0].orders
+            }
+          : undefined,
+        worst: rows.length > 1
+          ? {
+              name: rows[rows.length - 1].region,
+              revenue: rows[rows.length - 1].ticket,
+              units: rows[rows.length - 1].orders
+            }
+          : undefined
+      };
 
       baseResult.table = rows.map((row, index) => ({
         columns: ["#", "Região", "Ticket médio", "Pedidos"],
@@ -718,16 +974,18 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
 
     case "sales_overview":
     default: {
-      const byRegion = monthSales.reduce<Record<string, { revenue: number }>>((acc, sale) => {
-        acc[sale.region] ||= { revenue: 0 };
+      const byRegion = monthSales.reduce<Record<string, { revenue: number; units: number }>>((acc, sale) => {
+        acc[sale.region] ||= { revenue: 0, units: 0 };
         acc[sale.region].revenue += revenueFromSale(sale);
+        acc[sale.region].units += sale.qty;
         return acc;
       }, {});
 
       const regionData = Object.entries(byRegion)
         .map(([region, stats]) => ({
           region,
-          revenue: stats.revenue
+          revenue: stats.revenue,
+          units: stats.units
         }))
         .sort((a, b) => b.revenue - a.revenue);
 
@@ -736,6 +994,32 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         { label: "Unidades", value: totalUnits.toLocaleString("pt-BR") },
         { label: "Pedidos", value: totalOrders.toLocaleString("pt-BR") }
       ];
+
+      baseResult.summary = {
+        subject: `no panorama das regiões em ${month}`,
+        action: "Consolidamos",
+        totalRevenue,
+        totalUnits,
+        revenueLabel: "receita",
+        unitsLabel: "unidades",
+        entityLabel: "região",
+        entityLabelPlural: "regiões",
+        entityGender: "f",
+        best: regionData[0]
+          ? {
+              name: regionData[0].region,
+              revenue: regionData[0].revenue,
+              units: regionData[0].units
+            }
+          : undefined,
+        worst: regionData.length > 1
+          ? {
+              name: regionData[regionData.length - 1].region,
+              revenue: regionData[regionData.length - 1].revenue,
+              units: regionData[regionData.length - 1].units
+            }
+          : undefined
+      };
 
       baseResult.table = regionData.map((row, index) => ({
         columns: ["#", "Região", "Receita", "Participação"],
@@ -884,7 +1168,7 @@ export default function DipaPanel() {
   const hasResponse = Boolean(latestAssistant);
   const latestResult = latestAssistant?.result;
   const isSubmitDisabled = busy || !question.trim();
-  const summaryView = buildBrandSalesSummaryView(latestResult);
+  const summaryView = buildInsightSummaryView(latestResult);
 
   return (
     <div className={clsx("min-h-screen", ds.colors.background, "text-slate-200") }>
@@ -966,17 +1250,9 @@ export default function DipaPanel() {
               </div>
               {summaryView ? (
                 <div className="mt-6 space-y-3 text-left text-lg leading-relaxed text-slate-100">
-                  <p>
-                    Vendemos <strong>{summaryView.totalUnitsFormatted} unidades</strong> de {summaryView.productLabel} neste período, com faturamento bruto de <strong>{summaryView.totalRevenueFormatted}</strong>.
-                  </p>
-                  <p>
-                    O melhor consultor foi <strong>{summaryView.best.name}</strong>, com <strong>{summaryView.best.unitsFormatted} unidades</strong> e <strong>{summaryView.best.revenueFormatted}</strong>.
-                  </p>
-                  {summaryView.hasMultipleSellers ? (
-                    <p>
-                      O consultor com menor resultado foi <strong>{summaryView.worst.name}</strong>, com <strong>{summaryView.worst.unitsFormatted} unidades</strong> e <strong>{summaryView.worst.revenueFormatted}</strong>.
-                    </p>
-                  ) : null}
+                  {summaryView.paragraphs.map((paragraph, index) => (
+                    <React.Fragment key={index}>{paragraph}</React.Fragment>
+                  ))}
                 </div>
               ) : (
                 <p className="mt-6 text-left text-lg leading-relaxed text-slate-100">{latestAssistant.text}</p>
