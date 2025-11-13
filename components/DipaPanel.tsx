@@ -1,26 +1,16 @@
 "use client";
 
-import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { clsx } from "clsx";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 import type { TParsedQuery } from "@/app/api/query/schema";
 import logoDipam from "@/assets/logo_dipam.avif";
 import { ds } from "@/styles/ui";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip as RTooltip,
-  XAxis,
-  YAxis
-} from "recharts";
+import { PromptCard } from "@/components/panel/PromptCard";
+import { InsightCard } from "@/components/panel/InsightCard";
+import { ChatHistory } from "@/components/panel/ChatHistory";
+import type { ChartConfig, PanelMessage, QueryResult, IntentId } from "@/components/panel/types";
 
 type Region =
   | "Porto Alegre"
@@ -69,51 +59,7 @@ type Sale = {
   discount: number;
 };
 
-type Intent =
-  | "target_vs_actual"
-  | "seller_performance"
-  | "mix_products"
-  | "promotion_mix"
-  | "top_products"
-  | "avg_ticket"
-  | "sales_overview"
-  | "brand_sales";
-
-const INTENT_LABELS: Record<Intent, string> = {
-  target_vs_actual: "Meta vs realizado",
-  seller_performance: "Performance de vendedores",
-  mix_products: "Mix de produtos",
-  promotion_mix: "Mix promocional",
-  top_products: "Top produtos",
-  avg_ticket: "Ticket médio",
-  sales_overview: "Visão geral",
-  brand_sales: "Vendas por marca"
-};
-
-type ChartConfig = {
-  type: "area" | "bar";
-  data: Record<string, string | number>[];
-  xKey: string;
-  series: { key: string; label: string; color: string }[];
-};
-
-type QueryResult = {
-  intent: Intent;
-  month: string;
-  kpis: { label: string; value: string; helper?: string }[];
-  narrative: string;
-  table: {
-    columns: string[];
-    rows: (string | number)[];
-  }[];
-  chart?: ChartConfig;
-};
-
-type Message = {
-  role: "user" | "assistant";
-  text: string;
-  result?: QueryResult;
-};
+type Intent = IntentId;
 
 const REGIONS: Region[] = [
   "Porto Alegre",
@@ -151,67 +97,6 @@ function seededRandom(seed: number) {
     seed = (seed * 16807) % 2147483647;
     return (seed - 1) / 2147483646;
   };
-}
-
-function ChatBubble({ role, text }: { role: "user" | "assistant"; text: string }) {
-  const isUser = role === "user";
-  const bubbleClass = isUser ? ds.chat.user : ds.chat.assistant;
-
-  return (
-    <div className={clsx("flex", isUser ? "justify-end" : "justify-start")}>
-      <div className={clsx(bubbleClass, "flex flex-col gap-1 transition duration-200 ease-out")}>
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-300 opacity-70">
-          {isUser ? "Você" : "DIPA"}
-        </span>
-        <p className="text-sm leading-relaxed">{text}</p>
-      </div>
-    </div>
-  );
-}
-
-function PromptChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={clsx(
-        ds.chip.base,
-        active ? ds.chip.active : ds.chip.default,
-        "active:scale-95 motion-safe:transition-transform"
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-function InsightChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={clsx(
-        ds.chip.base,
-        "text-xs active:scale-95 motion-safe:transition-transform",
-        active ? ds.chip.active : ds.chip.default
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-function KpiStat({ label, value, helper }: { label: string; value: string; helper?: string }) {
-  return (
-    <div className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-slate-900/80 p-6 shadow-inner shadow-blue-900/30 transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_0_14px_rgba(59,130,246,0.45)]">
-      <span className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent" />
-      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{label}</p>
-      <p className="mt-3 text-4xl font-semibold tracking-tight text-slate-50 md:text-5xl">{value}</p>
-      {helper ? <p className="mt-2 text-xs text-slate-400/80">{helper}</p> : null}
-    </div>
-  );
 }
 
 function genData() {
@@ -852,189 +737,9 @@ function runQueryStructured(filters: TParsedQuery, fallbackMonth = "2025-11", ra
   return runQuery(filters.intent, month, runtimeFilters);
 }
 
-function KPIGrid({ items }: { items: QueryResult["kpis"] }) {
-  if (!items.length) return null;
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-3">
-      {items.map((item) => (
-        <KpiStat key={item.label} label={item.label} value={item.value} helper={item.helper} />
-      ))}
-    </div>
-  );
-}
-
-function ResultTable({ result }: { result: QueryResult }) {
-  if (!result.table.length) return null;
-
-  const numericColumnStart = Math.max(result.table[0].columns.length - 2, 1);
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm font-semibold text-slate-300">Tabela analítica</p>
-      <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 shadow-inner shadow-blue-900/20">
-        <div className="max-h-80 overflow-auto">
-          <table className="min-w-full border-collapse text-sm text-slate-300">
-            <thead className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur">
-              <tr className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {result.table[0].columns.map((column, idx) => (
-                  <th
-                    key={column}
-                    className={clsx(
-                      "px-5 py-3 text-left text-slate-400/80",
-                      idx >= numericColumnStart && "text-right"
-                    )}
-                  >
-                    {column}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {result.table.map((row, rowIndex) => (
-                <tr
-                  key={`${rowIndex}-${row.rows[0]}`}
-                  className="border-b border-slate-800/60 odd:bg-slate-900/40 even:bg-slate-900/20 transition hover:bg-slate-800/40"
-                >
-                  {row.rows.map((value, cellIndex) => (
-                    <td
-                      key={`${rowIndex}-${cellIndex}`}
-                      className={clsx(
-                        "px-5 py-3 text-sm font-medium text-slate-200/90",
-                        cellIndex >= numericColumnStart ? "text-right text-slate-50" : "text-left"
-                      )}
-                    >
-                      {value}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ResultChart({ result, title }: { result?: QueryResult["chart"]; title: string }) {
-  if (!result) return null;
-
-  const renderSeries = () => {
-    if (result.type === "area") {
-      return result.series.map((serie) => (
-        <Area
-          key={serie.key}
-          type="monotone"
-          dataKey={serie.key}
-          stroke={serie.color ?? COLOR_ACCENT}
-          strokeWidth={3}
-          fill={serie.color ?? COLOR_ACCENT}
-          fillOpacity={0.16}
-          dot={{ r: 3 }}
-          activeDot={{ r: 5 }}
-        />
-      ));
-    }
-    return result.series.map((serie) => (
-      <Bar key={serie.key} dataKey={serie.key} fill={serie.color ?? COLOR_ACCENT} radius={[14, 14, 0, 0]} />
-    ));
-  };
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm font-semibold text-slate-300">{title}</p>
-      <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-inner shadow-blue-900/20">
-        <div className="h-64 w-full overflow-hidden rounded-xl border border-slate-800/60 bg-slate-950/50">
-          <ResponsiveContainer width="100%" height="100%">
-            {result.type === "area" ? (
-              <AreaChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={ds.chart.grid} />
-                <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
-                <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
-                <Legend />
-                {renderSeries()}
-              </AreaChart>
-            ) : (
-              <BarChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={ds.chart.grid} />
-                <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
-                <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
-                <Legend />
-                {renderSeries()}
-              </BarChart>
-            )}
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PromptChips({
-  examples,
-  activeValue,
-  onSelect
-}: {
-  examples: string[];
-  activeValue: string;
-  onSelect: (example: string) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {examples.map((example) => (
-        <PromptChip key={example} label={example} active={example === activeValue} onClick={() => onSelect(example)} />
-      ))}
-    </div>
-  );
-}
-
-function InsightChips({
-  insights,
-  activeIndex,
-  onSelect
-}: {
-  insights: { index: number; question: string }[];
-  activeIndex: number | null;
-  onSelect: (index: number) => void;
-}) {
-  if (!insights.length) {
-    return <p className="text-xs text-slate-500">Nenhum insight gerado ainda.</p>;
-  }
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      {insights.map((entry) => (
-        <InsightChip
-          key={entry.index}
-          label={entry.question.length > 48 ? `${entry.question.slice(0, 48)}…` : entry.question}
-          active={entry.index === activeIndex}
-          onClick={() => onSelect(entry.index)}
-        />
-      ))}
-    </div>
-  );
-}
-
-function ChatHistory({ messages }: { messages: Message[] }) {
-  if (!messages.length) {
-    return <p className="text-sm text-slate-500">Nenhuma interação ainda. Gere um insight para iniciar.</p>;
-  }
-
-  return (
-    <div className="space-y-3">
-      {messages.map((message, index) => (
-        <ChatBubble key={`${message.role}-${index}`} role={message.role} text={message.text} />
-      ))}
-    </div>
-  );
-}
-
 export default function DipaPanel() {
   const [question, setQuestion] = useState("Comparar meta vs realizado por vendedor em 2025-11 na Grande Porto Alegre");
-  const [answers, setAnswers] = useState<Message[]>([]);
+  const [answers, setAnswers] = useState<PanelMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const [activeResult, setActiveResult] = useState<QueryResult | undefined>();
   const [activeInsightIndex, setActiveInsightIndex] = useState<number | null>(null);
@@ -1057,7 +762,19 @@ export default function DipaPanel() {
           question: previousQuestion?.text ?? "Insight gerado"
         };
       });
-  }, [answers]);
+  }, [answers, activeInsightIndex]);
+
+  const handleExampleSelection = (value: string) => {
+    void ask(value);
+  };
+
+  const handleRandomExample = () => {
+    const example = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
+    setQuestion(example);
+    void ask(example);
+  };
+
+  const insightOptions = assistantInsights.map(({ index, question }) => ({ index, question }));
 
   const ask = async (input: string) => {
     if (!input.trim()) return;
@@ -1105,7 +822,7 @@ export default function DipaPanel() {
     if (result) {
       let nextIndex: number | null = null;
       setAnswers((state) => {
-        const newAnswers: Message[] = [
+        const newAnswers: PanelMessage[] = [
           ...state,
           {
             role: "assistant",
@@ -1187,8 +904,8 @@ export default function DipaPanel() {
               <Image src={logoDipam} alt="Logotipo Dipam" className="h-8 w-8 object-contain" priority />
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-blue-400">Assistente Generativo</p>
-              <h1 className="text-2xl font-semibold text-slate-100 sm:text-[2rem] sm:leading-tight">DIPA GenAI</h1>
+              <h1 className="text-3xl font-semibold text-slate-100 sm:text-[2.5rem] sm:leading-tight">DIPA COPILOT™</h1>
+              <p className="mt-1 text-sm text-slate-400">Inteligência comercial em tempo real</p>
             </div>
           </div>
           <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-300">
@@ -1200,165 +917,30 @@ export default function DipaPanel() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-12">
           <section className="order-1 flex flex-col gap-6 lg:col-span-5 xl:col-span-4">
-            <Card className={clsx(ds.card, "shadow-2xl shadow-blue-900/30")}>
-              <CardContent className="flex flex-col gap-6 md:p-8">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Laboratório de prompts</p>
-                    <p className="mt-2 text-sm text-slate-400">
-                      Consulte o DIPA GenAI para investigar metas, produtos e oportunidades comerciais em tempo real.
-                    </p>
-                  </div>
-                  <Sparkles className="h-5 w-5 text-blue-400" />
-                </div>
-
-                <PromptChips
-                  examples={EXAMPLES}
-                  activeValue={question}
-                  onSelect={(value) => {
-                    setQuestion(value);
-                    void ask(value);
-                  }}
-                />
-
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void ask(question);
-                  }}
-                  className="space-y-4"
-                >
-                  <div className="space-y-2">
-                    <label htmlFor="prompt-input" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Pergunta
-                    </label>
-                    <textarea
-                      id="prompt-input"
-                      value={question}
-                      onChange={(event) => setQuestion(event.target.value)}
-                      placeholder="Ex.: Quanto vendemos de Nissin Miojo Galinha Caipira neste mês?"
-                      className="min-h-[160px] w-full resize-y rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-sm leading-relaxed text-slate-100 shadow-inner shadow-blue-950/40 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                    />
-                    <div className="flex justify-end text-xs text-slate-500">{question.length} caracteres</div>
-                  </div>
-
-                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="w-full sm:w-auto"
-                      onClick={() => {
-                        const example = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
-                        setQuestion(example);
-                        void ask(example);
-                      }}
-                      disabled={busy}
-                    >
-                      <Sparkles className="mr-2 h-4 w-4 text-blue-300" />
-                      Sugestão
-                    </Button>
-                    <Button
-                      type="submit"
-                      className="w-full sm:w-auto shadow-md shadow-blue-900/50 transition"
-                      disabled={busy}
-                    >
-                      {busy ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Gerando insight…
-                        </>
-                      ) : (
-                        <>
-                          <ArrowRight className="mr-2 h-4 w-4" />
-                          Gerar insight
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </form>
-
-                <div className="hidden border-t border-slate-800 pt-6 lg:block">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Histórico</p>
-                    <span className="text-xs text-slate-500">{answers.length} mensagens</span>
-                  </div>
-                  <div className="max-h-72 space-y-3 overflow-y-auto pr-2 scrollbar-thin scrollbar-track-slate-900 scrollbar-thumb-slate-700/80">
-                    <ChatHistory messages={answers} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <PromptCard
+              question={question}
+              busy={busy}
+              charactersCount={question.length}
+              examples={EXAMPLES}
+              onQuestionChange={setQuestion}
+              onSubmit={() => void ask(question)}
+              onSelectExample={handleExampleSelection}
+              onRandomExample={handleRandomExample}
+              history={answers}
+            />
           </section>
 
           <section className="order-2 flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
-            <Card
-              className={clsx(
-                ds.card,
-                "relative overflow-hidden shadow-2xl shadow-blue-900/30 transition-all duration-500",
-                busy && "opacity-90",
-                insightPulse && "ring-2 ring-blue-500/60 shadow-[0_0_45px_rgba(59,130,246,0.45)] motion-safe:animate-pulse"
-              )}
-            >
-              <CardContent className="flex flex-col gap-6 md:p-10">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Insight ativo</p>
-                    <h2 className="text-2xl font-semibold text-slate-100">
-                      {activeResult ? INTENT_LABELS[activeResult.intent] : "Nenhum insight selecionado"}
-                    </h2>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    {activeResult ? (
-                      <span className="inline-flex items-center rounded-full border border-blue-500/40 bg-blue-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-200">
-                        {activeResult.month}
-                      </span>
-                    ) : null}
-                    {activeResult && insightFresh ? (
-                      <span className="inline-flex items-center gap-2 rounded-full border border-blue-500/40 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-200">
-                        <span className="h-2 w-2 animate-ping rounded-full bg-blue-400" />
-                        Atualizado agora
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-
-                {assistantInsights.length > 1 ? (
-                  <div className="flex flex-wrap gap-2">
-                    <InsightChips
-                      insights={assistantInsights.map(({ index, question }) => ({ index, question }))}
-                      activeIndex={activeInsightIndex}
-                      onSelect={(index) => setActiveInsightIndex(index)}
-                    />
-                  </div>
-                ) : null}
-
-                <p className="text-sm text-slate-400">
-                  {busy && !activeResult
-                    ? "Gerando insight..."
-                    : activeResult?.narrative ?? "Selecione ou gere um insight para visualizar os detalhes."}
-                </p>
-
-                {activeResult ? (
-                  <Fragment>
-                    <KPIGrid items={activeResult.kpis} />
-                    <ResultChart result={activeResult.chart} title="Curva analítica" />
-                    <ResultTable result={activeResult} />
-                  </Fragment>
-                ) : (
-                  <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-blue-500/40 bg-slate-900/40 px-6 py-14 text-center shadow-inner shadow-blue-900/20">
-                    <Sparkles className="h-10 w-10 text-blue-400" />
-                    <h2 className="text-lg font-semibold text-slate-100">Nenhum insight selecionado</h2>
-                    <p className="max-w-sm text-sm text-slate-400">
-                      Gere um prompt no laboratório para visualizar KPIs, gráficos e tabelas nesta área.
-                    </p>
-                    <Button onClick={() => void ask(question)} className="shadow-lg shadow-blue-900/40">
-                      <ArrowRight className="mr-2 h-4 w-4" />
-                      Gerar insight inicial
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <InsightCard
+              busy={busy}
+              insightPulse={insightPulse}
+              insightFresh={insightFresh}
+              activeResult={activeResult}
+              insights={insightOptions}
+              activeInsightIndex={activeInsightIndex}
+              onSelectInsight={(index) => setActiveInsightIndex(index)}
+              onGenerateInitial={() => void ask(question)}
+            />
 
             <Card className={clsx(ds.card, "shadow-lg shadow-blue-900/30 lg:hidden")}>
               <CardContent className="space-y-3">

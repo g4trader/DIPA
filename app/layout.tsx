@@ -1,7 +1,7 @@
 
 import "./../styles/globals.css";
 import React from "react";
-export const metadata = { title: "DIPA – Dipam Intelligence & Performance Assistant" };
+export const metadata = { title: "DIPA COPILOT™ — Inteligência comercial em tempo real" };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
