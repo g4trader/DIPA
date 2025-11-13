@@ -1,16 +1,18 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Image from "next/image";
 import { clsx } from "clsx";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import type { TParsedQuery } from "@/app/api/query/schema";
 import logoDipam from "@/assets/logo_dipam.avif";
 import { ds } from "@/styles/ui";
-import { PromptCard } from "@/components/panel/PromptCard";
-import { InsightCard } from "@/components/panel/InsightCard";
 import { ChatHistory } from "@/components/panel/ChatHistory";
+import { KpiStats } from "@/components/panel/KpiStats";
+import { DipaChart } from "@/components/panel/DipaChart";
+import { RegionTable } from "@/components/panel/RegionTable";
 import type { ChartConfig, PanelMessage, QueryResult, IntentId } from "@/components/panel/types";
+import { Loader2, History, X, PanelRightOpen } from "lucide-react";
 
 type Region =
   | "Porto Alegre"
@@ -738,33 +740,34 @@ function runQueryStructured(filters: TParsedQuery, fallbackMonth = "2025-11", ra
 }
 
 export default function DipaPanel() {
-  const [question, setQuestion] = useState("Comparar meta vs realizado por vendedor em 2025-11 na Grande Porto Alegre");
+  const [question, setQuestion] = useState("");
   const [answers, setAnswers] = useState<PanelMessage[]>([]);
   const [busy, setBusy] = useState(false);
-  const [activeResult, setActiveResult] = useState<QueryResult | undefined>();
-  const [activeInsightIndex, setActiveInsightIndex] = useState<number | null>(null);
-  const [secondaryQuestionQueued, setSecondaryQuestionQueued] = useState(false);
-  const [insightPulse, setInsightPulse] = useState(false);
-  const [insightFresh, setInsightFresh] = useState(false);
-  const pulseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const freshTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const assistantInsights = useMemo(() => {
-    return answers
-      .map((message, index) => ({ message, index }))
-      .filter((entry) => entry.message.role === "assistant" && entry.message.result)
-      .map((entry) => {
-        const previousQuestion = answers
-          .slice(0, entry.index)
-          .reverse()
-          .find((item) => item.role === "user");
-        return {
-          ...entry,
-          question: previousQuestion?.text ?? "Insight gerado"
-        };
-      });
-  }, [answers, activeInsightIndex]);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const latestAssistant = useMemo(() => {
+    for (let index = answers.length - 1; index >= 0; index -= 1) {
+      const entry = answers[index];
+      if (entry.role === "assistant") {
+        return entry;
+      }
+    }
+    return undefined;
+  }, [answers]);
+
+  const latestQuestion = useMemo(() => {
+    for (let index = answers.length - 1; index >= 0; index -= 1) {
+      const entry = answers[index];
+      if (entry.role === "user") {
+        return entry.text;
+      }
+    }
+    return undefined;
+  }, [answers]);
 
   const handleExampleSelection = (value: string) => {
+    setQuestion(value);
     void ask(value);
   };
 
@@ -773,8 +776,6 @@ export default function DipaPanel() {
     setQuestion(example);
     void ask(example);
   };
-
-  const insightOptions = assistantInsights.map(({ index, question }) => ({ index, question }));
 
   const ask = async (input: string) => {
     if (!input.trim()) return;
@@ -786,6 +787,8 @@ export default function DipaPanel() {
 
     setBusy(true);
     setAnswers((state) => [...state, { role: "user", text: input }]);
+    setPreviewOpen(false);
+    setHistoryOpen(false);
 
     let result: QueryResult | undefined;
 
@@ -820,83 +823,25 @@ export default function DipaPanel() {
     }
 
     if (result) {
-      let nextIndex: number | null = null;
-      setAnswers((state) => {
-        const newAnswers: PanelMessage[] = [
-          ...state,
-          {
-            role: "assistant",
-            text: result.narrative,
-            result
-          }
-        ];
-        nextIndex = newAnswers.length - 1;
-        return newAnswers;
-      });
-      setActiveResult(result);
-      if (nextIndex !== null) {
-        setActiveInsightIndex(nextIndex);
-      }
-      if (pulseTimeout.current) {
-        clearTimeout(pulseTimeout.current);
-      }
-      setInsightPulse(true);
-      pulseTimeout.current = setTimeout(() => setInsightPulse(false), 1200);
-      if (freshTimeout.current) {
-        clearTimeout(freshTimeout.current);
-      }
-      setInsightFresh(true);
-      freshTimeout.current = setTimeout(() => setInsightFresh(false), 4000);
+      setAnswers((state) => [
+        ...state,
+        {
+          role: "assistant",
+          text: result.narrative,
+          result
+        }
+      ]);
     }
 
     setBusy(false);
   };
 
-  useEffect(() => {
-    if (answers.length === 0) {
-      void ask(question);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!secondaryQuestionQueued) {
-      const assistantMessages = answers.filter((message) => message.role === "assistant");
-      if (assistantMessages.length >= 1) {
-        setSecondaryQuestionQueued(true);
-        void ask("Quais as 3 marcas com maior share de receita em 2025-11?");
-      }
-    }
-  }, [answers, secondaryQuestionQueued]);
-
-  useEffect(() => {
-    if (assistantInsights.length === 0) {
-      setActiveInsightIndex(null);
-      setActiveResult(undefined);
-      return;
-    }
-    if (activeInsightIndex === null) {
-      const latest = assistantInsights[assistantInsights.length - 1];
-      setActiveInsightIndex(latest.index);
-      if (latest.message.result) {
-        setActiveResult(latest.message.result);
-      }
-    }
-  }, [assistantInsights, activeInsightIndex]);
-
-  useEffect(() => {
-    return () => {
-      if (pulseTimeout.current) {
-        clearTimeout(pulseTimeout.current);
-      }
-      if (freshTimeout.current) {
-        clearTimeout(freshTimeout.current);
-      }
-    };
-  }, []);
+  const hasResponse = Boolean(latestAssistant);
+  const latestResult = latestAssistant?.result;
+  const isSubmitDisabled = busy || !question.trim();
 
   return (
-    <div className={clsx("min-h-screen", ds.colors.background, "text-slate-200")}>
+    <div className={clsx("min-h-screen", ds.colors.background, "text-slate-200") }>
       <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
@@ -908,52 +853,139 @@ export default function DipaPanel() {
               <p className="mt-1 text-sm text-slate-400">Inteligência comercial em tempo real</p>
             </div>
           </div>
-          <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-300">
-            Protótipo
-          </span>
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              className="gap-2 text-sm font-medium text-slate-300 hover:text-slate-100"
+              onClick={() => setHistoryOpen(true)}
+            >
+              <History className="h-4 w-4" />
+              Histórico
+            </Button>
+            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-300">
+              Protótipo
+            </span>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-12">
-          <section className="order-1 flex flex-col gap-6 lg:col-span-5 xl:col-span-4">
-            <PromptCard
-              question={question}
-              busy={busy}
-              charactersCount={question.length}
-              examples={EXAMPLES}
-              onQuestionChange={setQuestion}
-              onSubmit={() => void ask(question)}
-              onSelectExample={handleExampleSelection}
-              onRandomExample={handleRandomExample}
-              history={answers}
-            />
-          </section>
+      <main className="mx-auto flex w-full max-w-4xl flex-col items-center gap-12 px-4 py-16 sm:px-6 lg:px-8">
+        <form
+          className="w-full space-y-6 text-center"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void ask(question);
+          }}
+        >
+          <textarea
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="Qual decisão comercial você quer acelerar agora?"
+            className="h-44 w-full rounded-3xl border border-slate-700 bg-slate-900/80 px-6 py-4 text-lg leading-relaxed text-slate-100 shadow-inner shadow-slate-950/40 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
 
-          <section className="order-2 flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
-            <InsightCard
-              busy={busy}
-              insightPulse={insightPulse}
-              insightFresh={insightFresh}
-              activeResult={activeResult}
-              insights={insightOptions}
-              activeInsightIndex={activeInsightIndex}
-              onSelectInsight={(index) => setActiveInsightIndex(index)}
-              onGenerateInitial={() => void ask(question)}
-            />
+          <div className="flex flex-wrap justify-center gap-2 text-xs text-slate-400">
+            {EXAMPLES.map((example) => (
+              <button
+                key={example}
+                type="button"
+                onClick={() => handleExampleSelection(example)}
+                className="rounded-full border border-slate-700/60 bg-slate-800/60 px-4 py-1.5 transition duration-150 ease-out hover:border-blue-500/50 hover:text-slate-100"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
 
-            <Card className={clsx(ds.card, "shadow-lg shadow-blue-900/30 lg:hidden")}>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Histórico</p>
-                  <span className="text-xs text-slate-500">{answers.length} mensagens</span>
-                </div>
-                <ChatHistory messages={answers} />
-              </CardContent>
-            </Card>
-          </section>
-        </div>
+          <div className="flex justify-center">
+            <Button
+              type="submit"
+              disabled={isSubmitDisabled}
+              className="gap-2 rounded-full px-8 py-3 text-base font-semibold"
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Perguntar ao copiloto"}
+            </Button>
+          </div>
+        </form>
+
+        {hasResponse && latestAssistant ? (
+          <div className="w-full max-w-3xl space-y-6">
+            <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-8 shadow-xl shadow-blue-900/30">
+              <div className="flex flex-col gap-2 text-left">
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPA COPILOT™</p>
+                {latestQuestion ? (
+                  <h2 className="text-lg font-semibold text-slate-100">{latestQuestion}</h2>
+                ) : null}
+              </div>
+              <p className="mt-6 text-left text-lg leading-relaxed text-slate-100">
+                {latestAssistant.text}
+              </p>
+            </div>
+
+            {latestResult ? (
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2 rounded-full px-6 py-3 text-sm font-medium"
+                  onClick={() => setPreviewOpen(true)}
+                >
+                  <PanelRightOpen className="h-4 w-4" />
+                  Ver preview analítico detalhado
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </main>
+
+      {historyOpen ? (
+        <div className="fixed inset-0 z-40 flex items-start justify-center sm:justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setHistoryOpen(false)} />
+          <div className="relative mt-24 w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900/95 p-6 shadow-2xl backdrop-blur">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-100">Histórico recente</h3>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                className="rounded-full border border-slate-700/60 bg-slate-800/70 p-1.5 text-slate-300 transition hover:border-blue-500/40 hover:text-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-4 max-h-[60vh] overflow-y-auto pr-1">
+              <ChatHistory messages={answers} emptyMessage="Nenhuma interação ainda." />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {previewOpen && latestResult ? (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/45" onClick={() => setPreviewOpen(false)} />
+          <div className="relative ml-auto flex h-full w-full max-w-md flex-col border-l border-slate-800 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview analítico</p>
+                <h3 className="text-base font-semibold text-slate-100">Detalhes estruturados</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(false)}
+                className="rounded-full border border-slate-700/60 bg-slate-800/80 p-1.5 text-slate-300 transition hover:border-blue-500/40 hover:text-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-6 px-6 py-6">
+              <KpiStats items={latestResult.kpis} />
+              <DipaChart chart={latestResult.chart} title="Indicadores visuais" />
+              <RegionTable result={latestResult} />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
