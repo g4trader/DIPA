@@ -16,25 +16,30 @@ import {
 import { ds } from "@/styles/ui";
 import type { ChartConfig } from "./types";
 
-type DipaChartProps = {
-  chart?: ChartConfig;
-  title: string;
-};
-
 const legendFormatter = (value: string) => `→ ${value}`;
 
-export function DipaChart({ chart, title }: DipaChartProps) {
-  if (!chart) return null;
+type DipaChartProps = {
+  chart?: ChartConfig;
+  emptyMessage?: string;
+};
+
+export function DipaChart({ chart, emptyMessage = "Sem dados suficientes para exibir o gráfico." }: DipaChartProps) {
+  const chartData = chart?.data ?? [];
+
+  if (!chartData.length) {
+    return (
+      <div className="flex h-40 items-center justify-center rounded-xl border border-slate-800 bg-slate-900/40 text-xs text-slate-500">
+        {emptyMessage}
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm font-semibold text-slate-300">{title}</p>
-      <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-inner shadow-blue-900/20">
-        <div className="h-64 w-full overflow-hidden rounded-xl border border-slate-800/60 bg-slate-950/50">
-          <ResponsiveContainer width="100%" height="100%">
-            {chart.type === "area" ? <AreaVisualization chart={chart} /> : <BarVisualization chart={chart} />}
-          </ResponsiveContainer>
-        </div>
+    <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-inner shadow-blue-900/20">
+      <div className="h-56 w-full overflow-hidden rounded-xl border border-slate-800/60 bg-slate-950/50">
+        <ResponsiveContainer width="100%" height="100%">
+          {chart?.type === "area" ? <AreaVisualization chart={chart} /> : <BarVisualization chart={chart!} />}
+        </ResponsiveContainer>
       </div>
     </div>
   );

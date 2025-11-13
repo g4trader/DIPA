@@ -68,7 +68,10 @@ export function InsightCard({
         {activeResult ? (
           <Fragment>
             <KpiStats items={activeResult.kpis} />
-            <DipaChart chart={activeResult.chart} title="Curva analítica" />
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Curva analítica</h3>
+              <DipaChart chart={activeResult.chart} />
+            </div>
             <RegionTable result={activeResult} />
           </Fragment>
         ) : (

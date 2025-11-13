@@ -1300,26 +1300,37 @@ export default function DipaPanel() {
       {previewOpen && latestResult ? (
         <div className="fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/45" onClick={() => setPreviewOpen(false)} />
-          <div className="relative ml-auto flex h-full w-full max-w-md flex-col border-l border-slate-800 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview analítico</p>
-                <h3 className="text-base font-semibold text-slate-100">Detalhes estruturados</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewOpen(false)}
-                className="rounded-full border border-slate-700/60 bg-slate-800/80 p-1.5 text-slate-300 transition hover:border-blue-500/40 hover:text-slate-100"
-              >
-                <X className="h-4 w-4" />
-              </button>
+          <aside className="relative ml-auto flex h-full w-full max-w-md border-l border-slate-800 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
+            <div className="flex h-full w-full flex-col gap-6 overflow-y-auto p-6">
+              <header className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview analítico</p>
+                  <h3 className="text-base font-semibold text-slate-100">Detalhes estruturados</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen(false)}
+                  className="rounded-full border border-slate-700/60 bg-slate-800/80 p-1.5 text-slate-300 transition hover:border-blue-500/40 hover:text-slate-100"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </header>
+
+              <section>
+                <KpiStats items={latestResult.kpis} />
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Indicadores visuais</h3>
+                <DipaChart chart={latestResult.chart} />
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tabela analítica</h3>
+                <RegionTable result={latestResult} showHeader={false} />
+              </section>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-6 px-6 py-6">
-              <KpiStats items={latestResult.kpis} />
-              <DipaChart chart={latestResult.chart} title="Indicadores visuais" />
-              <RegionTable result={latestResult} />
-            </div>
-          </div>
+          </aside>
         </div>
       ) : null}
     </div>
