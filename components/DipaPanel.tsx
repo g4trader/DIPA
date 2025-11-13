@@ -195,10 +195,11 @@ function InsightChip({ label, active, onClick }: { label: string; active: boolea
 
 function KpiStat({ label, value, helper }: { label: string; value: string; helper?: string }) {
   return (
-    <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-800/70 p-4 shadow-inner shadow-blue-900/20">
-      <p className={ds.typography.kpiLabel}>{label}</p>
-      <p className={ds.typography.kpiValue}>{value}</p>
-      {helper ? <p className="text-xs text-slate-400">{helper}</p> : null}
+    <div className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-slate-900/80 p-6 shadow-inner shadow-blue-900/30">
+      <span className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent" />
+      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{label}</p>
+      <p className="mt-3 text-4xl font-semibold tracking-tight text-slate-50 md:text-5xl">{value}</p>
+      {helper ? <p className="mt-2 text-xs text-slate-400/80">{helper}</p> : null}
     </div>
   );
 }
@@ -845,13 +846,11 @@ function KPIGrid({ items }: { items: QueryResult["kpis"] }) {
   if (!items.length) return null;
 
   return (
-    <Card className="min-w-0">
-      <CardContent className="grid gap-4 sm:grid-cols-3">
-        {items.map((item) => (
-          <KpiStat key={item.label} label={item.label} value={item.value} helper={item.helper} />
-        ))}
-      </CardContent>
-    </Card>
+    <div className="grid gap-4 sm:grid-cols-3">
+      {items.map((item) => (
+        <KpiStat key={item.label} label={item.label} value={item.value} helper={item.helper} />
+      ))}
+    </div>
   );
 }
 
@@ -861,31 +860,38 @@ function ResultTable({ result }: { result: QueryResult }) {
   const numericColumnStart = Math.max(result.table[0].columns.length - 2, 1);
 
   return (
-    <Card className="min-w-0">
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-800 text-left text-sm text-slate-300">
-            <thead className="bg-slate-900/80 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              <tr>
+    <div className="space-y-3">
+      <p className="text-sm font-semibold text-slate-300">Tabela analítica</p>
+      <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 shadow-inner shadow-blue-900/20">
+        <div className="max-h-80 overflow-auto">
+          <table className="min-w-full border-collapse text-sm text-slate-300">
+            <thead className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur">
+              <tr className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                 {result.table[0].columns.map((column, idx) => (
                   <th
                     key={column}
-                    className={clsx("px-4 py-3", idx >= numericColumnStart && "text-right")}
+                    className={clsx(
+                      "px-5 py-3 text-left text-slate-400/80",
+                      idx >= numericColumnStart && "text-right"
+                    )}
                   >
                     {column}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody>
               {result.table.map((row, rowIndex) => (
-                <tr key={`${rowIndex}-${row.rows[0]}`} className="odd:bg-slate-900/50 even:bg-slate-900/30">
+                <tr
+                  key={`${rowIndex}-${row.rows[0]}`}
+                  className="border-b border-slate-800/60 odd:bg-slate-900/40 even:bg-slate-900/20 transition hover:bg-slate-800/40"
+                >
                   {row.rows.map((value, cellIndex) => (
                     <td
                       key={`${rowIndex}-${cellIndex}`}
                       className={clsx(
-                        "px-4 py-3 text-sm text-slate-300",
-                        cellIndex >= numericColumnStart && "text-right font-semibold text-slate-50"
+                        "px-5 py-3 text-sm font-medium text-slate-200/90",
+                        cellIndex >= numericColumnStart ? "text-right text-slate-50" : "text-left"
                       )}
                     >
                       {value}
@@ -896,51 +902,64 @@ function ResultTable({ result }: { result: QueryResult }) {
             </tbody>
           </table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
-function ResultChart({ result }: { result?: QueryResult["chart"] }) {
+function ResultChart({ result, title }: { result?: QueryResult["chart"]; title: string }) {
   if (!result) return null;
 
   const renderSeries = () => {
     if (result.type === "area") {
       return result.series.map((serie) => (
-        <Area key={serie.key} type="monotone" dataKey={serie.key} stroke={serie.color} fill={serie.color} fillOpacity={0.12} />
+        <Area
+          key={serie.key}
+          type="monotone"
+          dataKey={serie.key}
+          stroke={serie.color ?? COLOR_ACCENT}
+          strokeWidth={3}
+          fill={serie.color ?? COLOR_ACCENT}
+          fillOpacity={0.16}
+          dot={{ r: 3 }}
+          activeDot={{ r: 5 }}
+        />
       ));
     }
     return result.series.map((serie) => (
-      <Bar key={serie.key} dataKey={serie.key} fill={serie.color} radius={[10, 10, 0, 0]} />
+      <Bar key={serie.key} dataKey={serie.key} fill={serie.color ?? COLOR_ACCENT} radius={[14, 14, 0, 0]} />
     ));
   };
 
   return (
-    <Card className="min-w-0">
-      <CardContent className="h-80 w-full overflow-hidden p-0">
-        <ResponsiveContainer width="100%" height="100%">
-          {result.type === "area" ? (
-            <AreaChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={ds.chart.grid} />
-              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
-              <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
-              <Legend />
-              {renderSeries()}
-            </AreaChart>
-          ) : (
-            <BarChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={ds.chart.grid} />
-              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
-              <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
-              <Legend />
-              {renderSeries()}
-            </BarChart>
-          )}
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
+    <div className="space-y-3">
+      <p className="text-sm font-semibold text-slate-300">{title}</p>
+      <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-inner shadow-blue-900/20">
+        <div className="h-64 w-full overflow-hidden rounded-xl border border-slate-800/60 bg-slate-950/50">
+          <ResponsiveContainer width="100%" height="100%">
+            {result.type === "area" ? (
+              <AreaChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={ds.chart.grid} />
+                <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
+                <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
+                <Legend />
+                {renderSeries()}
+              </AreaChart>
+            ) : (
+              <BarChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={ds.chart.grid} />
+                <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
+                <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
+                <Legend />
+                {renderSeries()}
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1011,7 +1030,9 @@ export default function DipaPanel() {
   const [activeInsightIndex, setActiveInsightIndex] = useState<number | null>(null);
   const [secondaryQuestionQueued, setSecondaryQuestionQueued] = useState(false);
   const [insightPulse, setInsightPulse] = useState(false);
+  const [insightFresh, setInsightFresh] = useState(false);
   const pulseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const freshTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const assistantInsights = useMemo(() => {
     return answers
       .map((message, index) => ({ message, index }))
@@ -1093,7 +1114,12 @@ export default function DipaPanel() {
         clearTimeout(pulseTimeout.current);
       }
       setInsightPulse(true);
-      pulseTimeout.current = setTimeout(() => setInsightPulse(false), 600);
+      pulseTimeout.current = setTimeout(() => setInsightPulse(false), 1200);
+      if (freshTimeout.current) {
+        clearTimeout(freshTimeout.current);
+      }
+      setInsightFresh(true);
+      freshTimeout.current = setTimeout(() => setInsightFresh(false), 4000);
     }
 
     setBusy(false);
@@ -1135,6 +1161,9 @@ export default function DipaPanel() {
     return () => {
       if (pulseTimeout.current) {
         clearTimeout(pulseTimeout.current);
+      }
+      if (freshTimeout.current) {
+        clearTimeout(freshTimeout.current);
       }
     };
   }, []);
@@ -1252,73 +1281,74 @@ export default function DipaPanel() {
           </section>
 
           <section className="order-2 flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
-            <Card className={clsx(ds.card, "shadow-xl shadow-blue-900/30")}>
-              <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-6">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Insights gerados</p>
-                  <p className="text-sm text-slate-500">Pré-visualização</p>
-                </div>
-                <InsightChips
-                  insights={assistantInsights.map(({ index, question }) => ({ index, question }))}
-                  activeIndex={activeInsightIndex}
-                  onSelect={(index) => setActiveInsightIndex(index)}
-                />
-              </CardContent>
-            </Card>
-
             <Card
               className={clsx(
                 ds.card,
-                "shadow-xl shadow-blue-900/30 transition",
-                busy && "animate-pulse",
-                insightPulse && "ring-2 ring-blue-500/60 shadow-[0_0_25px_rgba(59,130,246,0.45)]"
+                "relative overflow-hidden shadow-2xl shadow-blue-900/30 transition-all duration-500",
+                busy && "opacity-90",
+                insightPulse && "ring-2 ring-blue-500/60 shadow-[0_0_45px_rgba(59,130,246,0.45)] motion-safe:animate-pulse"
               )}
             >
-              <CardContent className="space-y-4 sm:p-8">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Insight selecionado</p>
-                    <h2 className="text-lg font-semibold text-slate-100">
+              <CardContent className="flex flex-col gap-6 md:p-10">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Insight ativo</p>
+                    <h2 className="text-2xl font-semibold text-slate-100">
                       {activeResult ? INTENT_LABELS[activeResult.intent] : "Nenhum insight selecionado"}
                     </h2>
                   </div>
-                  {activeResult ? (
-                    <span className="inline-flex items-center rounded-full border border-blue-500/50 bg-blue-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-200">
-                      {activeResult.month}
-                    </span>
-                  ) : null}
+                  <div className="flex flex-col items-end gap-2">
+                    {activeResult ? (
+                      <span className="inline-flex items-center rounded-full border border-blue-500/40 bg-blue-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-200">
+                        {activeResult.month}
+                      </span>
+                    ) : null}
+                    {activeResult && insightFresh ? (
+                      <span className="inline-flex items-center gap-2 rounded-full border border-blue-500/40 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-200">
+                        <span className="h-2 w-2 animate-ping rounded-full bg-blue-400" />
+                        Atualizado agora
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
+
+                {assistantInsights.length > 1 ? (
+                  <div className="flex flex-wrap gap-2">
+                    <InsightChips
+                      insights={assistantInsights.map(({ index, question }) => ({ index, question }))}
+                      activeIndex={activeInsightIndex}
+                      onSelect={(index) => setActiveInsightIndex(index)}
+                    />
+                  </div>
+                ) : null}
+
                 <p className="text-sm text-slate-400">
                   {busy && !activeResult
                     ? "Gerando insight..."
                     : activeResult?.narrative ?? "Selecione ou gere um insight para visualizar os detalhes."}
                 </p>
+
+                {activeResult ? (
+                  <Fragment>
+                    <KPIGrid items={activeResult.kpis} />
+                    <ResultChart result={activeResult.chart} title="Curva analítica" />
+                    <ResultTable result={activeResult} />
+                  </Fragment>
+                ) : (
+                  <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-blue-500/40 bg-slate-900/40 px-6 py-14 text-center shadow-inner shadow-blue-900/20">
+                    <Sparkles className="h-10 w-10 text-blue-400" />
+                    <h2 className="text-lg font-semibold text-slate-100">Nenhum insight selecionado</h2>
+                    <p className="max-w-sm text-sm text-slate-400">
+                      Gere um prompt no laboratório para visualizar KPIs, gráficos e tabelas nesta área.
+                    </p>
+                    <Button onClick={() => void ask(question)} className="shadow-lg shadow-blue-900/40">
+                      <ArrowRight className="mr-2 h-4 w-4" />
+                      Gerar insight inicial
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
-
-            {activeResult ? (
-              <Fragment>
-                <KPIGrid items={activeResult.kpis} />
-                <div className="grid gap-6 xl:grid-cols-2">
-                  <ResultChart result={activeResult.chart} />
-                  <ResultTable result={activeResult} />
-                </div>
-              </Fragment>
-            ) : (
-              <Card className={clsx(ds.card, "border-dashed border-blue-500/40 bg-slate-900/40 text-center shadow-inner shadow-blue-900/20")}>
-                <CardContent className="flex flex-col items-center gap-3 py-14">
-                  <Sparkles className="h-10 w-10 text-blue-400" />
-                  <h2 className="text-lg font-semibold text-slate-100">Nenhum insight selecionado</h2>
-                  <p className="max-w-sm text-sm text-slate-400">
-                    Gere um prompt no laboratório para visualizar KPIs, gráficos e tabelas nesta área.
-                  </p>
-                  <Button onClick={() => void ask(question)} className="shadow-lg shadow-blue-900/40">
-                    <ArrowRight className="mr-2 h-4 w-4" />
-                    Gerar insight inicial
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
 
             <Card className={clsx(ds.card, "shadow-lg shadow-blue-900/30 lg:hidden")}>
               <CardContent className="space-y-3">
