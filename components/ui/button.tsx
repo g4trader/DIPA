@@ -1,15 +1,24 @@
 
 import * as React from "react";
 import { clsx } from "clsx";
-type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "default"|"outline"|"ghost"|"secondary"; size?: "sm"|"md" };
-export function Button({ className, variant="default", size="md", ...props }: Props) {
-  const base = "inline-flex items-center justify-center rounded-xl font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-sky-300/60 disabled:opacity-50";
-  const variants: Record<string,string> = {
-    default: "bg-sky-600 text-white hover:bg-sky-700",
-    outline: "border border-sky-200 bg-white text-sky-700 hover:bg-sky-50",
-    ghost: "hover:bg-slate-100",
-    secondary: "bg-slate-200 hover:bg-slate-300"
+import { ds } from "@/styles/ui";
+
+type ButtonVariant = "primary" | "secondary" | "ghost";
+type ButtonSize = "sm" | "md";
+
+type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize };
+
+export function Button({ className, variant = "primary", size = "md", ...props }: Props) {
+  const base = `${ds.button.base} disabled:opacity-60 disabled:cursor-not-allowed`;
+  const variantMap: Record<ButtonVariant, string> = {
+    primary: ds.button.primary,
+    secondary: ds.button.secondary,
+    ghost: "bg-transparent text-slate-300 hover:bg-slate-800"
   };
-  const sizes: Record<string,string> = { sm: "h-8 px-3 text-sm", md: "h-10 px-4 text-sm" };
-  return <button className={clsx(base, variants[variant], sizes[size], className)} {...props} />;
+  const sizeMap: Record<ButtonSize, string> = {
+    sm: "px-4 py-2 text-sm",
+    md: "px-5 py-2.5 text-sm"
+  };
+
+  return <button className={clsx(base, variantMap[variant], sizeMap[size], className)} {...props} />;
 }

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 import type { TParsedQuery } from "@/app/api/query/schema";
 import logoDipam from "@/assets/logo_dipam.avif";
+import { ds } from "@/styles/ui";
 import {
   Area,
   AreaChart,
@@ -140,6 +141,9 @@ const CATEGORIES = [
 const MONTHS = ["2025-07", "2025-08", "2025-09", "2025-10", "2025-11"] as const;
 const DEFAULT_MONTH: (typeof MONTHS)[number] = "2025-11";
 const USE_LLM = process.env.NEXT_PUBLIC_USE_LLM === "true";
+const COLOR_ACCENT = "#3B82F6";
+const COLOR_POSITIVE = "#22C55E";
+const COLOR_NEUTRAL = "#64748B";
 
 function seededRandom(seed: number) {
   return () => {
@@ -151,22 +155,15 @@ function seededRandom(seed: number) {
 
 function ChatBubble({ role, text }: { role: "user" | "assistant"; text: string }) {
   const isUser = role === "user";
+  const bubbleClass = isUser ? ds.chat.user : ds.chat.assistant;
+
   return (
     <div className={clsx("flex", isUser ? "justify-end" : "justify-start")}>
-      <div
-        className={clsx(
-          "max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-md transition",
-          isUser
-            ? "rounded-tr-sm border border-blue-500/50 bg-blue-500/15 text-blue-100 backdrop-blur"
-            : "rounded-tl-sm border border-slate-800 bg-slate-900/80 text-slate-50 backdrop-blur"
-        )}
-      >
-        <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-          <span>{isUser ? "Você" : "DIPA"}</span>
-          <span className="text-slate-600">•</span>
-          <span className="font-normal text-slate-500">agora</span>
-        </div>
-        <p className="leading-relaxed">{text}</p>
+      <div className={clsx(bubbleClass, "flex flex-col gap-1 transition duration-150")}>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-300 opacity-70">
+          {isUser ? "Você" : "DIPA"}
+        </span>
+        <p className="text-sm leading-relaxed">{text}</p>
       </div>
     </div>
   );
@@ -177,12 +174,7 @@ function PromptChip({ label, active, onClick }: { label: string; active: boolean
     <button
       type="button"
       onClick={onClick}
-      className={clsx(
-        "rounded-full px-3 py-1 text-sm font-medium transition focus:outline-none focus-visible:ring-2",
-        active
-          ? "border border-blue-500 bg-blue-500/20 text-blue-200 shadow focus-visible:ring-blue-400"
-          : "border border-slate-700 bg-slate-800/70 text-slate-300 hover:border-blue-500 hover:text-blue-200 focus-visible:ring-slate-600"
-      )}
+      className={clsx(ds.chip.base, active ? ds.chip.active : ds.chip.default)}
     >
       {label}
     </button>
@@ -194,12 +186,7 @@ function InsightChip({ label, active, onClick }: { label: string; active: boolea
     <button
       type="button"
       onClick={onClick}
-      className={clsx(
-        "rounded-full px-3 py-1 text-xs font-medium transition focus:outline-none focus-visible:ring-2",
-        active
-          ? "border border-blue-500 bg-blue-500/20 text-blue-200 shadow focus-visible:ring-blue-500"
-          : "border border-slate-700 bg-slate-800 text-slate-300 hover:border-blue-500 hover:text-blue-200 focus-visible:ring-slate-600"
-      )}
+      className={clsx(ds.chip.base, "text-xs", active ? ds.chip.active : ds.chip.default)}
     >
       {label}
     </button>
@@ -208,9 +195,9 @@ function InsightChip({ label, active, onClick }: { label: string; active: boolea
 
 function KpiStat({ label, value, helper }: { label: string; value: string; helper?: string }) {
   return (
-    <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-800/70 p-4 shadow-inner shadow-slate-950/40">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="text-3xl font-bold text-slate-50">{value}</p>
+    <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-800/70 p-4 shadow-inner shadow-blue-900/20">
+      <p className={ds.typography.kpiLabel}>{label}</p>
+      <p className={ds.typography.kpiValue}>{value}</p>
       {helper ? <p className="text-xs text-slate-400">{helper}</p> : null}
     </div>
   );
@@ -431,8 +418,8 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         })),
         xKey: "name",
         series: [
-          { key: "Meta", label: "Meta", color: "#cbd5f5" },
-          { key: "Realizado", label: "Realizado", color: "#34d399" }
+          { key: "Meta", label: "Meta", color: COLOR_NEUTRAL },
+          { key: "Realizado", label: "Realizado", color: COLOR_POSITIVE }
         ]
       };
 
@@ -500,8 +487,8 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         })),
         xKey: "name",
         series: [
-          { key: "Receita", label: "Receita", color: "#34d399" },
-          { key: "Crescimento", label: "Crescimento (%)", color: "#60a5fa" }
+          { key: "Receita", label: "Receita", color: COLOR_ACCENT },
+          { key: "Crescimento", label: "Crescimento (%)", color: COLOR_POSITIVE }
         ]
       };
 
@@ -552,8 +539,8 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         })),
         xKey: "name",
         series: [
-          { key: "Receita", label: "Receita", color: "#34d399" },
-          { key: "Unidades", label: "Unidades", color: "#fbbf24" }
+          { key: "Receita", label: "Receita", color: COLOR_ACCENT },
+          { key: "Unidades", label: "Unidades", color: COLOR_POSITIVE }
         ]
       };
 
@@ -602,8 +589,8 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         })),
         xKey: "name",
         series: [
-          { key: "Receita", label: "Receita", color: "#f87171" },
-          { key: "Unidades", label: "Unidades", color: "#60a5fa" }
+          { key: "Receita", label: "Receita", color: COLOR_ACCENT },
+          { key: "Unidades", label: "Unidades", color: COLOR_POSITIVE }
         ]
       };
 
@@ -652,8 +639,8 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         })),
         xKey: "name",
         series: [
-          { key: "Receita", label: "Receita", color: "#34d399" },
-          { key: "Unidades", label: "Unidades", color: "#facc15" }
+          { key: "Receita", label: "Receita", color: COLOR_ACCENT },
+          { key: "Unidades", label: "Unidades", color: COLOR_POSITIVE }
         ]
       };
 
@@ -729,7 +716,7 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
           Receita: Math.round(entry.revenue)
         })),
         xKey: "name",
-        series: [{ key: "Receita", label: "Receita", color: "#38bdf8" }]
+        series: [{ key: "Receita", label: "Receita", color: COLOR_ACCENT }]
       };
 
       baseResult.narrative = `Receita de ${productLabel} detalhada por vendedor em ${month}.`;
@@ -777,8 +764,8 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         })),
         xKey: "name",
         series: [
-          { key: "Ticket", label: "Ticket médio", color: "#34d399" },
-          { key: "Pedidos", label: "Pedidos", color: "#60a5fa" }
+          { key: "Ticket", label: "Ticket médio", color: COLOR_ACCENT },
+          { key: "Pedidos", label: "Pedidos", color: COLOR_POSITIVE }
         ]
       };
 
@@ -824,7 +811,7 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
           Receita: Math.round(row.revenue)
         })),
         xKey: "name",
-        series: [{ key: "Receita", label: "Receita", color: "#34d399" }]
+        series: [{ key: "Receita", label: "Receita", color: COLOR_ACCENT }]
       };
 
       baseResult.narrative = `Resumo consolidado de vendas para ${month}, destacando regiões com maior participação de receita.`;
@@ -858,8 +845,8 @@ function KPIGrid({ items }: { items: QueryResult["kpis"] }) {
   if (!items.length) return null;
 
   return (
-    <Card className="min-w-0 rounded-3xl border border-slate-800 bg-slate-900/60 shadow-lg shadow-blue-900/30 backdrop-blur">
-      <CardContent className="grid gap-4 p-6 sm:grid-cols-3">
+    <Card className="min-w-0">
+      <CardContent className="grid gap-4 sm:grid-cols-3">
         {items.map((item) => (
           <KpiStat key={item.label} label={item.label} value={item.value} helper={item.helper} />
         ))}
@@ -874,7 +861,7 @@ function ResultTable({ result }: { result: QueryResult }) {
   const numericColumnStart = Math.max(result.table[0].columns.length - 2, 1);
 
   return (
-    <Card className="min-w-0 rounded-3xl border border-slate-800 bg-slate-900/60 shadow-lg shadow-blue-900/30 backdrop-blur">
+    <Card className="min-w-0">
       <CardContent className="p-0">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-800 text-left text-sm text-slate-300">
@@ -929,24 +916,24 @@ function ResultChart({ result }: { result?: QueryResult["chart"] }) {
   };
 
   return (
-    <Card className="min-w-0 rounded-3xl border border-slate-800 bg-slate-900/60 shadow-lg shadow-blue-900/30 backdrop-blur">
+    <Card className="min-w-0">
       <CardContent className="h-80 w-full overflow-hidden p-0">
         <ResponsiveContainer width="100%" height="100%">
           {result.type === "area" ? (
             <AreaChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#CBD5F5" }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#CBD5F5" }} />
-              <RTooltip contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={ds.chart.grid} />
+              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
+              <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
               <Legend />
               {renderSeries()}
             </AreaChart>
           ) : (
             <BarChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#CBD5F5" }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#CBD5F5" }} />
-              <RTooltip contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={ds.chart.grid} />
+              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
+              <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
               <Legend />
               {renderSeries()}
             </BarChart>
@@ -1153,8 +1140,8 @@ export default function DipaPanel() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-900/70 bg-slate-950/80 backdrop-blur">
+    <div className={clsx("min-h-screen", ds.colors.background, "text-slate-200")}>
+      <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-500/40 bg-blue-500/20 shadow-lg shadow-blue-900/40">
@@ -1174,8 +1161,8 @@ export default function DipaPanel() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-12">
           <section className="order-1 flex flex-col gap-6 lg:col-span-5 xl:col-span-4">
-            <Card className="rounded-3xl border border-slate-800 bg-slate-900/60 shadow-2xl shadow-blue-900/30 backdrop-blur-xl">
-              <CardContent className="flex flex-col gap-6 p-6 md:p-8">
+            <Card className={clsx(ds.card, "shadow-2xl shadow-blue-900/30")}>
+              <CardContent className="flex flex-col gap-6 md:p-8">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Laboratório de prompts</p>
@@ -1211,7 +1198,7 @@ export default function DipaPanel() {
                       value={question}
                       onChange={(event) => setQuestion(event.target.value)}
                       placeholder="Ex.: Quanto vendemos de Nissin Miojo Galinha Caipira neste mês?"
-                      className="min-h-[160px] w-full resize-y rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm leading-relaxed text-slate-100 shadow-inner shadow-slate-950 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                      className="min-h-[160px] w-full resize-y rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-sm leading-relaxed text-slate-100 shadow-inner shadow-blue-950/40 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                     />
                     <div className="flex justify-end text-xs text-slate-500">{question.length} caracteres</div>
                   </div>
@@ -1219,8 +1206,8 @@ export default function DipaPanel() {
                   <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <Button
                       type="button"
-                      variant="outline"
-                      className="w-full sm:w-auto border-slate-700 bg-slate-800 text-slate-200 hover:border-blue-400 hover:text-blue-200"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
                       onClick={() => {
                         const example = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
                         setQuestion(example);
@@ -1228,12 +1215,12 @@ export default function DipaPanel() {
                       }}
                       disabled={busy}
                     >
-                      <Sparkles className="mr-2 h-4 w-4 text-blue-400" />
+                      <Sparkles className="mr-2 h-4 w-4 text-blue-300" />
                       Sugestão
                     </Button>
                     <Button
                       type="submit"
-                      className="w-full sm:w-auto bg-blue-600 text-white shadow-lg shadow-blue-900/50 transition hover:bg-blue-500 disabled:bg-blue-300"
+                      className="w-full sm:w-auto shadow-md shadow-blue-900/50 transition"
                       disabled={busy}
                     >
                       {busy ? (
@@ -1265,8 +1252,8 @@ export default function DipaPanel() {
           </section>
 
           <section className="order-2 flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
-            <Card className="rounded-3xl border border-slate-800 bg-slate-900/50 shadow-xl shadow-blue-900/30 backdrop-blur">
-              <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between md:gap-6">
+            <Card className={clsx(ds.card, "shadow-xl shadow-blue-900/30")}>
+              <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-6">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Insights gerados</p>
                   <p className="text-sm text-slate-500">Pré-visualização</p>
@@ -1281,12 +1268,13 @@ export default function DipaPanel() {
 
             <Card
               className={clsx(
-                "rounded-3xl border border-slate-800 bg-slate-900/60 shadow-xl shadow-blue-900/30 backdrop-blur transition",
+                ds.card,
+                "shadow-xl shadow-blue-900/30 transition",
                 busy && "animate-pulse",
                 insightPulse && "ring-2 ring-blue-500/60 shadow-[0_0_25px_rgba(59,130,246,0.45)]"
               )}
             >
-              <CardContent className="space-y-4 p-6 sm:p-8">
+              <CardContent className="space-y-4 sm:p-8">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Insight selecionado</p>
@@ -1317,17 +1305,14 @@ export default function DipaPanel() {
                 </div>
               </Fragment>
             ) : (
-              <Card className="rounded-3xl border border-dashed border-blue-500/40 bg-slate-900/50 text-center shadow-inner shadow-blue-900/20">
+              <Card className={clsx(ds.card, "border-dashed border-blue-500/40 bg-slate-900/40 text-center shadow-inner shadow-blue-900/20")}>
                 <CardContent className="flex flex-col items-center gap-3 py-14">
                   <Sparkles className="h-10 w-10 text-blue-400" />
                   <h2 className="text-lg font-semibold text-slate-100">Nenhum insight selecionado</h2>
                   <p className="max-w-sm text-sm text-slate-400">
                     Gere um prompt no laboratório para visualizar KPIs, gráficos e tabelas nesta área.
                   </p>
-                  <Button
-                    onClick={() => void ask(question)}
-                    className="bg-blue-600 text-white shadow-lg shadow-blue-900/40 hover:bg-blue-500"
-                  >
+                  <Button onClick={() => void ask(question)} className="shadow-lg shadow-blue-900/40">
                     <ArrowRight className="mr-2 h-4 w-4" />
                     Gerar insight inicial
                   </Button>
@@ -1335,8 +1320,8 @@ export default function DipaPanel() {
               </Card>
             )}
 
-            <Card className="rounded-3xl border border-slate-800 bg-slate-900/60 shadow-lg shadow-blue-900/30 backdrop-blur lg:hidden">
-              <CardContent className="space-y-3 p-6">
+            <Card className={clsx(ds.card, "shadow-lg shadow-blue-900/30 lg:hidden")}>
+              <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Histórico</p>
                   <span className="text-xs text-slate-500">{answers.length} mensagens</span>
