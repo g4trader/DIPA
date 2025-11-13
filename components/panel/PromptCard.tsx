@@ -39,7 +39,7 @@ export function PromptCard({
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Laboratório de prompts</p>
             <p className="mt-2 text-sm text-slate-400">
-              Consulte o DIPA COPILOT™ para investigar metas, produtos e oportunidades comerciais em tempo real.
+              Consulte o DIPAM COPILOT™ para investigar metas, produtos e oportunidades comerciais em tempo real.
             </p>
           </div>
           <Sparkles className="h-5 w-5 text-blue-400" />

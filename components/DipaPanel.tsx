@@ -1215,7 +1215,7 @@ export default function DipaPanel() {
               <Image src={logoDipam} alt="Logotipo Dipam" className="h-7 w-7 object-contain sm:h-8 sm:w-8" priority />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold text-slate-100 sm:text-[2.5rem] sm:leading-tight">DIPA COPILOT™</h1>
+              <h1 className="text-2xl font-semibold text-slate-100 sm:text-[2.5rem] sm:leading-tight">DIPAM COPILOT™</h1>
               <p className="mt-0.5 text-xs text-slate-400 sm:mt-1 sm:text-sm">Inteligência comercial em tempo real</p>
             </div>
           </div>
@@ -1280,7 +1280,7 @@ export default function DipaPanel() {
             {busy ? (
               <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-6 shadow-xl shadow-blue-900/30 sm:p-8 animate-pulse">
                 <div className="flex flex-col gap-2 text-left">
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPA COPILOT™</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPAM COPILOT™</p>
                   <div className="mt-2 h-5 w-2/3 rounded-full bg-slate-700/70" />
                 </div>
                 <div className="mt-6 space-y-3 text-left">
@@ -1293,7 +1293,7 @@ export default function DipaPanel() {
               <>
                 <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-6 shadow-xl shadow-blue-900/30 sm:p-8">
                   <div className="flex flex-col gap-2 text-left">
-                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPA COPILOT™</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPAM COPILOT™</p>
                     {latestQuestion ? (
                       <h2 className="text-lg font-semibold text-slate-100">{latestQuestion}</h2>
                     ) : null}
