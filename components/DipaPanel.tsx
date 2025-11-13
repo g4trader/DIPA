@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Fragment, useEffect, useMemo, useState } from "react";
+import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { clsx } from "clsx";
 import { Card, CardContent } from "@/components/ui/card";
@@ -155,16 +155,16 @@ function ChatBubble({ role, text }: { role: "user" | "assistant"; text: string }
     <div className={clsx("flex", isUser ? "justify-end" : "justify-start")}>
       <div
         className={clsx(
-          "max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm transition",
+          "max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-md transition",
           isUser
-            ? "rounded-tr-sm border border-blue-100 bg-blue-50 text-blue-900"
-            : "rounded-tl-sm border border-slate-900/40 bg-slate-900 text-slate-50"
+            ? "rounded-tr-sm border border-blue-500/50 bg-blue-500/15 text-blue-100 backdrop-blur"
+            : "rounded-tl-sm border border-slate-800 bg-slate-900/80 text-slate-50 backdrop-blur"
         )}
       >
         <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
           <span>{isUser ? "Você" : "DIPA"}</span>
-          <span className="text-slate-300">•</span>
-          <span className="font-normal">agora</span>
+          <span className="text-slate-600">•</span>
+          <span className="font-normal text-slate-500">agora</span>
         </div>
         <p className="leading-relaxed">{text}</p>
       </div>
@@ -180,8 +180,8 @@ function PromptChip({ label, active, onClick }: { label: string; active: boolean
       className={clsx(
         "rounded-full px-3 py-1 text-sm font-medium transition focus:outline-none focus-visible:ring-2",
         active
-          ? "border border-blue-200 bg-blue-50 text-blue-700 shadow-sm focus-visible:ring-blue-200"
-          : "border border-slate-200 bg-slate-100 text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:ring-slate-200"
+          ? "border border-blue-500 bg-blue-500/20 text-blue-200 shadow focus-visible:ring-blue-400"
+          : "border border-slate-700 bg-slate-800/70 text-slate-300 hover:border-blue-500 hover:text-blue-200 focus-visible:ring-slate-600"
       )}
     >
       {label}
@@ -197,8 +197,8 @@ function InsightChip({ label, active, onClick }: { label: string; active: boolea
       className={clsx(
         "rounded-full px-3 py-1 text-xs font-medium transition focus:outline-none focus-visible:ring-2",
         active
-          ? "border border-blue-200 bg-blue-50 text-blue-700 shadow-sm focus-visible:ring-blue-200"
-          : "border border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:ring-slate-200"
+          ? "border border-blue-500 bg-blue-500/20 text-blue-200 shadow focus-visible:ring-blue-500"
+          : "border border-slate-700 bg-slate-800 text-slate-300 hover:border-blue-500 hover:text-blue-200 focus-visible:ring-slate-600"
       )}
     >
       {label}
@@ -208,10 +208,10 @@ function InsightChip({ label, active, onClick }: { label: string; active: boolea
 
 function KpiStat({ label, value, helper }: { label: string; value: string; helper?: string }) {
   return (
-    <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="text-2xl font-semibold text-slate-900">{value}</p>
-      {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
+    <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-800/70 p-4 shadow-inner shadow-slate-950/40">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-3xl font-bold text-slate-50">{value}</p>
+      {helper ? <p className="text-xs text-slate-400">{helper}</p> : null}
     </div>
   );
 }
@@ -858,7 +858,7 @@ function KPIGrid({ items }: { items: QueryResult["kpis"] }) {
   if (!items.length) return null;
 
   return (
-    <Card className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <Card className="min-w-0 rounded-3xl border border-slate-800 bg-slate-900/60 shadow-lg shadow-blue-900/30 backdrop-blur">
       <CardContent className="grid gap-4 p-6 sm:grid-cols-3">
         {items.map((item) => (
           <KpiStat key={item.label} label={item.label} value={item.value} helper={item.helper} />
@@ -874,11 +874,11 @@ function ResultTable({ result }: { result: QueryResult }) {
   const numericColumnStart = Math.max(result.table[0].columns.length - 2, 1);
 
   return (
-    <Card className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <Card className="min-w-0 rounded-3xl border border-slate-800 bg-slate-900/60 shadow-lg shadow-blue-900/30 backdrop-blur">
       <CardContent className="p-0">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <table className="min-w-full divide-y divide-slate-800 text-left text-sm text-slate-300">
+            <thead className="bg-slate-900/80 text-xs font-semibold uppercase tracking-wide text-slate-400">
               <tr>
                 {result.table[0].columns.map((column, idx) => (
                   <th
@@ -890,15 +890,15 @@ function ResultTable({ result }: { result: QueryResult }) {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-800">
               {result.table.map((row, rowIndex) => (
-                <tr key={`${rowIndex}-${row.rows[0]}`} className="odd:bg-white even:bg-slate-50">
+                <tr key={`${rowIndex}-${row.rows[0]}`} className="odd:bg-slate-900/50 even:bg-slate-900/30">
                   {row.rows.map((value, cellIndex) => (
                     <td
                       key={`${rowIndex}-${cellIndex}`}
                       className={clsx(
-                        "px-4 py-3 text-sm text-slate-700",
-                        cellIndex >= numericColumnStart && "text-right font-medium text-slate-900"
+                        "px-4 py-3 text-sm text-slate-300",
+                        cellIndex >= numericColumnStart && "text-right font-semibold text-slate-50"
                       )}
                     >
                       {value}
@@ -929,24 +929,24 @@ function ResultChart({ result }: { result?: QueryResult["chart"] }) {
   };
 
   return (
-    <Card className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <Card className="min-w-0 rounded-3xl border border-slate-800 bg-slate-900/60 shadow-lg shadow-blue-900/30 backdrop-blur">
       <CardContent className="h-80 w-full overflow-hidden p-0">
         <ResponsiveContainer width="100%" height="100%">
           {result.type === "area" ? (
             <AreaChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#475569" }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#475569" }} />
-              <RTooltip cursor={{ fill: "#f1f5f9" }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#CBD5F5" }} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#CBD5F5" }} />
+              <RTooltip contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12 }} />
               <Legend />
               {renderSeries()}
             </AreaChart>
           ) : (
             <BarChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#475569" }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#475569" }} />
-              <RTooltip cursor={{ fill: "#f1f5f9" }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#CBD5F5" }} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#CBD5F5" }} />
+              <RTooltip contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12 }} />
               <Legend />
               {renderSeries()}
             </BarChart>
@@ -1023,6 +1023,8 @@ export default function DipaPanel() {
   const [activeResult, setActiveResult] = useState<QueryResult | undefined>();
   const [activeInsightIndex, setActiveInsightIndex] = useState<number | null>(null);
   const [secondaryQuestionQueued, setSecondaryQuestionQueued] = useState(false);
+  const [insightPulse, setInsightPulse] = useState(false);
+  const pulseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const assistantInsights = useMemo(() => {
     return answers
       .map((message, index) => ({ message, index }))
@@ -1100,6 +1102,11 @@ export default function DipaPanel() {
       if (nextIndex !== null) {
         setActiveInsightIndex(nextIndex);
       }
+      if (pulseTimeout.current) {
+        clearTimeout(pulseTimeout.current);
+      }
+      setInsightPulse(true);
+      pulseTimeout.current = setTimeout(() => setInsightPulse(false), 600);
     }
 
     setBusy(false);
@@ -1138,27 +1145,27 @@ export default function DipaPanel() {
   }, [assistantInsights, activeInsightIndex]);
 
   useEffect(() => {
-    if (activeInsightIndex === null) return;
-    const active = assistantInsights.find((entry) => entry.index === activeInsightIndex);
-    if (active?.message.result) {
-      setActiveResult(active.message.result);
-    }
-  }, [activeInsightIndex, assistantInsights]);
+    return () => {
+      if (pulseTimeout.current) {
+        clearTimeout(pulseTimeout.current);
+      }
+    };
+  }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <header className="border-b border-slate-900/70 bg-slate-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-500/40 bg-blue-500/20 shadow-lg shadow-blue-900/40">
               <Image src={logoDipam} alt="Logotipo Dipam" className="h-8 w-8 object-contain" priority />
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Assistente Generativo</p>
-              <h1 className="text-2xl font-semibold text-slate-900 sm:text-[2rem] sm:leading-tight">DIPA GenAI</h1>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-blue-400">Assistente Generativo</p>
+              <h1 className="text-2xl font-semibold text-slate-100 sm:text-[2rem] sm:leading-tight">DIPA GenAI</h1>
             </div>
           </div>
-          <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-600">
+          <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-300">
             Protótipo
           </span>
         </div>
@@ -1167,16 +1174,16 @@ export default function DipaPanel() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-12">
           <section className="order-1 flex flex-col gap-6 lg:col-span-5 xl:col-span-4">
-            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <Card className="rounded-3xl border border-slate-800 bg-slate-900/60 shadow-2xl shadow-blue-900/30 backdrop-blur-xl">
               <CardContent className="flex flex-col gap-6 p-6 md:p-8">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Laboratório de prompts</p>
-                    <p className="mt-2 text-sm text-slate-500">
-                      Faça perguntas abertas, refine filtros e acompanhe o preview ao lado em tempo real.
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Laboratório de prompts</p>
+                    <p className="mt-2 text-sm text-slate-400">
+                      Consulte o DIPA GenAI para investigar metas, produtos e oportunidades comerciais em tempo real.
                     </p>
                   </div>
-                  <Sparkles className="h-5 w-5 text-blue-600" />
+                  <Sparkles className="h-5 w-5 text-blue-400" />
                 </div>
 
                 <PromptChips
@@ -1196,24 +1203,24 @@ export default function DipaPanel() {
                   className="space-y-4"
                 >
                   <div className="space-y-2">
-                    <label htmlFor="prompt-input" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <label htmlFor="prompt-input" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                       Pergunta
                     </label>
                     <textarea
                       id="prompt-input"
                       value={question}
                       onChange={(event) => setQuestion(event.target.value)}
-                      placeholder="Comparar meta vs realizado por vendedor em 2025-11 na Grande Porto Alegre"
-                      className="min-h-[160px] w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      placeholder="Ex.: Quanto vendemos de Nissin Miojo Galinha Caipira neste mês?"
+                      className="min-h-[160px] w-full resize-y rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm leading-relaxed text-slate-100 shadow-inner shadow-slate-950 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                     />
-                    <div className="flex justify-end text-xs text-slate-400">{question.length} caracteres</div>
+                    <div className="flex justify-end text-xs text-slate-500">{question.length} caracteres</div>
                   </div>
 
                   <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full sm:w-auto border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      className="w-full sm:w-auto border-slate-700 bg-slate-800 text-slate-200 hover:border-blue-400 hover:text-blue-200"
                       onClick={() => {
                         const example = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
                         setQuestion(example);
@@ -1221,12 +1228,12 @@ export default function DipaPanel() {
                       }}
                       disabled={busy}
                     >
-                      <Sparkles className="mr-2 h-4 w-4 text-blue-500" />
+                      <Sparkles className="mr-2 h-4 w-4 text-blue-400" />
                       Sugestão
                     </Button>
                     <Button
                       type="submit"
-                      className="w-full sm:w-auto bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300"
+                      className="w-full sm:w-auto bg-blue-600 text-white shadow-lg shadow-blue-900/50 transition hover:bg-blue-500 disabled:bg-blue-300"
                       disabled={busy}
                     >
                       {busy ? (
@@ -1244,12 +1251,12 @@ export default function DipaPanel() {
                   </div>
                 </form>
 
-                <div className="hidden border-t border-slate-200 pt-6 lg:block">
+                <div className="hidden border-t border-slate-800 pt-6 lg:block">
                   <div className="mb-3 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Histórico</p>
-                    <span className="text-xs text-slate-400">{answers.length} mensagens</span>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Histórico</p>
+                    <span className="text-xs text-slate-500">{answers.length} mensagens</span>
                   </div>
-                  <div className="max-h-72 space-y-3 overflow-y-auto pr-2">
+                  <div className="max-h-72 space-y-3 overflow-y-auto pr-2 scrollbar-thin scrollbar-track-slate-900 scrollbar-thumb-slate-700/80">
                     <ChatHistory messages={answers} />
                   </div>
                 </div>
@@ -1258,10 +1265,10 @@ export default function DipaPanel() {
           </section>
 
           <section className="order-2 flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
-            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <Card className="rounded-3xl border border-slate-800 bg-slate-900/50 shadow-xl shadow-blue-900/30 backdrop-blur">
               <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between md:gap-6">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Insights gerados</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Insights gerados</p>
                   <p className="text-sm text-slate-500">Pré-visualização</p>
                 </div>
                 <InsightChips
@@ -1272,22 +1279,28 @@ export default function DipaPanel() {
               </CardContent>
             </Card>
 
-            <Card className={clsx("rounded-2xl border border-slate-200 bg-white shadow-sm transition", busy && "animate-pulse")}>
-              <CardContent className="space-y-4 p-6">
+            <Card
+              className={clsx(
+                "rounded-3xl border border-slate-800 bg-slate-900/60 shadow-xl shadow-blue-900/30 backdrop-blur transition",
+                busy && "animate-pulse",
+                insightPulse && "ring-2 ring-blue-500/60 shadow-[0_0_25px_rgba(59,130,246,0.45)]"
+              )}
+            >
+              <CardContent className="space-y-4 p-6 sm:p-8">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Insight selecionado</p>
-                    <h2 className="text-lg font-semibold text-slate-900">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Insight selecionado</p>
+                    <h2 className="text-lg font-semibold text-slate-100">
                       {activeResult ? INTENT_LABELS[activeResult.intent] : "Nenhum insight selecionado"}
                     </h2>
                   </div>
                   {activeResult ? (
-                    <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    <span className="inline-flex items-center rounded-full border border-blue-500/50 bg-blue-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-200">
                       {activeResult.month}
                     </span>
                   ) : null}
                 </div>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-400">
                   {busy && !activeResult
                     ? "Gerando insight..."
                     : activeResult?.narrative ?? "Selecione ou gere um insight para visualizar os detalhes."}
@@ -1295,7 +1308,7 @@ export default function DipaPanel() {
               </CardContent>
             </Card>
 
-            {activeResult && (
+            {activeResult ? (
               <Fragment>
                 <KPIGrid items={activeResult.kpis} />
                 <div className="grid gap-6 xl:grid-cols-2">
@@ -1303,19 +1316,17 @@ export default function DipaPanel() {
                   <ResultTable result={activeResult} />
                 </div>
               </Fragment>
-            )}
-
-            {!activeResult && (
-              <Card className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 text-center shadow-none">
+            ) : (
+              <Card className="rounded-3xl border border-dashed border-blue-500/40 bg-slate-900/50 text-center shadow-inner shadow-blue-900/20">
                 <CardContent className="flex flex-col items-center gap-3 py-14">
-                  <Sparkles className="h-10 w-10 text-blue-500" />
-                  <h2 className="text-lg font-semibold text-blue-900">Nenhum insight selecionado</h2>
-                  <p className="max-w-sm text-sm text-blue-800">
+                  <Sparkles className="h-10 w-10 text-blue-400" />
+                  <h2 className="text-lg font-semibold text-slate-100">Nenhum insight selecionado</h2>
+                  <p className="max-w-sm text-sm text-slate-400">
                     Gere um prompt no laboratório para visualizar KPIs, gráficos e tabelas nesta área.
                   </p>
                   <Button
                     onClick={() => void ask(question)}
-                    className="bg-blue-600 text-white hover:bg-blue-700"
+                    className="bg-blue-600 text-white shadow-lg shadow-blue-900/40 hover:bg-blue-500"
                   >
                     <ArrowRight className="mr-2 h-4 w-4" />
                     Gerar insight inicial
@@ -1324,11 +1335,11 @@ export default function DipaPanel() {
               </Card>
             )}
 
-            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm lg:hidden">
+            <Card className="rounded-3xl border border-slate-800 bg-slate-900/60 shadow-lg shadow-blue-900/30 backdrop-blur lg:hidden">
               <CardContent className="space-y-3 p-6">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Histórico</p>
-                  <span className="text-xs text-slate-400">{answers.length} mensagens</span>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Histórico</p>
+                  <span className="text-xs text-slate-500">{answers.length} mensagens</span>
                 </div>
                 <ChatHistory messages={answers} />
               </CardContent>
