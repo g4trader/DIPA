@@ -231,6 +231,38 @@ function extractProductNameFromQuery(query: string): string | undefined {
   return phrase.length ? phrase : undefined;
 }
 
+function buildBrandSalesSummaryView(result?: QueryResult) {
+  if (!result?.summary || result.summary.kind !== "brand_sales") {
+    return null;
+  }
+
+  const { productLabel, totalRevenue, totalUnits, sellers } = result.summary;
+  if (!sellers.length) {
+    return null;
+  }
+
+  const ordered = [...sellers].sort((a, b) => b.revenue - a.revenue);
+  const best = ordered[0];
+  const worst = ordered[ordered.length - 1];
+
+  return {
+    productLabel,
+    totalRevenueFormatted: formatCurrency(totalRevenue),
+    totalUnitsFormatted: totalUnits.toLocaleString("pt-BR"),
+    best: {
+      name: best.name,
+      revenueFormatted: formatCurrency(best.revenue),
+      unitsFormatted: best.units.toLocaleString("pt-BR")
+    },
+    worst: {
+      name: worst.name,
+      revenueFormatted: formatCurrency(worst.revenue),
+      unitsFormatted: worst.units.toLocaleString("pt-BR")
+    },
+    hasMultipleSellers: ordered.length > 1
+  };
+}
+
 function intentFromQuery(query: string): Intent {
   const normalized = query.toLowerCase();
   const hasBrand = BRANDS.some((brand) => normalized.includes(brand.toLowerCase()));
@@ -262,7 +294,8 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
     month,
     kpis: [],
     narrative: "",
-    table: []
+    table: [],
+    summary: undefined
   };
 
   switch (intent) {
@@ -597,6 +630,18 @@ function runQuery(intent: Intent, month: string, filters: Partial<TParsedQuery> 
         { label: "Vendedores ativos", value: sellerRows.length.toString() }
       ];
 
+      baseResult.summary = {
+        kind: "brand_sales",
+        productLabel,
+        totalRevenue: totalProductRevenue,
+        totalUnits: totalProductUnits,
+        sellers: sellerRows.map((entry) => ({
+          name: entry.seller.name,
+          revenue: entry.revenue,
+          units: entry.units
+        }))
+      };
+
       baseResult.table = sellerRows.map((entry, index) => ({
         columns: ["#", "Vendedor", "Receita", "Unidades"],
         rows: [
@@ -839,6 +884,7 @@ export default function DipaPanel() {
   const hasResponse = Boolean(latestAssistant);
   const latestResult = latestAssistant?.result;
   const isSubmitDisabled = busy || !question.trim();
+  const summaryView = buildBrandSalesSummaryView(latestResult);
 
   return (
     <div className={clsx("min-h-screen", ds.colors.background, "text-slate-200") }>
@@ -918,9 +964,23 @@ export default function DipaPanel() {
                   <h2 className="text-lg font-semibold text-slate-100">{latestQuestion}</h2>
                 ) : null}
               </div>
-              <p className="mt-6 text-left text-lg leading-relaxed text-slate-100">
-                {latestAssistant.text}
-              </p>
+              {summaryView ? (
+                <div className="mt-6 space-y-3 text-left text-lg leading-relaxed text-slate-100">
+                  <p>
+                    Vendemos <strong>{summaryView.totalUnitsFormatted} unidades</strong> de {summaryView.productLabel} neste período, com faturamento bruto de <strong>{summaryView.totalRevenueFormatted}</strong>.
+                  </p>
+                  <p>
+                    O melhor consultor foi <strong>{summaryView.best.name}</strong>, com <strong>{summaryView.best.unitsFormatted} unidades</strong> e <strong>{summaryView.best.revenueFormatted}</strong>.
+                  </p>
+                  {summaryView.hasMultipleSellers ? (
+                    <p>
+                      O consultor com menor resultado foi <strong>{summaryView.worst.name}</strong>, com <strong>{summaryView.worst.unitsFormatted} unidades</strong> e <strong>{summaryView.worst.revenueFormatted}</strong>.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-6 text-left text-lg leading-relaxed text-slate-100">{latestAssistant.text}</p>
+              )}
             </div>
 
             {latestResult ? (

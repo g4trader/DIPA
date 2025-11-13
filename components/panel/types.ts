@@ -23,6 +23,21 @@ export type ChartConfig = {
   series: ChartSeries[];
 };
 
+export type SellerContribution = {
+  name: string;
+  revenue: number;
+  units: number;
+};
+
+export type InsightSummary =
+  | {
+      kind: "brand_sales";
+      productLabel: string;
+      totalRevenue: number;
+      totalUnits: number;
+      sellers: SellerContribution[];
+    };
+
 export type TableEntry = {
   columns: string[];
   rows: (string | number)[];
@@ -35,6 +50,7 @@ export type QueryResult = {
   narrative: string;
   table: TableEntry[];
   chart?: ChartConfig;
+  summary?: InsightSummary;
 };
 
 export type PanelMessage = {
