@@ -889,36 +889,36 @@ export default function DipaPanel() {
   return (
     <div className={clsx("min-h-screen", ds.colors.background, "text-slate-200") }>
       <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-500/40 bg-blue-500/20 shadow-lg shadow-blue-900/40">
-              <Image src={logoDipam} alt="Logotipo Dipam" className="h-8 w-8 object-contain" priority />
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-500/40 bg-blue-500/20 shadow-lg shadow-blue-900/40 sm:h-12 sm:w-12">
+              <Image src={logoDipam} alt="Logotipo Dipam" className="h-7 w-7 object-contain sm:h-8 sm:w-8" priority />
             </div>
             <div>
-              <h1 className="text-3xl font-semibold text-slate-100 sm:text-[2.5rem] sm:leading-tight">DIPA COPILOT™</h1>
-              <p className="mt-1 text-sm text-slate-400">Inteligência comercial em tempo real</p>
+              <h1 className="text-2xl font-semibold text-slate-100 sm:text-[2.5rem] sm:leading-tight">DIPA COPILOT™</h1>
+              <p className="mt-0.5 text-xs text-slate-400 sm:mt-1 sm:text-sm">Inteligência comercial em tempo real</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Button
               type="button"
               variant="ghost"
-              className="gap-2 text-sm font-medium text-slate-300 hover:text-slate-100"
+              className="gap-2 text-xs font-medium text-slate-300 hover:text-slate-100 sm:text-sm"
               onClick={() => setHistoryOpen(true)}
             >
               <History className="h-4 w-4" />
               Histórico
             </Button>
-            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-300">
+            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-slate-300 sm:text-xs">
               Protótipo
             </span>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-4xl flex-col items-center gap-12 px-4 py-16 sm:px-6 lg:px-8">
+      <main className="mx-auto flex w-full max-w-4xl flex-col items-stretch gap-6 px-4 py-10 sm:items-center sm:gap-10 sm:px-6 sm:py-16 lg:px-8">
         <form
-          className="w-full space-y-6 text-center"
+          className="w-full space-y-4 text-center sm:space-y-6"
           onSubmit={(event) => {
             event.preventDefault();
             void ask(question);
@@ -928,16 +928,16 @@ export default function DipaPanel() {
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
             placeholder="Qual decisão comercial você quer acelerar agora?"
-            className="h-44 w-full rounded-3xl border border-slate-700 bg-slate-900/80 px-6 py-4 text-lg leading-relaxed text-slate-100 shadow-inner shadow-slate-950/40 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            className="min-h-[180px] w-full rounded-3xl border border-slate-700 bg-slate-900/80 px-4 py-4 text-base leading-relaxed text-slate-100 shadow-inner shadow-slate-950/40 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:px-6 sm:text-lg"
           />
 
-          <div className="flex flex-wrap justify-center gap-2 text-xs text-slate-400">
+          <div className="flex flex-wrap justify-start gap-2 text-xs text-slate-400 sm:justify-center sm:text-sm">
             {EXAMPLES.map((example) => (
               <button
                 key={example}
                 type="button"
                 onClick={() => handleExampleSelection(example)}
-                className="rounded-full border border-slate-700/60 bg-slate-800/60 px-4 py-1.5 transition duration-150 ease-out hover:border-blue-500/50 hover:text-slate-100"
+                className="rounded-full border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 transition duration-150 ease-out hover:border-blue-500/50 hover:text-slate-100"
               >
                 {example}
               </button>
@@ -948,7 +948,7 @@ export default function DipaPanel() {
             <Button
               type="submit"
               disabled={isSubmitDisabled}
-              className="gap-2 rounded-full px-8 py-3 text-base font-semibold"
+              className="mt-4 w-full max-w-none gap-2 rounded-full px-6 py-3 text-base font-semibold sm:mt-0 sm:w-auto sm:px-8"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Perguntar ao copiloto"}
             </Button>
@@ -957,7 +957,7 @@ export default function DipaPanel() {
 
         {hasResponse && latestAssistant ? (
           <div className="w-full max-w-3xl space-y-6">
-            <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-8 shadow-xl shadow-blue-900/30">
+            <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-6 shadow-xl shadow-blue-900/30 sm:p-8">
               <div className="flex flex-col gap-2 text-left">
                 <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPA COPILOT™</p>
                 {latestQuestion ? (
@@ -988,7 +988,7 @@ export default function DipaPanel() {
                 <Button
                   type="button"
                   variant="secondary"
-                  className="gap-2 rounded-full px-6 py-3 text-sm font-medium"
+                  className="w-full max-w-xs gap-2 rounded-full px-6 py-3 text-sm font-medium sm:w-auto"
                   onClick={() => setPreviewOpen(true)}
                 >
                   <PanelRightOpen className="h-4 w-4" />

@@ -30,13 +30,13 @@ export type SellerContribution = {
 };
 
 export type InsightSummary =
-  | {
-      kind: "brand_sales";
-      productLabel: string;
-      totalRevenue: number;
-      totalUnits: number;
-      sellers: SellerContribution[];
-    };
+  {
+    kind: "brand_sales";
+    productLabel: string;
+    totalRevenue: number;
+    totalUnits: number;
+    sellers: SellerContribution[];
+  };
 
 export type TableEntry = {
   columns: string[];

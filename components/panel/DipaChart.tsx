@@ -21,13 +21,15 @@ type DipaChartProps = {
   title: string;
 };
 
+const legendFormatter = (value: string) => `→ ${value}`;
+
 export function DipaChart({ chart, title }: DipaChartProps) {
   if (!chart) return null;
 
   return (
     <div className="space-y-3">
       <p className="text-sm font-semibold text-slate-300">{title}</p>
-      <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-inner shadow-blue-900/20 transition duration-200 ease-out hover:shadow-[0_0_12px_rgba(59,130,246,0.35)]">
+      <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-inner shadow-blue-900/20">
         <div className="h-64 w-full overflow-hidden rounded-xl border border-slate-800/60 bg-slate-950/50">
           <ResponsiveContainer width="100%" height="100%">
             {chart.type === "area" ? <AreaVisualization chart={chart} /> : <BarVisualization chart={chart} />}
@@ -45,14 +47,14 @@ function AreaVisualization({ chart }: { chart: ChartConfig }) {
       <XAxis dataKey={chart.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
       <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
       <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
-      <Legend />
+      <Legend formatter={legendFormatter} wrapperStyle={{ paddingTop: 8 }} />
       {chart.series.map((serie) => (
         <Area
           key={serie.key}
           type="monotone"
           dataKey={serie.key}
           stroke={serie.color}
-          strokeWidth={3}
+          strokeWidth={2.5}
           fill={serie.color}
           fillOpacity={0.16}
           dot={{ r: 3 }}
@@ -70,9 +72,9 @@ function BarVisualization({ chart }: { chart: ChartConfig }) {
       <XAxis dataKey={chart.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
       <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: ds.chart.axis }} />
       <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
-      <Legend />
+      <Legend formatter={legendFormatter} wrapperStyle={{ paddingTop: 8 }} />
       {chart.series.map((serie) => (
-        <Bar key={serie.key} dataKey={serie.key} fill={serie.color} radius={[14, 14, 0, 0]} />
+        <Bar key={serie.key} dataKey={serie.key} fill={serie.color} radius={[12, 12, 0, 0]} />
       ))}
     </BarChart>
   );
