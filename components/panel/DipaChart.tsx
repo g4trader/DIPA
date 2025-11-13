@@ -21,9 +21,10 @@ const legendFormatter = (value: string) => `→ ${value}`;
 type DipaChartProps = {
   chart?: ChartConfig;
   emptyMessage?: string;
+  refreshKey?: number;
 };
 
-export function DipaChart({ chart, emptyMessage = "Sem dados suficientes para exibir o gráfico." }: DipaChartProps) {
+export function DipaChart({ chart, emptyMessage = "Sem dados suficientes para exibir o gráfico.", refreshKey = 0 }: DipaChartProps) {
   const chartData = chart?.data ?? [];
   const containerKey = useMemo(() => {
     if (!chartData.length) return "empty";
@@ -48,7 +49,7 @@ export function DipaChart({ chart, emptyMessage = "Sem dados suficientes para ex
   return (
     <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-inner shadow-blue-900/20">
       <div className="h-56 w-full overflow-hidden rounded-xl border border-slate-800/60 bg-slate-950/50">
-        <ResponsiveContainer key={containerKey} width="100%" height="100%">
+        <ResponsiveContainer key={`${refreshKey}-${containerKey}`} width="99%" height="100%">
           {chart?.type === "area" ? <AreaVisualization chart={chart} /> : <BarVisualization chart={chart!} />}
         </ResponsiveContainer>
       </div>

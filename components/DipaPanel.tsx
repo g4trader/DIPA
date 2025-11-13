@@ -1075,16 +1075,24 @@ export default function DipaPanel() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [chartRefreshKey, setChartRefreshKey] = useState(0);
   const answerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!previewOpen) return;
 
-    const frame = requestAnimationFrame(() => {
+    const trigger = () => {
       window.dispatchEvent(new Event("resize"));
-    });
+      setChartRefreshKey((value) => value + 1);
+    };
 
-    return () => cancelAnimationFrame(frame);
+    const frame = requestAnimationFrame(trigger);
+    const timeout = setTimeout(trigger, 240);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timeout);
+    };
   }, [previewOpen]);
 
   useEffect(() => {
@@ -1366,7 +1374,7 @@ export default function DipaPanel() {
 
               <section className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Indicadores visuais</h3>
-                <DipaChart chart={latestResult.chart} />
+                <DipaChart chart={latestResult.chart} refreshKey={chartRefreshKey} />
               </section>
 
               <section className="space-y-3">
