@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { clsx } from "clsx";
 import { Button } from "@/components/ui/button";
@@ -1074,6 +1074,28 @@ export default function DipaPanel() {
   const [busy, setBusy] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const answerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!previewOpen) return;
+
+    const frame = requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [previewOpen]);
+
+  useEffect(() => {
+    const updateViewport = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
 
   const latestAssistant = useMemo(() => {
     for (let index = answers.length - 1; index >= 0; index -= 1) {
@@ -1170,6 +1192,12 @@ export default function DipaPanel() {
   const isSubmitDisabled = busy || !question.trim();
   const summaryView = buildInsightSummaryView(latestResult);
 
+  useEffect(() => {
+    if (!busy && hasResponse && isMobile) {
+      answerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [busy, hasResponse, isMobile]);
+
   return (
     <div className={clsx("min-h-screen", ds.colors.background, "text-slate-200") }>
       <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur">
@@ -1239,38 +1267,54 @@ export default function DipaPanel() {
           </div>
         </form>
 
-        {hasResponse && latestAssistant ? (
-          <div className="w-full max-w-3xl space-y-6">
-            <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-6 shadow-xl shadow-blue-900/30 sm:p-8">
-              <div className="flex flex-col gap-2 text-left">
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPA COPILOT™</p>
-                {latestQuestion ? (
-                  <h2 className="text-lg font-semibold text-slate-100">{latestQuestion}</h2>
-                ) : null}
-              </div>
-              {summaryView ? (
-                <div className="mt-6 space-y-3 text-left text-lg leading-relaxed text-slate-100">
-                  {summaryView.paragraphs.map((paragraph, index) => (
-                    <React.Fragment key={index}>{paragraph}</React.Fragment>
-                  ))}
+        {(busy || (hasResponse && latestAssistant)) ? (
+          <div ref={answerRef} className="w-full max-w-3xl space-y-6">
+            {busy ? (
+              <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-6 shadow-xl shadow-blue-900/30 sm:p-8 animate-pulse">
+                <div className="flex flex-col gap-2 text-left">
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPA COPILOT™</p>
+                  <div className="mt-2 h-5 w-2/3 rounded-full bg-slate-700/70" />
                 </div>
-              ) : (
-                <p className="mt-6 text-left text-lg leading-relaxed text-slate-100">{latestAssistant.text}</p>
-              )}
-            </div>
-
-            {latestResult ? (
-              <div className="flex justify-center">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full max-w-xs gap-2 rounded-full px-6 py-3 text-sm font-medium sm:w-auto"
-                  onClick={() => setPreviewOpen(true)}
-                >
-                  <PanelRightOpen className="h-4 w-4" />
-                  Ver preview analítico detalhado
-                </Button>
+                <div className="mt-6 space-y-3 text-left">
+                  <div className="h-4 rounded-full bg-slate-800/70" />
+                  <div className="h-4 w-11/12 rounded-full bg-slate-800/60" />
+                  <div className="h-4 w-4/5 rounded-full bg-slate-800/50" />
+                </div>
               </div>
+            ) : latestAssistant ? (
+              <>
+                <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-6 shadow-xl shadow-blue-900/30 sm:p-8">
+                  <div className="flex flex-col gap-2 text-left">
+                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPA COPILOT™</p>
+                    {latestQuestion ? (
+                      <h2 className="text-lg font-semibold text-slate-100">{latestQuestion}</h2>
+                    ) : null}
+                  </div>
+                  {summaryView ? (
+                    <div className="mt-6 space-y-3 text-left text-lg leading-relaxed text-slate-100">
+                      {summaryView.paragraphs.map((paragraph, index) => (
+                        <React.Fragment key={index}>{paragraph}</React.Fragment>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-6 text-left text-lg leading-relaxed text-slate-100">{latestAssistant.text}</p>
+                  )}
+                </div>
+
+                {latestResult ? (
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full max-w-xs gap-2 rounded-full px-6 py-3 text-sm font-medium sm:w-auto"
+                      onClick={() => setPreviewOpen(true)}
+                    >
+                      <PanelRightOpen className="h-4 w-4" />
+                      Ver preview analítico detalhado
+                    </Button>
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </div>
         ) : null}
