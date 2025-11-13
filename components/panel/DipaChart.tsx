@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -25,6 +25,17 @@ type DipaChartProps = {
 
 export function DipaChart({ chart, emptyMessage = "Sem dados suficientes para exibir o gráfico." }: DipaChartProps) {
   const chartData = chart?.data ?? [];
+  const containerKey = useMemo(() => {
+    if (!chartData.length) return "empty";
+    return chartData
+      .map((entry) =>
+        Object.keys(entry)
+          .sort()
+          .map((key) => `${key}:${entry[key as keyof typeof entry]}`)
+          .join("|")
+      )
+      .join(";");
+  }, [chartData]);
 
   if (!chartData.length) {
     return (
@@ -37,7 +48,7 @@ export function DipaChart({ chart, emptyMessage = "Sem dados suficientes para ex
   return (
     <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-inner shadow-blue-900/20">
       <div className="h-56 w-full overflow-hidden rounded-xl border border-slate-800/60 bg-slate-950/50">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer key={containerKey} width="100%" height="100%">
           {chart?.type === "area" ? <AreaVisualization chart={chart} /> : <BarVisualization chart={chart!} />}
         </ResponsiveContainer>
       </div>
@@ -58,9 +69,9 @@ function AreaVisualization({ chart }: { chart: ChartConfig }) {
           key={serie.key}
           type="monotone"
           dataKey={serie.key}
-          stroke={serie.color}
+          stroke={serie.color ?? "#3B82F6"}
           strokeWidth={2.5}
-          fill={serie.color}
+          fill={serie.color ?? "#3B82F6"}
           fillOpacity={0.16}
           dot={{ r: 3 }}
           activeDot={{ r: 5 }}
@@ -79,7 +90,7 @@ function BarVisualization({ chart }: { chart: ChartConfig }) {
       <RTooltip contentStyle={{ background: ds.chart.tooltip, border: `1px solid ${ds.chart.tooltipBorder}`, borderRadius: 12 }} />
       <Legend formatter={legendFormatter} wrapperStyle={{ paddingTop: 8 }} />
       {chart.series.map((serie) => (
-        <Bar key={serie.key} dataKey={serie.key} fill={serie.color} radius={[12, 12, 0, 0]} />
+        <Bar key={serie.key} dataKey={serie.key} fill={serie.color ?? "#3B82F6"} radius={[12, 12, 0, 0]} />
       ))}
     </BarChart>
   );
