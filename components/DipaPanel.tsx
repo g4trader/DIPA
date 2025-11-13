@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Fragment, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { clsx } from "clsx";
 import { Card, CardContent } from "@/components/ui/card";
@@ -147,6 +147,73 @@ function seededRandom(seed: number) {
     seed = (seed * 16807) % 2147483647;
     return (seed - 1) / 2147483646;
   };
+}
+
+function ChatBubble({ role, text }: { role: "user" | "assistant"; text: string }) {
+  const isUser = role === "user";
+  return (
+    <div className={clsx("flex", isUser ? "justify-end" : "justify-start")}>
+      <div
+        className={clsx(
+          "max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm transition",
+          isUser
+            ? "rounded-tr-sm border border-blue-100 bg-blue-50 text-blue-900"
+            : "rounded-tl-sm border border-slate-900/40 bg-slate-900 text-slate-50"
+        )}
+      >
+        <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <span>{isUser ? "Você" : "DIPA"}</span>
+          <span className="text-slate-300">•</span>
+          <span className="font-normal">agora</span>
+        </div>
+        <p className="leading-relaxed">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function PromptChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx(
+        "rounded-full px-3 py-1 text-sm font-medium transition focus:outline-none focus-visible:ring-2",
+        active
+          ? "border border-blue-200 bg-blue-50 text-blue-700 shadow-sm focus-visible:ring-blue-200"
+          : "border border-slate-200 bg-slate-100 text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:ring-slate-200"
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function InsightChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx(
+        "rounded-full px-3 py-1 text-xs font-medium transition focus:outline-none focus-visible:ring-2",
+        active
+          ? "border border-blue-200 bg-blue-50 text-blue-700 shadow-sm focus-visible:ring-blue-200"
+          : "border border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:ring-slate-200"
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function KpiStat({ label, value, helper }: { label: string; value: string; helper?: string }) {
+  return (
+    <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-2xl font-semibold text-slate-900">{value}</p>
+      {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
+    </div>
+  );
 }
 
 function genData() {
@@ -788,49 +855,62 @@ function runQueryStructured(filters: TParsedQuery, fallbackMonth = "2025-11", ra
 }
 
 function KPIGrid({ items }: { items: QueryResult["kpis"] }) {
+  if (!items.length) return null;
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((item) => (
-        <Card key={item.label} className="border-slate-200 bg-white/90">
-          <CardContent className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
-            <p className="text-xl font-semibold text-slate-900">{item.value}</p>
-            {item.helper ? <p className="text-xs text-slate-500">{item.helper}</p> : null}
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <Card className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <CardContent className="grid gap-4 p-6 sm:grid-cols-3">
+        {items.map((item) => (
+          <KpiStat key={item.label} label={item.label} value={item.value} helper={item.helper} />
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
 function ResultTable({ result }: { result: QueryResult }) {
   if (!result.table.length) return null;
 
+  const numericColumnStart = Math.max(result.table[0].columns.length - 2, 1);
+
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-      <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
-        <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
-          <tr>
-            {result.table[0].columns.map((column) => (
-              <th key={column} className="px-4 py-3 font-semibold">
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {result.table.map((row, rowIndex) => (
-            <tr key={`${rowIndex}-${row.rows[0]}`} className="hover:bg-slate-50/60">
-              {row.rows.map((value, cellIndex) => (
-                <td key={`${rowIndex}-${cellIndex}`} className="px-4 py-3 text-sm text-slate-700">
-                  {value}
-                </td>
+    <Card className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
+            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr>
+                {result.table[0].columns.map((column, idx) => (
+                  <th
+                    key={column}
+                    className={clsx("px-4 py-3", idx >= numericColumnStart && "text-right")}
+                  >
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {result.table.map((row, rowIndex) => (
+                <tr key={`${rowIndex}-${row.rows[0]}`} className="odd:bg-white even:bg-slate-50">
+                  {row.rows.map((value, cellIndex) => (
+                    <td
+                      key={`${rowIndex}-${cellIndex}`}
+                      className={clsx(
+                        "px-4 py-3 text-sm text-slate-700",
+                        cellIndex >= numericColumnStart && "text-right font-medium text-slate-900"
+                      )}
+                    >
+                      {value}
+                    </td>
+                  ))}
+                </tr>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -840,32 +920,32 @@ function ResultChart({ result }: { result?: QueryResult["chart"] }) {
   const renderSeries = () => {
     if (result.type === "area") {
       return result.series.map((serie) => (
-        <Area key={serie.key} type="monotone" dataKey={serie.key} stroke={serie.color} fill={serie.color} fillOpacity={0.25} />
+        <Area key={serie.key} type="monotone" dataKey={serie.key} stroke={serie.color} fill={serie.color} fillOpacity={0.12} />
       ));
     }
     return result.series.map((serie) => (
-      <Bar key={serie.key} dataKey={serie.key} fill={serie.color} radius={[6, 6, 0, 0]} />
+      <Bar key={serie.key} dataKey={serie.key} fill={serie.color} radius={[10, 10, 0, 0]} />
     ));
   };
 
   return (
-    <Card className="min-w-0 border-slate-200 bg-white">
-      <CardContent className="h-80 w-full overflow-hidden">
+    <Card className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <CardContent className="h-80 w-full overflow-hidden p-0">
         <ResponsiveContainer width="100%" height="100%">
           {result.type === "area" ? (
-            <AreaChart data={result.data}>
+            <AreaChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
+              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#475569" }} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#475569" }} />
               <RTooltip cursor={{ fill: "#f1f5f9" }} />
               <Legend />
               {renderSeries()}
             </AreaChart>
           ) : (
-            <BarChart data={result.data}>
+            <BarChart data={result.data} margin={{ top: 16, right: 24, left: 12, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
+              <XAxis dataKey={result.xKey} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#475569" }} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#475569" }} />
               <RTooltip cursor={{ fill: "#f1f5f9" }} />
               <Legend />
               {renderSeries()}
@@ -877,19 +957,60 @@ function ResultChart({ result }: { result?: QueryResult["chart"] }) {
   );
 }
 
-function QuickExamples({ onSelect }: { onSelect: (example: string) => void }) {
+function PromptChips({
+  examples,
+  activeValue,
+  onSelect
+}: {
+  examples: string[];
+  activeValue: string;
+  onSelect: (example: string) => void;
+}) {
   return (
     <div className="flex flex-wrap gap-2">
-      {EXAMPLES.map((example) => (
-        <Button
-          key={example}
-          variant="outline"
-          size="sm"
-          className="border-sky-400/40 bg-slate-900/40 text-sky-100 hover:bg-slate-900/60"
-          onClick={() => onSelect(example)}
-        >
-          {example}
-        </Button>
+      {examples.map((example) => (
+        <PromptChip key={example} label={example} active={example === activeValue} onClick={() => onSelect(example)} />
+      ))}
+    </div>
+  );
+}
+
+function InsightChips({
+  insights,
+  activeIndex,
+  onSelect
+}: {
+  insights: { index: number; question: string }[];
+  activeIndex: number | null;
+  onSelect: (index: number) => void;
+}) {
+  if (!insights.length) {
+    return <p className="text-xs text-slate-500">Nenhum insight gerado ainda.</p>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {insights.map((entry) => (
+        <InsightChip
+          key={entry.index}
+          label={entry.question.length > 48 ? `${entry.question.slice(0, 48)}…` : entry.question}
+          active={entry.index === activeIndex}
+          onClick={() => onSelect(entry.index)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ChatHistory({ messages }: { messages: Message[] }) {
+  if (!messages.length) {
+    return <p className="text-sm text-slate-500">Nenhuma interação ainda. Gere um insight para iniciar.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {messages.map((message, index) => (
+        <ChatBubble key={`${message.role}-${index}`} role={message.role} text={message.text} />
       ))}
     </div>
   );
@@ -1025,233 +1146,196 @@ export default function DipaPanel() {
   }, [activeInsightIndex, assistantInsights]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-sky-50">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-6 pb-10">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-lg ring-1 ring-sky-200">
-                <Image src={logoDipam} alt="Logotipo Dipam" className="h-12 w-12 object-contain" priority />
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-sky-500">Assistente Generativo</p>
-                <h1 className="text-3xl font-semibold text-slate-900 sm:text-[2.4rem] sm:leading-tight">DIPA GenAI</h1>
-              </div>
+    <div className="min-h-screen bg-slate-50">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 shadow-sm">
+              <Image src={logoDipam} alt="Logotipo Dipam" className="h-8 w-8 object-contain" priority />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Assistente Generativo</p>
+              <h1 className="text-2xl font-semibold text-slate-900 sm:text-[2rem] sm:leading-tight">DIPA GenAI</h1>
             </div>
           </div>
-        </header>
+          <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-600">
+            Protótipo
+          </span>
+        </div>
+      </header>
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,580px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,620px)_minmax(0,1fr)]">
-          <div className="flex min-w-0 flex-col">
-            <Card className="h-full border-transparent bg-slate-950 text-white shadow-2xl shadow-sky-200/40">
-              <CardContent className="flex h-full min-w-0 flex-col gap-6">
-                <div className="flex items-center justify-between">
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-12">
+          <section className="order-1 flex flex-col gap-6 lg:col-span-5 xl:col-span-4">
+            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <CardContent className="flex flex-col gap-6 p-6 md:p-8">
+                <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-sky-300">Laboratório de prompts</p>
-                    <h2 className="text-xl font-semibold text-white">Converse com o DIPA</h2>
-                    <p className="text-sm text-slate-300">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Laboratório de prompts</p>
+                    <p className="mt-2 text-sm text-slate-500">
                       Faça perguntas abertas, refine filtros e acompanhe o preview ao lado em tempo real.
                     </p>
                   </div>
-                  <Sparkles className="h-5 w-5 text-sky-300" />
+                  <Sparkles className="h-5 w-5 text-blue-600" />
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-[0.18em] text-sky-300">Sugestões</p>
-                  <QuickExamples
-                    onSelect={(value) => {
-                      setQuestion(value);
-                      void ask(value);
-                    }}
-                  />
-                </div>
+                <PromptChips
+                  examples={EXAMPLES}
+                  activeValue={question}
+                  onSelect={(value) => {
+                    setQuestion(value);
+                    void ask(value);
+                  }}
+                />
 
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
                     void ask(question);
                   }}
-                  className="space-y-3"
+                  className="space-y-4"
                 >
-                  <textarea
-                    value={question}
-                    onChange={(event) => setQuestion(event.target.value)}
-                    placeholder="Comparar meta vs realizado por vendedor em 2025-11 na Grande Porto Alegre"
-                    className="min-h-[180px] w-full resize-y rounded-2xl border border-sky-500/30 bg-slate-950/80 px-4 py-3 text-sm leading-relaxed text-white shadow-inner placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300"
-                  />
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <span className="text-xs text-slate-400">{question.length} caracteres</span>
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          const example = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
-                          setQuestion(example);
-                          void ask(example);
-                        }}
-                      >
-                        <Sparkles className="mr-2 h-4 w-4 text-sky-300" />
-                        Sugestão
-                      </Button>
-                      <Button type="submit" disabled={busy} className="min-w-[140px]">
-                        {busy ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Gerando...
-                          </>
-                        ) : (
-                          <>
-                            <ArrowRight className="mr-2 h-4 w-4" />
-                            Gerar insight
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                  <div className="space-y-2">
+                    <label htmlFor="prompt-input" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Pergunta
+                    </label>
+                    <textarea
+                      id="prompt-input"
+                      value={question}
+                      onChange={(event) => setQuestion(event.target.value)}
+                      placeholder="Comparar meta vs realizado por vendedor em 2025-11 na Grande Porto Alegre"
+                      className="min-h-[160px] w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                    <div className="flex justify-end text-xs text-slate-400">{question.length} caracteres</div>
+                  </div>
+
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full sm:w-auto border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      onClick={() => {
+                        const example = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
+                        setQuestion(example);
+                        void ask(example);
+                      }}
+                      disabled={busy}
+                    >
+                      <Sparkles className="mr-2 h-4 w-4 text-blue-500" />
+                      Sugestão
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="w-full sm:w-auto bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300"
+                      disabled={busy}
+                    >
+                      {busy ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Gerando insight…
+                        </>
+                      ) : (
+                        <>
+                          <ArrowRight className="mr-2 h-4 w-4" />
+                          Gerar insight
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </form>
 
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-sky-200">
-                    <span>Histórico</span>
-                    <span>{answers.length} mensagens</span>
+                <div className="hidden border-t border-slate-200 pt-6 lg:block">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Histórico</p>
+                    <span className="text-xs text-slate-400">{answers.length} mensagens</span>
                   </div>
-                  <div className="relative h-[340px] overflow-y-auto rounded-2xl border border-sky-500/25 bg-slate-900/70 p-5">
-                    <div className="space-y-4">
-                      {answers.length === 0 ? (
-                        <p className="text-sm text-slate-300">
-                          Nenhuma interação ainda. Use uma sugestão acima ou descreva o insight que deseja gerar.
-                        </p>
-                      ) : (
-                        answers.map((message, index) => (
-                          <div key={index} className={clsx("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-                            <div
-                              className={clsx(
-                                "max-w-[90%] rounded-2xl px-4 py-3 text-sm shadow-lg transition",
-                                message.role === "user"
-                                  ? "bg-sky-500 text-white"
-                                  : "bg-slate-950/80 text-slate-100 ring-1 ring-sky-500/25"
-                              )}
-                            >
-                              <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-[0.18em]">
-                                <span className={clsx(message.role === "user" ? "text-sky-100" : "text-sky-300")}>
-                                  {message.role === "user" ? "Você" : "DIPA"}
-                                </span>
-                                <span className={clsx("text-slate-500", message.role === "user" ? "text-sky-200/80" : "")}>•</span>
-                                <span className="text-slate-500">Agora</span>
-                              </div>
-                              <p className="leading-relaxed">{message.text}</p>
-                              {message.role === "assistant" && message.result ? (
-                                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-300">
-                                  <Button
-                                    variant={index === activeInsightIndex ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => {
-                                      if (message.result) {
-                                        setActiveInsightIndex(index);
-                                        setActiveResult(message.result);
-                                      }
-                                    }}
-                                  >
-                                    {index === activeInsightIndex ? "Visualizando" : "Ver insight"}
-                                  </Button>
-                                  <span>{INTENT_LABELS[message.result.intent]}</span>
-                                  <span>•</span>
-                                  <span>{message.result.month}</span>
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    {busy && (
-                      <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-center gap-2 rounded-full bg-slate-950/90 px-3 py-1 text-xs text-slate-300 shadow">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-300" />
-                        Gerando insight...
-                      </div>
-                    )}
+                  <div className="max-h-72 space-y-3 overflow-y-auto pr-2">
+                    <ChatHistory messages={answers} />
                   </div>
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </section>
 
-          <div className="flex min-w-0 flex-col gap-6">
-            <Card className="min-w-0 border-transparent bg-white shadow-lg shadow-sky-100/70">
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+          <section className="order-2 flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
+            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between md:gap-6">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Insights gerados</p>
+                  <p className="text-sm text-slate-500">Pré-visualização</p>
+                </div>
+                <InsightChips
+                  insights={assistantInsights.map(({ index, question }) => ({ index, question }))}
+                  activeIndex={activeInsightIndex}
+                  onSelect={(index) => setActiveInsightIndex(index)}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className={clsx("rounded-2xl border border-slate-200 bg-white shadow-sm transition", busy && "animate-pulse")}>
+              <CardContent className="space-y-4 p-6">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-sky-600">Insights gerados</p>
-                    <h2 className="text-lg font-semibold text-slate-900">Pré-visualização</h2>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Insight selecionado</p>
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      {activeResult ? INTENT_LABELS[activeResult.intent] : "Nenhum insight selecionado"}
+                    </h2>
                   </div>
-                  <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
-                    {assistantInsights.length} ativos
-                  </span>
+                  {activeResult ? (
+                    <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">
+                      {activeResult.month}
+                    </span>
+                  ) : null}
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {assistantInsights.length === 0 ? (
-                    <span className="text-xs text-slate-500">Envie uma pergunta para ver a lista de análises geradas.</span>
-                  ) : (
-                    assistantInsights.map((entry) => (
-                      <button
-                        key={entry.index}
-                        type="button"
-                        onClick={() => setActiveInsightIndex(entry.index)}
-                        className={clsx(
-                          "rounded-full border px-3 py-1 text-xs font-medium transition",
-                          entry.index === activeInsightIndex
-                            ? "border-transparent bg-sky-600 text-white shadow"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:text-sky-600"
-                        )}
-                      >
-                        {entry.question.length > 48 ? `${entry.question.slice(0, 48)}…` : entry.question}
-                      </button>
-                    ))
-                  )}
-                </div>
+                <p className="text-sm text-slate-500">
+                  {busy && !activeResult
+                    ? "Gerando insight..."
+                    : activeResult?.narrative ?? "Selecione ou gere um insight para visualizar os detalhes."}
+                </p>
               </CardContent>
             </Card>
 
-            {activeResult ? (
-              <div className="space-y-6">
-                <Card className="min-w-0 border-transparent bg-white shadow-md shadow-slate-200/50">
-                  <CardContent className="space-y-3">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Insight selecionado</p>
-                        <h3 className="text-xl font-semibold text-slate-900">{INTENT_LABELS[activeResult.intent]}</h3>
-                        <p className="mt-1 text-sm text-slate-500">{activeResult.narrative}</p>
-                      </div>
-                      <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
-                        {activeResult.month}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-
+            {activeResult && (
+              <Fragment>
                 <KPIGrid items={activeResult.kpis} />
-                <ResultChart result={activeResult.chart} />
-                <ResultTable result={activeResult} />
-              </div>
-            ) : (
-              <Card className="min-w-0 border-dashed border-sky-200 bg-white/70">
-                <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-                  <Sparkles className="h-10 w-10 text-sky-500" />
-                  <h2 className="text-lg font-semibold text-sky-900">Nenhum insight selecionado</h2>
-                  <p className="max-w-md text-sm text-sky-800">
-                    Gere um prompt no painel ao lado para visualizar KPIs, gráficos e detalhes tabulares aqui.
+                <div className="grid gap-6 xl:grid-cols-2">
+                  <ResultChart result={activeResult.chart} />
+                  <ResultTable result={activeResult} />
+                </div>
+              </Fragment>
+            )}
+
+            {!activeResult && (
+              <Card className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 text-center shadow-none">
+                <CardContent className="flex flex-col items-center gap-3 py-14">
+                  <Sparkles className="h-10 w-10 text-blue-500" />
+                  <h2 className="text-lg font-semibold text-blue-900">Nenhum insight selecionado</h2>
+                  <p className="max-w-sm text-sm text-blue-800">
+                    Gere um prompt no laboratório para visualizar KPIs, gráficos e tabelas nesta área.
                   </p>
-                  <Button onClick={() => void ask(question)} className="mt-2">
+                  <Button
+                    onClick={() => void ask(question)}
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                  >
                     <ArrowRight className="mr-2 h-4 w-4" />
                     Gerar insight inicial
                   </Button>
                 </CardContent>
               </Card>
             )}
-          </div>
+
+            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm lg:hidden">
+              <CardContent className="space-y-3 p-6">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Histórico</p>
+                  <span className="text-xs text-slate-400">{answers.length} mensagens</span>
+                </div>
+                <ChatHistory messages={answers} />
+              </CardContent>
+            </Card>
+          </section>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
