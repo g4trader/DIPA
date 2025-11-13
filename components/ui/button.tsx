@@ -13,7 +13,8 @@ export function Button({ className, variant = "primary", size = "md", ...props }
   const variantMap: Record<ButtonVariant, string> = {
     primary: ds.button.primary,
     secondary: ds.button.secondary,
-    ghost: "bg-transparent text-slate-300 hover:bg-slate-800"
+    ghost:
+      "bg-transparent text-slate-300 hover:bg-slate-800/70 hover:shadow-[0_0_12px_rgba(59,130,246,0.25)] focus-visible:ring-slate-600"
   };
   const sizeMap: Record<ButtonSize, string> = {
     sm: "px-4 py-2 text-sm",

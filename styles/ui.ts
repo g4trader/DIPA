@@ -28,16 +28,19 @@ export const ds = {
     kpiValue: "text-3xl font-bold text-slate-100"
   },
   button: {
-    base: "inline-flex items-center justify-center rounded-xl font-medium transition focus:outline-none focus-visible:ring-2",
+    base:
+      "inline-flex items-center justify-center rounded-xl font-medium transition duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 hover:shadow-[0_0_12px_rgba(59,130,246,0.4)] hover:-translate-y-0.5",
     primary: "bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/30 focus-visible:ring-blue-400",
-    secondary: "bg-slate-700 hover:bg-slate-600 text-slate-200 focus-visible:ring-slate-500"
+    secondary: "bg-slate-700/90 hover:bg-slate-600 text-slate-200 focus-visible:ring-slate-500"
   },
   chip: {
-    base: "rounded-full px-3 py-1 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300",
-    default: "bg-slate-700 text-slate-300",
+    base:
+      "rounded-full px-3 py-1 text-sm font-medium transition duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 hover:-translate-y-0.5 hover:shadow-[0_0_12px_rgba(59,130,246,0.35)]",
+    default: "bg-slate-700/80 text-slate-300",
     active: "bg-blue-600 text-white shadow-lg shadow-blue-500/30"
   },
-  card: "rounded-2xl bg-slate-800/60 border border-slate-700 shadow-xl shadow-blue-900/30 backdrop-blur-md",
+  card:
+    "rounded-2xl border border-slate-700/80 bg-slate-800/50 shadow-xl shadow-blue-900/30 backdrop-blur-md transition duration-200 ease-out hover:shadow-[0_0_12px_rgba(59,130,246,0.4)] hover:-translate-y-0.5",
   chart: {
     grid: "#1e293b",
     axis: "#cbd5f5",
@@ -50,8 +53,10 @@ export const ds = {
     cell: "px-4 py-3 text-sm text-slate-300"
   },
   chat: {
-    user: "self-end max-w-[70%] rounded-2xl bg-blue-600 px-3 py-2 text-sm text-white shadow-md shadow-blue-900/30",
-    assistant: "self-start max-w-[70%] rounded-2xl bg-slate-700 px-3 py-2 text-sm text-slate-200 shadow"
+    user:
+      "self-end max-w-[70%] rounded-2xl bg-blue-600/90 px-3 py-2 text-sm text-white shadow-md shadow-blue-900/30 transition duration-200 hover:shadow-[0_0_12px_rgba(59,130,246,0.45)] hover:-translate-y-0.5 backdrop-blur-md",
+    assistant:
+      "self-start max-w-[70%] rounded-2xl bg-slate-800/60 px-3 py-2 text-sm text-slate-200 shadow transition duration-200 hover:shadow-[0_0_12px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 backdrop-blur-md"
   }
 };
 

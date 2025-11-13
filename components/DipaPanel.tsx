@@ -159,7 +159,7 @@ function ChatBubble({ role, text }: { role: "user" | "assistant"; text: string }
 
   return (
     <div className={clsx("flex", isUser ? "justify-end" : "justify-start")}>
-      <div className={clsx(bubbleClass, "flex flex-col gap-1 transition duration-150")}>
+      <div className={clsx(bubbleClass, "flex flex-col gap-1 transition duration-200 ease-out")}>
         <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-300 opacity-70">
           {isUser ? "Você" : "DIPA"}
         </span>
@@ -174,7 +174,12 @@ function PromptChip({ label, active, onClick }: { label: string; active: boolean
     <button
       type="button"
       onClick={onClick}
-      className={clsx(ds.chip.base, active ? ds.chip.active : ds.chip.default)}
+      aria-pressed={active}
+      className={clsx(
+        ds.chip.base,
+        active ? ds.chip.active : ds.chip.default,
+        "active:scale-95 motion-safe:transition-transform"
+      )}
     >
       {label}
     </button>
@@ -186,7 +191,12 @@ function InsightChip({ label, active, onClick }: { label: string; active: boolea
     <button
       type="button"
       onClick={onClick}
-      className={clsx(ds.chip.base, "text-xs", active ? ds.chip.active : ds.chip.default)}
+      aria-pressed={active}
+      className={clsx(
+        ds.chip.base,
+        "text-xs active:scale-95 motion-safe:transition-transform",
+        active ? ds.chip.active : ds.chip.default
+      )}
     >
       {label}
     </button>
@@ -195,7 +205,7 @@ function InsightChip({ label, active, onClick }: { label: string; active: boolea
 
 function KpiStat({ label, value, helper }: { label: string; value: string; helper?: string }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-slate-900/80 p-6 shadow-inner shadow-blue-900/30">
+    <div className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-slate-900/80 p-6 shadow-inner shadow-blue-900/30 transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_0_14px_rgba(59,130,246,0.45)]">
       <span className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent" />
       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{label}</p>
       <p className="mt-3 text-4xl font-semibold tracking-tight text-slate-50 md:text-5xl">{value}</p>
