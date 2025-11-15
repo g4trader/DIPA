@@ -129,11 +129,11 @@ def check_database():
                             ORDER BY mes_ano DESC
                             LIMIT 10
                         """)
-                
-                result = conn.execute(query)
-                meses = [row[0] for row in result]
-                
-                if meses:
+                    
+                    result = conn.execute(query)
+                    meses = [row[0] for row in result]
+                    
+                    if meses:
                     print(f"📅 Meses disponíveis em venda: {', '.join(meses)}")
                 else:
                     print("⚠️  Nenhum mês encontrado em venda")

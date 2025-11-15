@@ -1937,16 +1937,20 @@ class AgentService:
             # Tenta pegar do contexto de processamento se disponível
             pergunta_original = entities.get("pergunta", "")
         
+        logger.info(f"[_handle_vendedores_performance] entities.keys()={list(entities.keys())}")
+        logger.info(f"[_handle_vendedores_performance] entities.get('mes_ano')={entities.get('mes_ano')}")
         logger.info(f"[_handle_vendedores_performance] pergunta_original='{pergunta_original}' (tamanho={len(pergunta_original) if pergunta_original else 0})")
         
-        # 1) Tentar extrair MES/ANO EXPLÍCITO da pergunta (agosto 2025, etc.)
-        mes_ano_solicitado = extrair_mes_ano_explicito(pergunta_original) if pergunta_original else None
-        logger.info(f"[_handle_vendedores_performance] mes_ano_solicitado extraído={mes_ano_solicitado}")
+        # Prioriza o mes_ano que já foi extraído pelo parse_mes_ano_from_text em extract_entities
+        # Isso é mais confiável porque usa a mesma função de parsing
+        mes_ano_solicitado = entities.get("mes_ano")
         
-        # 2) Se não encontrar nada explícito, usa o que o parser geral colocou
-        if not mes_ano_solicitado:
-            mes_ano_solicitado = entities.get("mes_ano")
-            logger.info(f"[_handle_vendedores_performance] mes_ano_solicitado do entities.get('mes_ano')={mes_ano_solicitado}")
+        # Se não estiver em entities, tenta extrair explicitamente da pergunta
+        if not mes_ano_solicitado and pergunta_original:
+            mes_ano_solicitado = extrair_mes_ano_explicito(pergunta_original)
+            logger.info(f"[_handle_vendedores_performance] mes_ano_solicitado extraído explicitamente={mes_ano_solicitado}")
+        
+        logger.info(f"[_handle_vendedores_performance] mes_ano_solicitado FINAL={mes_ano_solicitado}")
         
         contexto_dados = {
             "mes_ano_solicitado": mes_ano_solicitado,

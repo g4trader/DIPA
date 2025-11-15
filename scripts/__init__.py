@@ -1,0 +1,6 @@
+"""
+Scripts utilitários do projeto.
+"""
+
+
+

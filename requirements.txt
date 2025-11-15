@@ -1,0 +1,48 @@
+# Python 3.11+
+
+# FastAPI e servidor (para API do agente)
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# Data processing
+pandas==2.1.3
+numpy==1.26.2
+pyarrow==14.0.1
+
+# Database - SQLAlchemy e drivers
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9  # PostgreSQL
+alembic==1.12.1  # Migrações
+
+# ML
+scikit-learn==1.3.2
+joblib==1.3.2
+xgboost==2.0.3  # Opcional, para modelos mais avançados
+
+# Environment e configuração
+python-dotenv==1.0.0
+
+# Logging
+python-json-logger==2.0.7
+
+# Utilitários
+python-dateutil==2.8.2
+unidecode==1.3.8  # Para remoção de acentos
+
+# Notebooks (opcional)
+jupyter==1.0.0
+ipykernel==6.27.1
+matplotlib==3.8.2
+seaborn==0.13.0
+
+# Testing
+pytest==7.4.3
+pytest-cov==4.1.0
+httpx==0.25.2  # Para TestClient do FastAPI
+
+# HTTP client para APIs externas (OpenAI)
+requests==2.31.0
+
+# Visualização (opcional)
+plotly==5.18.0

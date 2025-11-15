@@ -1,0 +1,25 @@
+# Configuração de Produtos de Foco
+# Mapeia produtos-chave (como marcas conhecidas) para códigos de produto e termos de busca
+# Isso permite buscas otimizadas usando códigos indexados em vez de LIKE em descrições
+
+nissin:
+  termos: ["nissin", "miojo", "cup noodles", "ufo", "lamen"]
+  codigos: []
+  # Nota: Os códigos serão preenchidos dinamicamente ou via script de mapeamento
+  # Por enquanto, deixe vazio para usar fallback por termo
+
+# Exemplos futuros (comentados):
+# heineken:
+#   termos: ["heineken", "heine"]
+#   codigos: []
+#
+# marilan:
+#   termos: ["marilan"]
+#   codigos: []
+#
+# ajinomoto:
+#   termos: ["ajinomoto", "saori"]
+#   codigos: []
+
+
+
