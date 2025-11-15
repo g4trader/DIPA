@@ -104,14 +104,18 @@ def analisar_meta_mensal(session: Session, ano: int, mes: int) -> Dict[str, Any]
         }
     
     # 2) Busca dados de metas do mês
+    # MetaVendedor não tem supervisor_nome diretamente, precisa fazer join com Vendedor -> Supervisor
+    from src.dw.models import Vendedor, Supervisor
     metas_vendedor = (
         session.query(
             MetaVendedor.vendedor_id,
             MetaVendedor.vendedor_nome,
-            MetaVendedor.supervisor_nome,
+            Supervisor.nome.label("supervisor_nome"),
             func.sum(MetaVendedor.valor_meta).label("meta_total"),
             func.sum(MetaVendedor.valor_faturado).label("realizado_total"),
         )
+        .join(Vendedor, MetaVendedor.vendedor_id == Vendedor.id)
+        .outerjoin(Supervisor, Vendedor.supervisor_id == Supervisor.id)
         .filter(
             MetaVendedor.ano == ano,
             MetaVendedor.mes == mes
@@ -119,7 +123,7 @@ def analisar_meta_mensal(session: Session, ano: int, mes: int) -> Dict[str, Any]
         .group_by(
             MetaVendedor.vendedor_id,
             MetaVendedor.vendedor_nome,
-            MetaVendedor.supervisor_nome
+            Supervisor.nome
         )
         .all()
     )
