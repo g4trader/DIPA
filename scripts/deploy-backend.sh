@@ -59,7 +59,7 @@ gcloud run deploy ${SERVICE_NAME} \
   --timeout 300s \
   --max-instances 10 \
   --min-instances 0 \
-  --set-env-vars PORT=8080,DB_TYPE=sqlite,SQLITE_PATH=/app/data/dipam_dw.db \
+  --set-env-vars DB_TYPE=sqlite,SQLITE_PATH=/app/data/dipam_dw.db \
   --set-secrets OPENAI_API_KEY=openai-api-key:latest \
   --quiet
 
