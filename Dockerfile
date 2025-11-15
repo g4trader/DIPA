@@ -18,11 +18,26 @@ COPY requirements.txt .
 # Instala dependências Python
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Cria diretório para banco SQLite (garante que existe antes de copiar o arquivo)
+RUN mkdir -p /app/data
+
 # Copia código da aplicação
 COPY . .
 
-# Expõe porta (Cloud Run usa a variável PORT)
+# Copia arquivo SQLite do banco de dados populado pelo ETL
+# Este arquivo contém os dados de metas e vendas necessários para produção
+# IMPORTANTE: O arquivo deve estar commitado no repositório ou ser copiado no build
+COPY data/dipam_dw.db /app/data/dipam_dw.db
+
+# Garante permissões corretas para o banco SQLite
+RUN chmod 644 /app/data/dipam_dw.db
+
+# Variáveis de ambiente padrão para SQLite em produção
+# Pode ser sobrescrito via variáveis de ambiente do Cloud Run
+ENV DB_TYPE=sqlite
+ENV SQLITE_PATH=/app/data/dipam_dw.db
 ENV PORT=8080
+
 EXPOSE 8080
 
 # Comando para executar a aplicação
