@@ -1,8 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Configuração de path aliases
-  // Next.js usa automaticamente o tsconfig.json para path aliases
-  // Não precisa de configuração adicional aqui se o tsconfig.json estiver correto
+  reactStrictMode: true,
+  
+  // Next.js 14+ usa automaticamente o tsconfig.json para path aliases
+  // Mas podemos verificar se está configurado corretamente
+  // O baseUrl e paths no tsconfig.json devem ser suficientes
 };
 
 export default nextConfig;
