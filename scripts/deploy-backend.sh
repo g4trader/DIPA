@@ -47,19 +47,20 @@ docker push ${IMAGE_NAME}:latest
 
 # Deploy no Cloud Run
 echo "🚀 Fazendo deploy no Cloud Run..."
+echo "📝 Configuração: SQLite (POC) - banco incluído na imagem Docker"
 gcloud run deploy ${SERVICE_NAME} \
   --image ${IMAGE_NAME}:latest \
   --platform managed \
   --region ${REGION} \
   --allow-unauthenticated \
   --port 8080 \
-  --memory 2Gi \
-  --cpu 1 \
+  --memory 4Gi \
+  --cpu 2 \
   --timeout 300s \
   --max-instances 10 \
   --min-instances 0 \
-  --set-env-vars PORT=8080,DB_TYPE=postgresql \
-  --set-secrets POSTGRES_USER=postgres-user:latest,POSTGRES_PASSWORD=postgres-password:latest,POSTGRES_DB=postgres-db:latest,OPENAI_API_KEY=openai-api-key:latest \
+  --set-env-vars PORT=8080,DB_TYPE=sqlite,SQLITE_PATH=/app/data/dipam_dw.db \
+  --set-secrets OPENAI_API_KEY=openai-api-key:latest \
   --quiet
 
 # Obter URL do serviço
@@ -75,14 +76,17 @@ echo "🌐 URL do serviço: ${SERVICE_URL}"
 echo "📖 Documentação: ${SERVICE_URL}/docs"
 echo "❤️  Health check: ${SERVICE_URL}/health"
 echo ""
-echo "⚠️  IMPORTANTE: Configure as seguintes variáveis de ambiente no Cloud Run:"
-echo "   - POSTGRES_HOST (IP do Cloud SQL ou socket Unix)"
-echo "   - POSTGRES_PORT"
+echo "📋 Configuração aplicada:"
+echo "   - DB_TYPE=sqlite (banco SQLite incluído na imagem)"
+echo "   - SQLITE_PATH=/app/data/dipam_dw.db"
+echo "   - PORT=8080"
 echo ""
-echo "   E certifique-se de que os secrets existem:"
-echo "   - postgres-user"
-echo "   - postgres-password"
-echo "   - postgres-db"
-echo "   - openai-api-key"
+echo "⚠️  IMPORTANTE: Certifique-se de que os secrets existem:"
+echo "   - openai-api-key (secret com chave da API OpenAI)"
+echo ""
+echo "💡 Para migrar para PostgreSQL no futuro:"
+echo "   1. Configure Cloud SQL"
+echo "   2. Atualize variáveis de ambiente: DB_TYPE=postgresql, POSTGRES_HOST, etc."
+echo "   3. Adicione secrets: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB"
 echo ""
 
