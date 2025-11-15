@@ -27,29 +27,48 @@ RUN apt-get update && apt-get install -y \
     && gcloud components install gsutil -q || true \
     && rm -rf /var/lib/apt/lists/*
 
-# Cria diretório para banco SQLite
+# Cria diretório para banco SQLite ANTES de copiar código
 RUN mkdir -p /app/data
 
-# Copia código da aplicação
+# Copia código da aplicação (MAS NÃO copia data/ para evitar sobrescrever)
 COPY . .
 
-# Baixa arquivo SQLite do Cloud Storage durante o build
+# IMPORTANTE: Baixa arquivo SQLite do Cloud Storage DEPOIS de copiar código
 # NOTA: O arquivo tem ~1.8GB e está no Cloud Storage porque não cabe no git
 # Durante o build do Cloud Build, o gcloud CLI já está autenticado
+# Esta etapa deve ser executada DEPOIS de COPY para garantir que o diretório existe
 RUN export PATH=$PATH:/root/google-cloud-sdk/bin && \
+    echo "📥 Verificando banco SQLite..." && \
     if command -v gsutil &> /dev/null; then \
         echo "📥 Baixando banco SQLite do Cloud Storage..." && \
-        gsutil cp gs://trivihair-dipam-data/dipam_dw.db /app/data/dipam_dw.db && \
+        gsutil -m cp gs://trivihair-dipam-data/dipam_dw.db /app/data/dipam_dw.db && \
         chmod 644 /app/data/dipam_dw.db && \
-        echo "✅ Arquivo SQLite baixado com sucesso do Cloud Storage"; \
+        echo "✅ Arquivo SQLite baixado com sucesso do Cloud Storage" && \
+        ls -lh /app/data/dipam_dw.db && \
+        echo "✅ Verificando se arquivo tem conteúdo..." && \
+        sqlite3 /app/data/dipam_dw.db "SELECT COUNT(*) FROM metas_vendedor LIMIT 1;" 2>&1 || echo "⚠️  Não foi possível verificar tabelas (pode ser normal se sqlite3 não estiver instalado)"; \
     elif [ -f data/dipam_dw.db ]; then \
         echo "📋 Usando arquivo SQLite local (fallback)..." && \
         cp data/dipam_dw.db /app/data/dipam_dw.db && \
         chmod 644 /app/data/dipam_dw.db && \
-        echo "✅ Arquivo SQLite copiado do repositório"; \
+        echo "✅ Arquivo SQLite copiado do repositório" && \
+        ls -lh /app/data/dipam_dw.db; \
     else \
         echo "⚠️  ATENÇÃO: Arquivo SQLite não encontrado!" && \
         echo "   Tente fazer upload para Cloud Storage: gsutil cp data/dipam_dw.db gs://trivihair-dipam-data/dipam_dw.db"; \
+        exit 1; \
+    fi
+
+# Verificação final: confirma que o arquivo existe e tem tamanho > 0
+RUN if [ -f /app/data/dipam_dw.db ]; then \
+        FILE_SIZE=$(stat -f%z /app/data/dipam_dw.db 2>/dev/null || stat -c%s /app/data/dipam_dw.db 2>/dev/null || echo "0"); \
+        echo "✅ Verificação final: Arquivo SQLite existe com tamanho ${FILE_SIZE} bytes"; \
+        if [ "$FILE_SIZE" -lt 1000 ]; then \
+            echo "❌ ERRO: Arquivo SQLite muito pequeno (${FILE_SIZE} bytes) - provavelmente vazio!"; \
+            exit 1; \
+        fi; \
+    else \
+        echo "❌ ERRO: Arquivo SQLite não existe em /app/data/dipam_dw.db"; \
         exit 1; \
     fi
 
