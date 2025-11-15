@@ -1,0 +1,8 @@
+# Não ignorar arquivos necessários para o build
+!lib/
+!components/
+!types/
+!app/
+!styles/
+!assets/
+
