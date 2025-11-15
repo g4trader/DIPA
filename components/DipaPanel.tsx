@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { clsx } from "clsx";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,12 @@ import type { TParsedQuery } from "@/app/api/query/schema";
 import logoDipam from "@/assets/logo_dipam.avif";
 import { ds } from "@/styles/ui";
 import { ChatHistory } from "@/components/panel/ChatHistory";
-import { KpiStats } from "@/components/panel/KpiStats";
-import { DipaChart } from "@/components/panel/DipaChart";
-import { RegionTable } from "@/components/panel/RegionTable";
-import type { ChartConfig, PanelMessage, QueryResult, IntentId } from "@/components/panel/types";
-import { Loader2, History, X, PanelRightOpen } from "lucide-react";
+import type { PanelMessage, BateuMetaContext, AnaliseProdutosContext, ProdutoInfo, IntentId, QueryResult } from "@/components/panel/types";
+import { Loader2, History, X } from "lucide-react";
+import { askDipamAgent, DipamApiError } from "@/lib/dipamApi";
+import { DipamAnswerCard } from "@/components/DipamAnswerCard";
+import { CopilotAnswerCard } from "@/components/CopilotAnswerCard";
+import { CopilotAnswerPayload } from "@/types/agent";
 
 type Region =
   | "Porto Alegre"
@@ -171,14 +172,16 @@ function genData() {
 
 const DATA = genData();
 
-const EXAMPLES = [
-  "Comparar meta vs realizado de 2025-11 por vendedor",
-  "Mostrar o mix de produtos promocionais em 2025-10",
-  "Quais são os top produtos por receita em 2025-08?",
-  "Resumo geral de vendas para 2025-11",
-  "Ticket médio por região em 2025-09",
-  "Quanto foi vendido de Nissin Miojo Galinha Caipira neste mês"
-];
+// Tipo de mensagem para o chat GenAI
+type Role = "user" | "assistant";
+
+interface ChatMessage {
+  id: string;
+  role: Role;
+  content: string;
+  // Payload estruturado da resposta do Copilot
+  payload?: CopilotAnswerPayload;
+}
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -233,6 +236,115 @@ function extractProductNameFromQuery(query: string): string | undefined {
 
 function formatUnits(value: number) {
   return value.toLocaleString("pt-BR");
+}
+
+// Função helper para verificar se o contexto contém dados de "quem bateu meta"
+function isBateuMetaContext(contexto?: Record<string, any>): contexto is BateuMetaContext {
+  return (
+    contexto !== undefined &&
+    contexto.mes_ano !== undefined &&
+    contexto.resumo !== undefined &&
+    contexto.top_vendedores !== undefined &&
+    Array.isArray(contexto.top_vendedores)
+  );
+}
+
+// Função helper para verificar se o contexto contém dados de análise de produtos
+function isAnaliseProdutosContext(contexto?: Record<string, any>): contexto is AnaliseProdutosContext {
+  return (
+    contexto !== undefined &&
+    contexto.tipo === "analise_produtos" &&
+    contexto.periodo_dias !== undefined &&
+    contexto.produtos !== undefined &&
+    Array.isArray(contexto.produtos)
+  );
+}
+
+// Função helper para formatar mês/ano
+function formatMesAno(mesAno: string): string {
+  try {
+    const [ano, mes] = mesAno.split("-");
+    const meses = [
+      "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+      "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
+    ];
+    const mesIndex = parseInt(mes, 10) - 1;
+    return `${meses[mesIndex]} de ${ano}`;
+  } catch {
+    return mesAno;
+  }
+}
+
+// Função helper para formatar percentual que já está em formato 0-100
+function formatPercentValue(value: number): string {
+  return `${value.toFixed(1)}%`;
+}
+
+// Função helper para extrair estratégias sugeridas do texto da resposta
+function extractEstrategiasSugeridas(texto: string): string[] {
+  const estrategias: string[] = [];
+  
+  // Procura por seções de recomendação com bullets ou listas
+  const lines = texto.split("\n");
+  let inRecommendations = false;
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    // Detecta início de seção de recomendações
+    if (trimmed.includes("Recomendações") || trimmed.includes("Estratégias") || trimmed.includes("💡")) {
+      inRecommendations = true;
+      continue;
+    }
+    
+    // Se estiver na seção de recomendações, extrai itens da lista
+    if (inRecommendations) {
+      // Detecta bullets (•, -, *, etc.)
+      if (trimmed.match(/^[•\-\*]\s+/)) {
+        const item = trimmed.replace(/^[•\-\*]\s+/, "").trim();
+        if (item && item.length > 10) {  // Só adiciona se for uma frase completa
+          estrategias.push(item);
+        }
+      }
+      // Detecta listas numeradas
+      else if (trimmed.match(/^\d+\.\s+/)) {
+        const item = trimmed.replace(/^\d+\.\s+/, "").trim();
+        if (item && item.length > 10) {
+          estrategias.push(item);
+        }
+      }
+      // Se encontrar uma linha vazia após recomendações, para
+      else if (trimmed === "" && estrategias.length > 0) {
+        break;
+      }
+    }
+  }
+  
+  // Se não encontrou na seção de recomendações, tenta buscar no texto geral
+  if (estrategias.length === 0) {
+    // Procura por padrões comuns de estratégias
+    const estrategiaPatterns = [
+      /refor[çc]ar.*mix.*rota/i,
+      /reativ[ao].*clientes/i,
+      /campanhas.*pdv/i,
+      /produtos.*baixa.*elasticidade/i,
+      /estrat[ée]gias.*promo[çc][ãa]o/i,
+      /marketing.*direcionado/i
+    ];
+    
+    for (const pattern of estrategiaPatterns) {
+      const matches = texto.match(new RegExp(`[^.]*${pattern.source}[^.]*`, "i"));
+      if (matches) {
+        estrategias.push(matches[0].trim());
+      }
+    }
+  }
+  
+  return estrategias.length > 0 ? estrategias : [
+    "Avaliar estratégias de promoção para estes produtos",
+    "Revisar o mix de produtos e possível descontinuação",
+    "Considerar ações de marketing direcionadas para aumentar o giro"
+  ];
 }
 
 function buildInsightSummaryView(result?: QueryResult) {
@@ -1068,32 +1180,131 @@ function runQueryStructured(filters: TParsedQuery, fallbackMonth = "2025-11", ra
   return runQuery(filters.intent, month, runtimeFilters);
 }
 
-export default function DipaPanel() {
-  const [question, setQuestion] = useState("");
-  const [answers, setAnswers] = useState<PanelMessage[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [chartRefreshKey, setChartRefreshKey] = useState(0);
-  const answerRef = useRef<HTMLDivElement | null>(null);
+// Componente de lista de mensagens
+function MessagesList({ 
+  messages, 
+  expandedContext, 
+  setExpandedContext 
+}: { 
+  messages: ChatMessage[]; 
+  expandedContext: string | null; 
+  setExpandedContext: (id: string | null) => void;
+}) {
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!previewOpen) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [messages]);
 
-    const trigger = () => {
-      window.dispatchEvent(new Event("resize"));
-      setChartRefreshKey((value) => value + 1);
-    };
+  return (
+    <div className="flex-1 flex flex-col gap-4 py-6 overflow-y-auto">
+      {messages.map((message, index) => (
+        <div key={message.id} className="w-full">
+          {message.role === 'user' ? (
+            <div className="flex justify-end">
+              <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl bg-blue-600/90 px-4 py-3 text-sm sm:text-base text-white shadow-lg shadow-blue-900/30">
+                {message.content}
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-start">
+              <div className="w-full max-w-[85%] sm:max-w-[90%]">
+                {/* Usa CopilotAnswerCard se tiver payload estruturado, senão usa DipamAnswerCard */}
+                {message.payload ? (
+                  <CopilotAnswerCard payload={message.payload} />
+                ) : (
+                  <DipamAnswerCard
+                    pergunta={messages[index - 1]?.role === 'user' ? messages[index - 1].content : "Pergunta não disponível"}
+                    intent={message.payload?.intent || "outros"}
+                    confianca={message.payload?.confidence ?? 0.5}
+                    respostaMarkdown={message.content || ""}
+                    contexto={{}}
+                    showDetalhes={expandedContext === message.id}
+                    onToggleDetalhes={() => {
+                      setExpandedContext(expandedContext === message.id ? null : message.id);
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+      <div ref={messagesEndRef} />
+    </div>
+  );
+}
 
-    const frame = requestAnimationFrame(trigger);
-    const timeout = setTimeout(trigger, 240);
+// Componente de input fixo no rodapé
+function ChatInputBar({ 
+  input, 
+  setInput, 
+  isLoading, 
+  onSubmit 
+}: { 
+  input: string; 
+  setInput: (value: string) => void; 
+  isLoading: boolean; 
+  onSubmit: (e: React.FormEvent) => void;
+}) {
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(timeout);
-    };
-  }, [previewOpen]);
+  useEffect(() => {
+    if (!isLoading) {
+      inputRef.current?.focus();
+    }
+  }, [isLoading]);
+
+  return (
+    <footer className="sticky bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-950/95 backdrop-blur z-20">
+      <form
+        onSubmit={onSubmit}
+        className="max-w-5xl mx-auto flex items-center gap-3 px-4 py-3"
+      >
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            setInput(target.value);
+            // Auto-resize
+            target.style.height = 'auto';
+            target.style.height = `${Math.min(target.scrollHeight, 160)}px`;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              onSubmit(e as any);
+            }
+          }}
+          placeholder="Digite sua pergunta..."
+          rows={1}
+          className="flex-1 resize-none rounded-2xl bg-slate-900/80 border border-slate-700 px-4 py-3 text-sm text-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 max-h-[160px] overflow-y-auto placeholder:text-slate-400"
+          disabled={isLoading}
+        />
+        <button
+          type="submit"
+          className="inline-flex items-center justify-center rounded-2xl bg-sky-500 hover:bg-sky-400 px-5 py-2 text-sm font-medium text-slate-950 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!input.trim() || isLoading}
+        >
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar"}
+        </button>
+      </form>
+    </footer>
+  );
+}
+
+export default function DipaPanel() {
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [expandedContext, setExpandedContext] = useState<string | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const hasConversation = messages.length > 0;
 
   useEffect(() => {
     const updateViewport = () => {
@@ -1105,110 +1316,104 @@ export default function DipaPanel() {
     return () => window.removeEventListener("resize", updateViewport);
   }, []);
 
-  const latestAssistant = useMemo(() => {
-    for (let index = answers.length - 1; index >= 0; index -= 1) {
-      const entry = answers[index];
-      if (entry.role === "assistant") {
-        return entry;
-      }
-    }
-    return undefined;
-  }, [answers]);
+  // Função comum para enviar pergunta (usada tanto no landing quanto no chat)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const question = input.trim();
+    if (!question || busy) return;
 
-  const latestQuestion = useMemo(() => {
-    for (let index = answers.length - 1; index >= 0; index -= 1) {
-      const entry = answers[index];
-      if (entry.role === "user") {
-        return entry.text;
-      }
-    }
-    return undefined;
-  }, [answers]);
-
-  const handleExampleSelection = (value: string) => {
-    setQuestion(value);
-    void ask(value);
-  };
-
-  const handleRandomExample = () => {
-    const example = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
-    setQuestion(example);
-    void ask(example);
-  };
-
-  const ask = async (input: string) => {
-    if (!input.trim()) return;
-
-    const fallbackMonth = extractMonth(input, DEFAULT_MONTH);
-    const fallbackIntent = intentFromQuery(input);
-    const detectedBrand = detectBrandFromQuery(input);
-    const detectedProduct = extractProductNameFromQuery(input);
-
+    // Limpa erros anteriores
+    setError(null);
+    
+    // Limpa o input imediatamente
+    setInput("");
+    
+    // Adiciona mensagem do usuário
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: question
+    };
+    
+    setMessages((msgs) => [...msgs, userMessage]);
     setBusy(true);
-    setAnswers((state) => [...state, { role: "user", text: input }]);
-    setPreviewOpen(false);
     setHistoryOpen(false);
 
-    let result: QueryResult | undefined;
-
     try {
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      // Chama a API do Dipam AI
+      const response = await askDipamAgent({
+        pergunta: question,
+        usuarioId: "fabiano",
+        papel: "diretor"
+      });
 
-      if (USE_LLM) {
-        const res = await fetch("/api/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: input })
-        });
-
-        if (!res.ok) {
-          throw new Error("parser failed");
-        }
-
-        const payload = (await res.json()) as { data: TParsedQuery };
-        result = runQueryStructured(payload.data, fallbackMonth, input);
-      } else {
-        const heuristicFilters: Partial<TParsedQuery> & { productName?: string } = {};
-        if (detectedBrand) heuristicFilters.brand = detectedBrand;
-        if (detectedProduct) heuristicFilters.productName = detectedProduct;
-        result = runQuery(fallbackIntent, fallbackMonth, heuristicFilters);
-      }
+      // Adiciona resposta do agente
+      // Usa payload estruturado do backend se disponível, senão constrói a partir da resposta
+      const copilotPayload: CopilotAnswerPayload = response.payload || {
+        intent: response.intent,
+        intentLabel: response.intent === "consulta_meta" 
+          ? "Consulta de Meta" 
+          : response.intent === "consulta_vendedores_performance"
+          ? "Consulta Vendedores Performance"
+          : "Consulta Geral",
+        confidence: response.confidence,
+        question: response.question,
+        resumoExecutivo: response.resumoExecutivo,
+        kpis: response.kpis,
+        topVendedores: response.topVendedores,
+        insights: Array.isArray(response.insights) 
+          ? response.insights.join("\n") 
+          : (typeof response.insights === "string" ? response.insights : undefined),
+        observacoes: Array.isArray(response.observacoes) 
+          ? response.observacoes.join("\n") 
+          : (typeof response.observacoes === "string" ? response.observacoes : undefined),
+      };
+      
+      const agentMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: response.resumoExecutivo || response.question || "",
+        // Payload estruturado para renderização no CopilotAnswerCard
+        payload: copilotPayload
+      };
+      
+      setMessages((msgs) => [...msgs, agentMessage]);
+      
     } catch (error) {
-      console.error("LLM parser error. Falling back to heuristics.", error);
-      const heuristicFilters: Partial<TParsedQuery> & { productName?: string } = {};
-      if (detectedBrand) heuristicFilters.brand = detectedBrand;
-      if (detectedProduct) heuristicFilters.productName = detectedProduct;
-      result = runQuery(fallbackIntent, fallbackMonth, heuristicFilters);
+      console.error("Erro ao chamar API do Dipam AI:", error);
+      
+      const errorMessage = error instanceof DipamApiError 
+        ? error.message 
+        : "Erro ao conectar com o agente. Verifique se a API está rodando.";
+      
+      setError(errorMessage);
+      
+      // Adiciona mensagem de erro como resposta do agente
+      const errorAgentMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `❌ ${errorMessage}`
+      };
+      
+      setMessages((msgs) => [...msgs, errorAgentMessage]);
+    } finally {
+      setBusy(false);
+      // Mantém foco no input após resposta
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     }
-
-    if (result) {
-      setAnswers((state) => [
-        ...state,
-        {
-          role: "assistant",
-          text: result.narrative,
-          result
-        }
-      ]);
-    }
-
-    setBusy(false);
   };
 
-  const hasResponse = Boolean(latestAssistant);
-  const latestResult = latestAssistant?.result;
-  const isSubmitDisabled = busy || !question.trim();
-  const summaryView = buildInsightSummaryView(latestResult);
+  // Scroll automático já é gerenciado pelo MessagesList
 
-  useEffect(() => {
-    if (!busy && hasResponse && isMobile) {
-      answerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [busy, hasResponse, isMobile]);
-
+  // Renderização condicional: Landing vs Chat
+  if (!hasConversation) {
+    // LANDING: Tela inicial sem conversa
   return (
-    <div className={clsx("min-h-screen", ds.colors.background, "text-slate-200") }>
-      <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur">
+      <div className={clsx("min-h-screen flex flex-col", ds.colors.background, "text-slate-200")}>
+        <header className="flex-shrink-0 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur z-10">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-500/40 bg-blue-500/20 shadow-lg shadow-blue-900/40 sm:h-12 sm:w-12">
@@ -1236,49 +1441,89 @@ export default function DipaPanel() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-4xl flex-col items-stretch gap-6 px-4 py-10 sm:items-center sm:gap-10 sm:px-6 sm:py-16 lg:px-8">
-        <form
-          className="w-full space-y-4 text-center sm:space-y-6"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void ask(question);
-          }}
-        >
+      {/* LANDING: Input centralizado grande */}
+      <main className="flex-1 flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-2xl text-center space-y-6">
+          <h1 className="text-2xl font-semibold text-slate-100">Como posso ajudar?</h1>
+          <p className="text-sm text-slate-400">
+            Faça uma pergunta sobre metas, vendas, clientes ou oportunidades.
+          </p>
+
+          <form onSubmit={handleSubmit}>
+            <div className="bg-slate-900/60 border border-slate-700 rounded-2xl px-4 py-3 flex items-end gap-3">
           <textarea
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Qual decisão comercial você quer acelerar agora?"
-            className="min-h-[180px] w-full rounded-3xl border border-slate-700 bg-slate-900/80 px-4 py-4 text-base leading-relaxed text-slate-100 shadow-inner shadow-slate-950/40 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:px-6 sm:text-lg"
-          />
-
-          <div className="flex flex-wrap justify-start gap-2 text-xs text-slate-400 sm:justify-center sm:text-sm">
-            {EXAMPLES.map((example) => (
+                ref={inputRef}
+                value={input}
+                onChange={(e) => {
+                  const target = e.target as HTMLTextAreaElement;
+                  setInput(target.value);
+                  // Auto-resize
+                  target.style.height = 'auto';
+                  target.style.height = `${Math.min(target.scrollHeight, 160)}px`;
+                }}
+                placeholder="Digite sua pergunta..."
+                className="w-full bg-transparent outline-none resize-none text-slate-100 text-sm max-h-40 placeholder:text-slate-400"
+                rows={3}
+                disabled={busy}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }
+                }}
+              />
               <button
-                key={example}
-                type="button"
-                onClick={() => handleExampleSelection(example)}
-                className="rounded-full border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 transition duration-150 ease-out hover:border-blue-500/50 hover:text-slate-100"
+                type="submit"
+                className="shrink-0 px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                disabled={!input.trim() || busy}
               >
-                {example}
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Perguntar"}
               </button>
-            ))}
           </div>
+          </form>
+        </div>
+      </main>
+    </div>
+    );
+  }
 
-          <div className="flex justify-center">
+  // CHAT: Layout após primeira pergunta
+  return (
+    <div className={clsx("min-h-screen flex flex-col", ds.colors.background, "text-slate-200")}>
+      <header className="flex-shrink-0 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur z-10">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-500/40 bg-blue-500/20 shadow-lg shadow-blue-900/40 sm:h-12 sm:w-12">
+              <Image src={logoDipam} alt="Logotipo Dipam" className="h-7 w-7 object-contain sm:h-8 sm:w-8" priority />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-100 sm:text-[2.5rem] sm:leading-tight">DIPAM COPILOT™</h1>
+              <p className="mt-0.5 text-xs text-slate-400 sm:mt-1 sm:text-sm">Inteligência comercial em tempo real</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3">
             <Button
-              type="submit"
-              disabled={isSubmitDisabled}
-              className="mt-4 w-full max-w-none gap-2 rounded-full px-6 py-3 text-base font-semibold sm:mt-0 sm:w-auto sm:px-8"
+              type="button"
+              variant="ghost"
+              className="gap-2 text-xs font-medium text-slate-300 hover:text-slate-100 sm:text-sm"
+              onClick={() => setHistoryOpen(true)}
             >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Perguntar ao copiloto"}
+              <History className="h-4 w-4" />
+              Histórico
             </Button>
+            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-slate-300 sm:text-xs">
+              Protótipo
+            </span>
           </div>
-        </form>
+        </div>
+      </header>
 
-        {(busy || (hasResponse && latestAssistant)) ? (
-          <div ref={answerRef} className="w-full max-w-3xl space-y-6">
-            {busy ? (
-              <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-6 shadow-xl shadow-blue-900/30 sm:p-8 animate-pulse">
+      {/* Área de mensagens scrollável */}
+      <main className="flex-1 flex justify-center overflow-hidden">
+        <div className="w-full max-w-4xl flex flex-col px-4 pb-24">
+          {busy && messages.length > 0 && (
+            <div className="flex justify-start mb-4">
+              <div className="w-full max-w-[85%] sm:max-w-[90%] rounded-3xl border border-slate-700/70 bg-slate-900/70 p-6 shadow-xl shadow-blue-900/30 sm:p-8 animate-pulse">
                 <div className="flex flex-col gap-2 text-left">
                   <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPAM COPILOT™</p>
                   <div className="mt-2 h-5 w-2/3 rounded-full bg-slate-700/70" />
@@ -1289,44 +1534,24 @@ export default function DipaPanel() {
                   <div className="h-4 w-4/5 rounded-full bg-slate-800/50" />
                 </div>
               </div>
-            ) : latestAssistant ? (
-              <>
-                <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-6 shadow-xl shadow-blue-900/30 sm:p-8">
-                  <div className="flex flex-col gap-2 text-left">
-                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Resposta do DIPAM COPILOT™</p>
-                    {latestQuestion ? (
-                      <h2 className="text-lg font-semibold text-slate-100">{latestQuestion}</h2>
-                    ) : null}
-                  </div>
-                  {summaryView ? (
-                    <div className="mt-6 space-y-3 text-left text-lg leading-relaxed text-slate-100">
-                      {summaryView.paragraphs.map((paragraph, index) => (
-                        <React.Fragment key={index}>{paragraph}</React.Fragment>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-6 text-left text-lg leading-relaxed text-slate-100">{latestAssistant.text}</p>
-                  )}
-                </div>
-
-                {latestResult ? (
-                  <div className="flex justify-center">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="w-full max-w-xs gap-2 rounded-full px-6 py-3 text-sm font-medium sm:w-auto"
-                      onClick={() => setPreviewOpen(true)}
-                    >
-                      <PanelRightOpen className="h-4 w-4" />
-                      Ver preview analítico detalhado
-                    </Button>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-        ) : null}
+                      </div>
+          )}
+          <MessagesList 
+            messages={messages} 
+            expandedContext={expandedContext}
+            setExpandedContext={setExpandedContext}
+          />
+                                  </div>
       </main>
+
+      {/* Input fixo no rodapé */}
+      <ChatInputBar
+        input={input}
+        setInput={setInput}
+        isLoading={busy}
+        onSubmit={handleSubmit}
+      />
+
 
       {historyOpen ? (
         <div className="fixed inset-0 z-40 flex items-start justify-center sm:justify-end">
@@ -1343,48 +1568,23 @@ export default function DipaPanel() {
               </button>
             </div>
             <div className="mt-4 max-h-[60vh] overflow-y-auto pr-1">
-              <ChatHistory messages={answers} emptyMessage="Nenhuma interação ainda." />
+              <ChatHistory 
+                messages={messages.map(m => ({
+                  role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+                  text: m.content,
+                  timestamp: m.id,
+                  intent: m.role === 'agent' ? m.intent : undefined,
+                  confianca: m.role === 'agent' ? m.confidence : undefined,
+                  contexto: m.role === 'agent' ? m.context : undefined
+                }))} 
+                emptyMessage="Nenhuma interação ainda." 
+              />
             </div>
           </div>
         </div>
       ) : null}
 
-      {previewOpen && latestResult ? (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="absolute inset-0 bg-black/45" onClick={() => setPreviewOpen(false)} />
-          <aside className="relative ml-auto flex h-full w-full max-w-md border-l border-slate-800 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
-            <div className="flex h-full w-full flex-col gap-6 overflow-y-auto p-6">
-              <header className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview analítico</p>
-                  <h3 className="text-base font-semibold text-slate-100">Detalhes estruturados</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPreviewOpen(false)}
-                  className="rounded-full border border-slate-700/60 bg-slate-800/80 p-1.5 text-slate-300 transition hover:border-blue-500/40 hover:text-slate-100"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </header>
-
-              <section>
-                <KpiStats items={latestResult.kpis} />
-              </section>
-
-              <section className="space-y-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Indicadores visuais</h3>
-                <DipaChart chart={latestResult.chart} refreshKey={chartRefreshKey} />
-              </section>
-
-              <section className="space-y-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tabela analítica</h3>
-                <RegionTable result={latestResult} showHeader={false} />
-              </section>
-            </div>
-          </aside>
-        </div>
-      ) : null}
+      {/* Preview analítico removido - não mais necessário com novo layout de chat */}
     </div>
   );
 }

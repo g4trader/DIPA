@@ -1,0 +1,73 @@
+# Arquivos a ignorar no deploy para Google Cloud
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# Dados locais (usar Cloud Storage ou Cloud SQL)
+data/dipam_dw.db
+data_raw/
+dados/
+*.csv
+
+# Documentação
+*.md
+docs/
+ARCHITECTURE.md
+QUICKSTART.md
+TESTING.md
+
+# Configuração local
+.env
+.env.local
+.env.*.local
+
+# Notebooks
+*.ipynb
+notebooks/
+
+# Outros
+.dockerignore
+docker-compose.yml
+vercel.json
+

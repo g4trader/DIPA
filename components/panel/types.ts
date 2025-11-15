@@ -62,5 +62,51 @@ export type PanelMessage = {
   role: "user" | "assistant";
   text: string;
   result?: QueryResult;
+  // Campos adicionais para integração com API do Dipam AI
+  intent?: string;
+  confianca?: number;
+  contexto?: Record<string, any>;
+  timestamp?: string;
+};
+
+// Tipos para dados de "quem bateu meta"
+export type VendedorMetaInfo = {
+  vendedor: string;
+  rota?: string;
+  supervisor?: string;
+  meta: number;
+  realizado: number;
+  atingimento: number;
+};
+
+export type BateuMetaResumo = {
+  total_vendedores_bateram: number;
+  meta_total: number;
+  realizado_total: number;
+  atingimento_medio: number;
+};
+
+export type BateuMetaContext = {
+  mes_ano: string;
+  resumo: BateuMetaResumo;
+  top_vendedores: VendedorMetaInfo[];
+  demais_vendedores?: VendedorMetaInfo[];
+};
+
+// Tipos para análise de produtos com baixa venda
+export type ProdutoInfo = {
+  codigo: string;
+  produto: string;
+  unidades: number;
+  caixas: number;
+  faturamento: number;
+};
+
+export type AnaliseProdutosContext = {
+  tipo: "analise_produtos";
+  periodo_dias: number;
+  produtos: ProdutoInfo[];
+  criterio: string;
+  total_produtos?: number;
 };
 

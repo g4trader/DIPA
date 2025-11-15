@@ -45,3 +45,5 @@ function ChatBubble({ role, text }: { role: "user" | "assistant"; text: string }
   );
 }
 
+
+
