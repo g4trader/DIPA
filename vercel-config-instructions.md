@@ -2,18 +2,21 @@
 
 ## 📋 Checklist de Configuração
 
-### 1. Root Directory
+### 1. Root Directory (OBRIGATÓRIO configurar no Dashboard)
 O diretório raiz do frontend deve ser **`.`** (raiz do repositório), já que:
 - ✅ `package.json` está na raiz
 - ✅ `next.config.mjs` está na raiz  
 - ✅ `app/` está na raiz
 - ✅ `components/` está na raiz
 
+⚠️ **IMPORTANTE**: `rootDirectory` NÃO pode ser definido no `vercel.json` (não é suportado pelo schema). Deve ser configurado APENAS no dashboard do Vercel.
+
 **Como verificar/corrigir no Vercel Dashboard:**
 1. Acesse: https://vercel.com/south-medias-projects/dipa/settings
 2. Vá em **"General"** → **"Root Directory"**
-3. Deve estar configurado como **`.`** ou **`/`**
+3. Deve estar configurado como **`.`** ou **`/`** (raiz)
 4. Se estiver diferente (ex: `frontend/` ou `app/`), altere para **`.`**
+5. Clique em **"Save"**
 
 ### 2. Framework Preset
 - **Framework**: Next.js
