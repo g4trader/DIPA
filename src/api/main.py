@@ -16,7 +16,7 @@ import os
 import re
 
 from src.config import config
-from src.dw.connection import init_db, get_db_session
+from src.dw.connection import init_db, get_db_session, get_db_engine
 from src.agent.service import get_agent_service
 from src.agent.queries import query_vendedor_meta
 from src.dw.models import InteracaoAgent
