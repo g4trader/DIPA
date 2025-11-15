@@ -39,6 +39,8 @@ from src.ml.forecasting import get_monthly_revenue_series, forecast_month_revenu
 from src.analysis.produtos import get_produtos_menos_vendidos, get_top_produtos_para_recuperar
 from src.analysis.clientes import clientes_positivados_sem_compra_produto
 from src.agent.memory import buscar_interacoes_parecidas
+from src.agent.skills import buscar_skill_por_intent, executar_skill
+from src.agent.interaction_logger import registrar_interacao
 from src.config.produtos_foco import obter_codigos_por_nome, obter_termos_por_nome
 from datetime import datetime
 
@@ -70,46 +72,71 @@ def periodo_tem_dados(session: Session, mes_ano: str) -> bool:
         return False
     
     # Verifica se há dados em metas_vendedor
-    tem_metas = (
-        session.query(func.count(MetaVendedor.id))
-        .filter(MetaVendedor.mes_ano == mes_ano)
-        .scalar()
-        > 0
-    )
+    try:
+        tem_metas = (
+            session.query(func.count(MetaVendedor.id))
+            .filter(MetaVendedor.mes_ano == mes_ano)
+            .scalar()
+            > 0
+        )
+    except Exception as e:
+        logger.warning(f"Erro ao verificar metas_vendedor para {mes_ano}: {str(e)}")
+        tem_metas = False
     
     # Verifica se há dados em vendas
     # Extrai ano e mês para filtrar vendas
     ano, mes = mes_ano.split("-")
+    tem_vendas = False
     
-    # Tenta primeiro com extract (PostgreSQL/MySQL)
+    # Detecta tipo de banco para usar a função correta
+    from src.config import config
+    db_type = config.database.db_type
+    
     try:
-        from sqlalchemy import extract as sql_extract
-        tem_vendas = (
-            session.query(func.count(Venda.id))
-            .filter(
-                sql_extract('year', Venda.data_venda) == int(ano),
-                sql_extract('month', Venda.data_venda) == int(mes)
-            )
-            .scalar()
-            > 0
-        )
-    except Exception:
-        # Fallback para SQLite (que usa strftime)
-        try:
+        if db_type == "sqlite":
+            # SQLite usa strftime
             tem_vendas = (
                 session.query(func.count(Venda.id))
                 .filter(
                     func.strftime("%Y", Venda.data_venda) == ano,
-                    func.strftime("%m", Venda.data_venda) == mes,
+                    func.strftime("%m", Venda.data_venda) == mes.zfill(2),  # Garante formato 08
                 )
                 .scalar()
                 > 0
             )
-        except Exception as e:
-            logger.warning(f"Erro ao verificar vendas para {mes_ano}: {str(e)}")
+        else:
+            # PostgreSQL/MySQL usa extract
+            from sqlalchemy import extract as sql_extract
+            tem_vendas = (
+                session.query(func.count(Venda.id))
+                .filter(
+                    sql_extract('year', Venda.data_venda) == int(ano),
+                    sql_extract('month', Venda.data_venda) == int(mes)
+                )
+                .scalar()
+                > 0
+            )
+    except Exception as e:
+        # Fallback: tenta ambos os métodos
+        logger.warning(f"Erro ao verificar vendas para {mes_ano} (método principal): {str(e)}")
+        try:
+            # Tenta SQLite strftime como fallback
+            tem_vendas = (
+                session.query(func.count(Venda.id))
+                .filter(
+                    func.strftime("%Y", Venda.data_venda) == ano,
+                    func.strftime("%m", Venda.data_venda) == mes.zfill(2),
+                )
+                .scalar()
+                > 0
+            )
+        except Exception as e2:
+            logger.warning(f"Erro ao verificar vendas para {mes_ano} (fallback): {str(e2)}")
             tem_vendas = False
     
-    return tem_metas or tem_vendas
+    resultado = tem_metas or tem_vendas
+    logger.debug(f"periodo_tem_dados({mes_ano}): metas={tem_metas}, vendas={tem_vendas}, resultado={resultado}")
+    return resultado
 
 
 class AgentService:
@@ -269,6 +296,10 @@ class AgentService:
             # Adiciona pergunta original às entities para uso nos handlers
             entities["pergunta_original"] = pergunta
             
+            # 1.5. Verifica se existe skill ativa para essa intent
+            skill = buscar_skill_por_intent(session, intent.value)
+            sql_executado = None
+            
             # Prepara contexto de memória (interações aprovadas com alta similaridade)
             UMBRAL_MEMORIA = 0.85
             interacoes_aprovadas = [
@@ -296,62 +327,114 @@ class AgentService:
                 )
             
             # 2. Executa queries e monta contexto
-            # Se for consulta de meta, usa handler específico
-            t_handler_start = time.perf_counter()
-            logger.info(
-                f"[process_question: antes de executar handler da intent] "
-                f"Intent: {intent.value}, "
-                f"Pergunta: {pergunta[:100]}..."
-            )
+            # Se existir skill ativa, usa ela primeiro
+            if skill:
+                logger.info(f"[process_question: usando skill] {skill.nome} para intent {intent.value}")
+                t_skill_start = time.perf_counter()
+                
+                try:
+                    # Executa skill
+                    resultado_skill = executar_skill(session, skill, entities)
+                    
+                    if resultado_skill:
+                        # Monta contexto baseado no resultado da skill
+                        contexto = {
+                            "intent": intent.value,
+                            "entities": entities,
+                            "skill_usada": skill.nome,
+                            "tipo": resultado_skill.get("tipo"),
+                            "dados": resultado_skill.get("dados", []),
+                            "total": resultado_skill.get("total", 0),
+                            "tem_dados_suficientes": resultado_skill.get("total", 0) > 0
+                        }
+                        
+                        # SQL executado é o template preenchido (salvo na skill)
+                        sql_executado = skill.sql_template
+                        
+                        # Gera resposta usando LLM
+                        t_llm_start = time.perf_counter()
+                        resposta = self._generate_response(intent, contexto, pergunta, contexto_memoria)
+                        t_llm_end = time.perf_counter()
+                        logger.info(
+                            f"[process_question: depois de chamar LLM para skill] "
+                            f"Tempo: {t_llm_end - t_llm_start:.3f}s"
+                        )
+                        
+                        # Calcula confiança
+                        confianca = 0.9 if contexto.get("tem_dados_suficientes") else 0.6
+                        
+                        t_skill_end = time.perf_counter()
+                        logger.info(
+                            f"[process_question: skill executada] "
+                            f"Tempo: {t_skill_end - t_skill_start:.3f}s, "
+                            f"Total dados: {resultado_skill.get('total', 0)}"
+                        )
+                    else:
+                        # Erro ao executar skill - cai no fluxo normal
+                        logger.warning(f"Erro ao executar skill {skill.nome}, usando fluxo normal")
+                        skill = None  # Força usar fluxo normal
+                except Exception as e:
+                    logger.error(f"Erro ao executar skill {skill.nome}: {str(e)}, usando fluxo normal")
+                    skill = None  # Força usar fluxo normal
             
-            if intent == IntentType.CONSULTA_META:
-                contexto = self._handle_meta_query(intent, entities, session, contexto_memoria)
-                
-                # Adiciona contexto de memória se houver interações aprovadas
-                if contexto_memoria:
-                    contexto["memoria_interacoes_aprovadas"] = contexto_memoria
-                
-                # A resposta já está formatada no contexto
-                resposta = contexto.get("resposta", "Desculpe, ocorreu um erro ao processar sua pergunta.")
-                confianca = contexto.get("confianca", 0.5)
-            elif intent == IntentType.CONSULTA_VENDEDORES_PERFORMANCE:
-                contexto = self._handle_vendedores_performance(intent, entities, session, contexto_memoria)
-                
-                # Adiciona contexto de memória se houver interações aprovadas
-                if contexto_memoria:
-                    contexto["memoria_interacoes_aprovadas"] = contexto_memoria
-                
-                # A resposta já está formatada no contexto
-                resposta = contexto.get("resposta", "Desculpe, ocorreu um erro ao processar sua pergunta.")
-                confianca = contexto.get("confianca", 0.5)
-            else:
-                contexto = self._build_context(intent, entities, session)
-                
-                # 3. Usa modelos de ML quando apropriado
-                contexto = self._enrich_with_ml(intent, contexto, entities, session)
-                
-                # Adiciona contexto de memória se houver interações aprovadas
-                if contexto_memoria:
-                    contexto["memoria_interacoes_aprovadas"] = contexto_memoria
-                
-                # 4. Gera resposta
-                t_llm_start = time.perf_counter()
+            # Se não usou skill (ou skill falhou), usa fluxo normal
+            if not skill or "resposta" not in locals():
+                # Se for consulta de meta, usa handler específico
+                t_handler_start = time.perf_counter()
                 logger.info(
-                    f"[process_question: antes de chamar LLM] "
+                    f"[process_question: antes de executar handler da intent] "
                     f"Intent: {intent.value}, "
                     f"Pergunta: {pergunta[:100]}..."
                 )
-                resposta = self._generate_response(intent, contexto, pergunta, contexto_memoria)
-                t_llm_end = time.perf_counter()
-                logger.info(
-                    f"[process_question: depois de chamar LLM] "
-                    f"Tempo: {t_llm_end - t_llm_start:.3f}s, "
-                    f"Tamanho resposta: {len(resposta)} caracteres, "
-                    f"Pergunta: {pergunta[:100]}..."
-                )
                 
-                # 5. Calcula confiança
-                confianca = self._calculate_confidence(intent, entities, contexto)
+                if intent == IntentType.CONSULTA_META:
+                    contexto = self._handle_meta_query(intent, entities, session, contexto_memoria)
+                    
+                    # Adiciona contexto de memória se houver interações aprovadas
+                    if contexto_memoria:
+                        contexto["memoria_interacoes_aprovadas"] = contexto_memoria
+                    
+                    # A resposta já está formatada no contexto
+                    resposta = contexto.get("resposta", "Desculpe, ocorreu um erro ao processar sua pergunta.")
+                    confianca = contexto.get("confianca", 0.5)
+                elif intent == IntentType.CONSULTA_VENDEDORES_PERFORMANCE:
+                    contexto = self._handle_vendedores_performance(intent, entities, session, contexto_memoria)
+                    
+                    # Adiciona contexto de memória se houver interações aprovadas
+                    if contexto_memoria:
+                        contexto["memoria_interacoes_aprovadas"] = contexto_memoria
+                    
+                    # A resposta já está formatada no contexto
+                    resposta = contexto.get("resposta", "Desculpe, ocorreu um erro ao processar sua pergunta.")
+                    confianca = contexto.get("confianca", 0.5)
+                else:
+                    contexto = self._build_context(intent, entities, session)
+                    
+                    # 3. Usa modelos de ML quando apropriado
+                    contexto = self._enrich_with_ml(intent, contexto, entities, session)
+                    
+                    # Adiciona contexto de memória se houver interações aprovadas
+                    if contexto_memoria:
+                        contexto["memoria_interacoes_aprovadas"] = contexto_memoria
+                    
+                    # 4. Gera resposta
+                    t_llm_start = time.perf_counter()
+                    logger.info(
+                        f"[process_question: antes de chamar LLM] "
+                        f"Intent: {intent.value}, "
+                        f"Pergunta: {pergunta[:100]}..."
+                    )
+                    resposta = self._generate_response(intent, contexto, pergunta, contexto_memoria)
+                    t_llm_end = time.perf_counter()
+                    logger.info(
+                        f"[process_question: depois de chamar LLM] "
+                        f"Tempo: {t_llm_end - t_llm_start:.3f}s, "
+                        f"Tamanho resposta: {len(resposta)} caracteres, "
+                        f"Pergunta: {pergunta[:100]}..."
+                    )
+                    
+                    # 5. Calcula confiança
+                    confianca = self._calculate_confidence(intent, entities, contexto)
             
             t_handler_end = time.perf_counter()
             logger.info(
@@ -369,6 +452,25 @@ class AgentService:
                 f"Confiança: {confianca:.2f}, "
                 f"Pergunta: {pergunta[:100]}..."
             )
+            
+            # Registra interação para aprendizado contínuo
+            try:
+                interacao_id = registrar_interacao(
+                    session=session,
+                    pergunta=pergunta,
+                    resposta=resposta,
+                    intent=intent.value,
+                    entities=entities,
+                    contexto=contexto,
+                    confianca=confianca,
+                    usuario_id=usuario_id,
+                    papel=papel,
+                    sql_executado=sql_executado
+                )
+                if interacao_id:
+                    contexto["interacao_id"] = interacao_id
+            except Exception as e:
+                logger.warning(f"Erro ao registrar interação (não crítico): {str(e)}")
             
             return {
                 "resposta": resposta,
@@ -1835,19 +1937,26 @@ class AgentService:
             # Tenta pegar do contexto de processamento se disponível
             pergunta_original = entities.get("pergunta", "")
         
+        logger.info(f"[_handle_vendedores_performance] pergunta_original='{pergunta_original}' (tamanho={len(pergunta_original) if pergunta_original else 0})")
+        
         # 1) Tentar extrair MES/ANO EXPLÍCITO da pergunta (agosto 2025, etc.)
-        mes_ano_solicitado = extrair_mes_ano_explicito(pergunta_original)
+        mes_ano_solicitado = extrair_mes_ano_explicito(pergunta_original) if pergunta_original else None
+        logger.info(f"[_handle_vendedores_performance] mes_ano_solicitado extraído={mes_ano_solicitado}")
         
         # 2) Se não encontrar nada explícito, usa o que o parser geral colocou
         if not mes_ano_solicitado:
             mes_ano_solicitado = entities.get("mes_ano")
+            logger.info(f"[_handle_vendedores_performance] mes_ano_solicitado do entities.get('mes_ano')={mes_ano_solicitado}")
         
         contexto_dados = {
             "mes_ano_solicitado": mes_ano_solicitado,
         }
         
+        logger.info(f"[_handle_vendedores_performance] Verificando periodo_tem_dados para {mes_ano_solicitado}")
+        
         # 3) Só buscamos dados se EXISTIR dado para esse período
         if mes_ano_solicitado and periodo_tem_dados(session, mes_ano_solicitado):
+            logger.info(f"[_handle_vendedores_performance] periodo_tem_dados retornou True para {mes_ano_solicitado}")
             mes_ano_analise = mes_ano_solicitado
             
             try:
