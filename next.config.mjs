@@ -12,10 +12,18 @@ const nextConfig = {
   // Configuração explícita de path aliases para garantir compatibilidade com Vercel
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
     // Adiciona alias para @ apontando para a raiz do projeto
+    // Usamos path.resolve para garantir caminho absoluto
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': __dirname,
+      '@': path.resolve(__dirname),
     };
+    
+    // Garante que os módulos sejam resolvidos corretamente
+    config.resolve.modules = [
+      ...(config.resolve.modules || []),
+      path.resolve(__dirname),
+    ];
+    
     return config;
   },
 };
