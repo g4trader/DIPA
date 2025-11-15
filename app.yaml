@@ -1,0 +1,50 @@
+# Configuração para Google Cloud App Engine (alternativa ao Cloud Run)
+# Se preferir usar Cloud Run, ignore este arquivo e use apenas o Dockerfile
+
+runtime: python311
+
+instance_class: F2  # Pode ajustar conforme necessidade (F1, F2, F4)
+
+automatic_scaling:
+  min_instances: 0  # Escala para zero quando não há tráfego
+  max_instances: 10
+  target_cpu_utilization: 0.6
+
+env_variables:
+  # Database
+  DB_TYPE: "postgresql"  # Ou "sqlite" se usar Cloud SQL via Unix socket
+  POSTGRES_HOST: "/cloudsql/PROJECT_ID:REGION:INSTANCE_NAME"  # Cloud SQL via socket (mais seguro)
+  # POSTGRES_HOST: "IP_DO_CLOUD_SQL"  # Via IP público (menos seguro)
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: "${POSTGRES_USER}"  # Definir via Secret Manager ou variável de ambiente
+  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"  # Usar Secret Manager
+  POSTGRES_DB: "${POSTGRES_DB}"
+  
+  # API
+  PORT: "8080"
+  API_HOST: "0.0.0.0"
+  
+  # OpenAI
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"  # Usar Secret Manager
+
+# Cloud SQL (descomentar se usar Cloud SQL)
+# beta_settings:
+#   cloud_sql_instances: "PROJECT_ID:REGION:INSTANCE_NAME"
+
+# Handlers
+handlers:
+- url: /.*
+  script: auto
+
+# Apenas arquivos necessários
+skip_files:
+  - ^(.*/)?#.*#$
+  - ^(.*/)?.*~$
+  - ^(.*/)?.*\.py[co]$
+  - ^(.*/)?.*/RCS/.*$
+  - ^(.*/)?\..*$
+  - ^(.*/)?node_modules/.*$
+  - ^(.*/)?\.next/.*$
+  - ^(.*/)?venv/.*$
+  - ^(.*/)?__pycache__/.*$
+
