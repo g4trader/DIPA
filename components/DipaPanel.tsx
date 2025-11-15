@@ -1330,7 +1330,7 @@ export default function DipaPanel() {
     setInput("");
     
     // Adiciona mensagem do usuário
-    const userMessage: Message = {
+    const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
       content: question
@@ -1351,7 +1351,7 @@ export default function DipaPanel() {
       // Adiciona resposta do agente
       // Usa payload estruturado do backend se disponível, senão constrói a partir da resposta
       const copilotPayload: CopilotAnswerPayload = response.payload || {
-        intent: response.intent,
+          intent: response.intent,
         intentLabel: response.intent === "consulta_meta" 
           ? "Consulta de Meta" 
           : response.intent === "consulta_vendedores_performance"
@@ -1573,9 +1573,9 @@ export default function DipaPanel() {
                   role: m.role === 'user' ? 'user' as const : 'assistant' as const,
                   text: m.content,
                   timestamp: m.id,
-                  intent: m.role === 'agent' ? m.intent : undefined,
-                  confianca: m.role === 'agent' ? m.confidence : undefined,
-                  contexto: m.role === 'agent' ? m.context : undefined
+                  intent: m.role === 'assistant' && m.payload ? m.payload.intent : undefined,
+                  confianca: m.role === 'assistant' && m.payload ? m.payload.confidence : undefined,
+                  contexto: m.role === 'assistant' && m.payload ? m.payload : undefined
                 }))} 
                 emptyMessage="Nenhuma interação ainda." 
               />
