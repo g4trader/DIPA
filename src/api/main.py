@@ -131,26 +131,11 @@ async def startup_event():
         init_db()
         logger.info("Conexão com banco de dados inicializada")
         
-        # Testa conexão com uma query simples (otimizada para não demorar)
-        if config.database.db_type == "sqlite":
-            from sqlalchemy import text
-            engine = get_db_engine()
-            with engine.connect() as conn:
-                try:
-                    # Query rápida: apenas verifica se a tabela existe e tem pelo menos 1 registro
-                    # Usa LIMIT 1 para evitar full scan em bancos grandes
-                    result = conn.execute(text("SELECT 1 FROM metas_vendedor LIMIT 1"))
-                    result.fetchone()  # Apenas busca primeira linha
-                    logger.info("✅ Teste de conexão: banco acessível (metas_vendedor)")
-                    app.state.db_available = True
-                except Exception as e:
-                    error_msg = f"Erro ao testar conexão com metas_vendedor: {str(e)}"
-                    logger.error(f"❌ {error_msg}")
-                    app.state.startup_errors.append(error_msg)
-                    logger.warning("⚠️  Servidor continuará funcionando, mas consultas podem falhar")
-        else:
-            # Para PostgreSQL, apenas marca como disponível se init_db não deu erro
+            # Marca banco como disponível se init_db não deu erro
+            # IMPORTANTE: NÃO faz teste de conexão síncrono aqui para não bloquear startup
+            # O teste de conexão será feito no primeiro request ou no endpoint /health/db
             app.state.db_available = True
+            logger.info("✅ Banco de dados configurado (teste de conexão será feito sob demanda)")
         
     except Exception as e:
         error_msg = f"Erro ao inicializar banco de dados: {str(e)}"
