@@ -51,7 +51,8 @@ Este documento descreve como fazer deploy do DIPAM COPILOT™ em produção (bac
 **Se DB_TYPE=sqlite:**
 | Variável | Descrição | Exemplo |
 |----------|-----------|---------|
-| `SQLITE_PATH` | Caminho do arquivo SQLite | `/app/data/dipam_dw.db` (Cloud Run)<br>`data/dipam_dw.db` (local) |
+| `SQLITE_PATH` | Caminho do arquivo SQLite (relativo ou absoluto) | `data/dipam_dw.db` (recomendado)<br>`/app/data/dipam_dw.db` (absoluto, se necessário) |
+| | **Nota**: O diretório será criado automaticamente se não existir |
 
 **Se DB_TYPE=postgresql:**
 | Variável | Descrição | Exemplo |
@@ -88,7 +89,14 @@ Este documento descreve como fazer deploy do DIPAM COPILOT™ em produção (bac
 2. Projeto Google Cloud criado
 3. Cloud Build API habilitada
 4. Cloud Run API habilitada
-5. Arquivo SQLite (`dipam_dw.db`) no Cloud Storage
+5. Arquivo SQLite (`dipam_dw.db`) no Cloud Storage (ou usar caminho relativo)
+6. Arquivo `main.py` na raiz do projeto (expõe `app` para o Cloud Run buildpack)
+
+### Estrutura Necessária
+
+O Cloud Run buildpack (source-based deploy) espera encontrar `main:app` na raiz do projeto:
+- ✅ `main.py` na raiz → expõe `app` de `src.api.main`
+- ✅ `src/api/main.py` → contém o objeto `app` FastAPI
 
 ### Passo 1: Upload do Banco SQLite
 
@@ -97,7 +105,20 @@ Este documento descreve como fazer deploy do DIPAM COPILOT™ em produção (bac
 gsutil cp data/dipam_dw.db gs://trivihair-dipam-data/dipam_dw.db
 ```
 
-### Passo 2: Configurar Secrets no Secret Manager
+### Passo 2: Configurar SQLITE_PATH
+
+**Recomendação**: Use caminho relativo `data/dipam_dw.db` em vez de absoluto `/app/data/dipam_dw.db`.
+
+**Por quê?** 
+- O código cria o diretório automaticamente se não existir
+- Funciona tanto local quanto no Cloud Run
+- Evita problemas de permissão
+
+**Se precisar usar caminho absoluto** (ex: `/app/data/dipam_dw.db`):
+- O diretório `/app/data/` será criado automaticamente pelo código
+- Garante que não falhe por "unable to open database file"
+
+### Passo 3: Configurar Secrets no Secret Manager
 
 ```bash
 # Criar secret para OPENAI_API_KEY
@@ -107,7 +128,7 @@ echo -n "sk-..." | gcloud secrets create openai-api-key --data-file=-
 echo -n "valor" | gcloud secrets create postgres-password --data-file=-
 ```
 
-### Passo 3: Deploy via Cloud Build (ou Deploy Direto)
+### Passo 4: Deploy via Cloud Build (ou Deploy Direto)
 
 #### Opção A: Deploy Direto (Recomendado - Mais Rápido)
 
@@ -124,7 +145,7 @@ gcloud run deploy dipam-ai-backend \
   --timeout=300s \
   --max-instances=10 \
   --min-instances=0 \
-  --set-env-vars="ENVIRONMENT=production,DB_TYPE=sqlite,SQLITE_PATH=/app/data/dipam_dw.db,LOG_LEVEL=INFO" \
+  --set-env-vars="ENVIRONMENT=production,DB_TYPE=sqlite,SQLITE_PATH=data/dipam_dw.db,LOG_LEVEL=INFO" \
   --set-secrets="OPENAI_API_KEY=openai-api-key:latest"
 ```
 
@@ -146,7 +167,7 @@ gcloud builds submit --config cloudbuild.yaml
 
 **Nota**: O `cloudbuild.yaml` pode precisar de ajustes para usar `SHORT_SHA` corretamente.
 
-### Passo 4: Configurar Variáveis de Ambiente no Cloud Run
+### Passo 5: Configurar Variáveis de Ambiente no Cloud Run
 
 Após o deploy, configure as variáveis de ambiente:
 
@@ -155,7 +176,7 @@ Após o deploy, configure as variáveis de ambiente:
 ```bash
 gcloud run services update dipam-ai-backend \
   --region=us-central1 \
-  --set-env-vars="ENVIRONMENT=production,DB_TYPE=sqlite,SQLITE_PATH=/app/data/dipam_dw.db,LOG_LEVEL=INFO" \
+  --set-env-vars="ENVIRONMENT=production,DB_TYPE=sqlite,SQLITE_PATH=data/dipam_dw.db,LOG_LEVEL=INFO" \
   --set-secrets="OPENAI_API_KEY=openai-api-key:latest"
 ```
 
@@ -170,7 +191,7 @@ gcloud run services update dipam-ai-backend \
 
 **Serviço**: `dipam-ai-backend` (ou nome real do seu serviço)
 
-### Passo 5: Verificar Deploy
+### Passo 6: Verificar Deploy
 
 ```bash
 # Obter URL do serviço
@@ -194,7 +215,7 @@ curl $SERVICE_URL/health/openai
 gcloud run services logs read dipam-ai-backend --region=us-central1 --limit=50
 ```
 
-### Passo 6: Testar Endpoint Principal
+### Passo 7: Testar Endpoint Principal
 
 ```bash
 # Pergunta 1: Meta de outubro 2025
@@ -269,6 +290,49 @@ git push origin main
 3. Verifique se a resposta vem do backend (não é mock)
 
 ## 🧪 Testes
+
+### Simular Ambiente Cloud Run Localmente
+
+Antes de fazer deploy, teste localmente como se fosse Cloud Run:
+
+```bash
+# Ativa ambiente virtual
+source venv/bin/activate
+
+# Configura variáveis de ambiente (produção)
+export ENVIRONMENT=production
+export DB_TYPE=sqlite
+export SQLITE_PATH="data/dipam_dw.db"  # Caminho relativo - será criado se necessário
+export PORT=8080
+
+# Opcional: carrega OPENAI_API_KEY do .env
+export $(grep -v '^#' .env | grep OPENAI_API_KEY | xargs)
+
+# Testa com Gunicorn (como o Cloud Run buildpack faz)
+gunicorn -b 0.0.0.0:8080 main:app --workers 1 --timeout 300 --log-level info
+```
+
+Ou use o script automatizado:
+
+```bash
+# Torna executável (primeira vez)
+chmod +x scripts/run_cloudrun_style_local.sh
+
+# Executa
+./scripts/run_cloudrun_style_local.sh
+```
+
+Depois, teste os health endpoints:
+
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/health/db
+curl http://localhost:8080/health/openai
+```
+
+**⚠️ Se isso funcionar localmente, a chance do deploy no Cloud Run dar certo é muito alta!**
+
+### Testes
 
 ### Simular Ambiente Cloud Run Localmente
 

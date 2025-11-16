@@ -48,10 +48,34 @@ class DatabaseConfig:
     postgres_db: str = os.getenv("POSTGRES_DB", "dipam_dw")
     
     # SQLite - Caminho do arquivo SQLite
-    # Desenvolvimento local: "data/dipam_dw.db" (relativo)
-    # Cloud Run: "/app/data/dipam_dw.db" (absoluto no container)
+    # Desenvolvimento local: "data/dipam_dw.db" (relativo à raiz do projeto)
+    # Cloud Run: usar caminho relativo "data/dipam_dw.db" ou absoluto "/app/data/dipam_dw.db"
+    # IMPORTANTE: Se usar caminho absoluto, o diretório deve existir ou será criado
     # Pode ser sobrescrito via variável de ambiente SQLITE_PATH
-    sqlite_path: str = os.getenv("SQLITE_PATH", "data/dipam_dw.db")
+    @property
+    def sqlite_path(self) -> str:
+        """
+        Retorna o caminho do arquivo SQLite, criando o diretório se necessário.
+        
+        Garante que o diretório pai existe antes de usar o caminho.
+        Isso evita erros de "unable to open database file" no Cloud Run.
+        
+        Para caminhos relativos, usa o diretório raiz do projeto como base.
+        Para caminhos absolutos, cria o diretório se não existir.
+        """
+        path_str = os.getenv("SQLITE_PATH", "data/dipam_dw.db")
+        sqlite_path = Path(path_str)
+        
+        # Se o caminho é relativo, resolve em relação ao diretório raiz do projeto
+        if not sqlite_path.is_absolute():
+            # Raiz do projeto = 2 níveis acima de src/config.py
+            project_root = Path(__file__).resolve().parent.parent
+            sqlite_path = project_root / sqlite_path
+        
+        # Cria o diretório pai se não existir (para caminhos absolutos ou relativos)
+        sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        return str(sqlite_path)
     
     # URL de conexão completa (DB_URL tem prioridade sobre connection_string)
     # Se DB_URL for definida, ela será usada diretamente, ignorando as outras configurações

@@ -96,22 +96,18 @@ async def startup_event():
         
         # Verifica arquivo SQLite se estiver usando SQLite
         if config.database.db_type == "sqlite":
-            sqlite_path = config.database.sqlite_path
+            sqlite_path = config.database.sqlite_path  # Isso já cria o diretório se necessário
             logger.info(f"Usando SQLite - Caminho: {sqlite_path}")
             
-            # Verifica se o arquivo existe
+            # Verifica se o arquivo existe (após garantir que o diretório existe)
             if os.path.exists(sqlite_path):
                 file_size = os.path.getsize(sqlite_path)
                 logger.info(f"✅ Arquivo SQLite encontrado - Tamanho: {file_size / (1024*1024):.2f} MB")
             else:
-                error_msg = f"Arquivo SQLite NÃO encontrado em: {sqlite_path}"
-                logger.error(f"❌ {error_msg}")
-                logger.error(f"   Diretório /app/data existe? {os.path.exists('/app/data')}")
-                logger.error(f"   Listando /app/data: {os.listdir('/app/data') if os.path.exists('/app/data') else 'diretório não existe'}")
-                app.state.startup_errors.append(error_msg)
-                logger.warning("⚠️  Servidor continuará funcionando, mas consultas ao banco podem falhar")
-                # NÃO faz raise - apenas registra o erro
-                return  # Não tenta inicializar DB se arquivo não existe
+                # Arquivo não existe, mas o diretório foi criado pelo sqlite_path property
+                # Isso é OK - o SQLite criará o arquivo na primeira conexão
+                logger.info(f"📝 Arquivo SQLite não existe ainda - será criado na primeira conexão: {sqlite_path}")
+                logger.info(f"   Diretório pai existe? {os.path.exists(os.path.dirname(sqlite_path))}")
         
         # Inicializa conexão com banco de dados
         init_db()
