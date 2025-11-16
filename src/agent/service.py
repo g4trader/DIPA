@@ -373,7 +373,15 @@ class AgentService:
             entities["pergunta_original"] = pergunta
             
             # 1.5. Verifica se existe skill ativa para essa intent
-            skill = buscar_skill_por_intent(session, intent.value)
+            logger.info(f"[process_question: antes de buscar_skill_por_intent] Intent: {intent.value}")
+            try:
+                skill = buscar_skill_por_intent(session, intent.value)
+                logger.info(f"[process_question: depois de buscar_skill_por_intent] Skill: {skill.nome if skill else None}")
+            except Exception as e:
+                logger.error(f"[process_question: ERRO em buscar_skill_por_intent] {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
+                skill = None
             sql_executado = None
             
             # Prepara contexto de memória (interações aprovadas com alta similaridade)
