@@ -1,7 +1,8 @@
 # Resumo de Deploy - DIPAM COPILOT™
 
-**Data/Hora**: 2025-11-15 22:12:37 -03  
-**Commit Hash**: `2966ad3`  
+**Data/Hora**: 2025-11-15 22:12:37 -03 (início) / 2025-11-15 22:30:00 -03 (finalização)  
+**Commit Hash Principal**: `2966ad3` (feat: respostas estruturadas)  
+**Commit Hash Final**: `696bd3a` (docs: resumo de deploy)  
 **Branch**: `main`
 
 ## 📋 Commit Realizado
