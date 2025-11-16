@@ -49,8 +49,14 @@ def extrair_mes_ano_explicito(texto: str) -> Optional[str]:
         return f"{ano:04d}-{mes:02d}"
 
     # Formatos com nome do mes: "agosto 2025", "em agosto de 2025" etc.
-    for nome, num in MESES_NOME.items():
-        if nome in t:
+    # IMPORTANTE: Procura meses completos primeiro (mais específicos) para evitar falsos positivos
+    # Ex.: "ago" pode aparecer em "agosto" ou outras palavras, então priorizamos "agosto"
+    meses_ordenados = sorted(MESES_NOME.items(), key=lambda x: -len(x[0]))  # Mais longos primeiro
+    
+    for nome, num in meses_ordenados:
+        # Usa word boundary para evitar falsos positivos
+        pattern = r"\b" + re.escape(nome) + r"\b"
+        if re.search(pattern, t):
             m_ano = re.search(r"20\d{2}", t)
             if m_ano:
                 ano = int(m_ano.group(0))
