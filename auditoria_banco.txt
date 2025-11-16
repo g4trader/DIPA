@@ -1,0 +1,157 @@
+================================================================================
+AUDITORIA COMPLETA DO BANCO DE DADOS
+================================================================================
+Data/Hora: 2025-11-16 20:32:50
+
+RESUMO EXECUTIVO
+--------------------------------------------------------------------------------
+Total de tabelas auditadas: 11
+Tabelas com problemas: 6
+Totalizadores encontrados: 436
+Valores absurdos encontrados: 36
+IDs nulos encontrados: 3779603
+IDs duplicados encontrados: 267
+
+DETALHES POR TABELA
+================================================================================
+
+Tabela: churn_risk
+Total de registros: 0
+Colunas: 7
+Colunas de entidade: cliente_id
+
+Tabela: clientes
+Total de registros: 5,746
+Colunas: 23
+Colunas de entidade: supervisor_id, supervisor_responsavel, rota_rca
+
+⚠️  IDs NULOS:
+  - Coluna 'supervisor_id': 5746 registros nulos
+
+Tabela: dim_tempo
+Total de registros: 0
+Colunas: 13
+
+Tabela: interacoes_agent
+Total de registros: 32
+Colunas: 14
+
+⚠️  IDs DUPLICADOS:
+  - Coluna 'usuario_id': 2 IDs duplicados
+    Exemplos: [{'id': 'fabiano', 'count': 29}, {'id': 'test', 'count': 3}]
+
+Tabela: interacoes_embedding
+Total de registros: 0
+Colunas: 4
+
+Tabela: meta_predictions
+Total de registros: 0
+Colunas: 8
+Colunas de entidade: vendedor_id
+
+Tabela: metas_departamento
+Total de registros: 123
+Colunas: 22
+Colunas de entidade: supervisor_id, supervisor_nome, departamento, clientes_pos
+
+⚠️  IDs DUPLICADOS:
+  - Coluna 'supervisor_id': 11 IDs duplicados
+    Exemplos: [{'id': 13, 'count': 12}, {'id': 14, 'count': 12}, {'id': 15, 'count': 12}]
+
+Tabela: metas_vendedor
+Total de registros: 753
+Colunas: 21
+Colunas de entidade: vendedor_id, vendedor_nome, clientes_pos
+
+⚠️  TOTALIZADORES ENCONTRADOS: 36
+  - Coluna 'vendedor_nome' contém 'totais'
+    Registro: {'id': 1, 'vendedor_nome': 'Totais', 'valor_meta': 14000445.74, 'valor_faturado': 15270147.33}
+  - Coluna 'vendedor_nome' contém 'totais'
+    Registro: {'id': 63, 'vendedor_nome': 'Totais', 'valor_meta': 15667956.15, 'valor_faturado': 16107206.12}
+  - Coluna 'vendedor_nome' contém 'totais'
+    Registro: {'id': 125, 'vendedor_nome': 'Totais', 'valor_meta': 14217543.45, 'valor_faturado': 15503992.33}
+  - Coluna 'vendedor_nome' contém 'totais'
+    Registro: {'id': 187, 'vendedor_nome': 'Totais', 'valor_meta': 17833053.45, 'valor_faturado': 17254142.15}
+  - Coluna 'vendedor_nome' contém 'totais'
+    Registro: {'id': 251, 'vendedor_nome': 'Totais', 'valor_meta': 17346278.28, 'valor_faturado': 18025487.55}
+
+⚠️  VALORES ABSURDOS: 36
+  - Meta > R$ 10M por vendedor
+    Coluna: valor_meta, Valor: 14,000,445.74
+  - Meta > R$ 10M por vendedor
+    Coluna: valor_meta, Valor: 15,667,956.15
+  - Meta > R$ 10M por vendedor
+    Coluna: valor_meta, Valor: 14,217,543.45
+  - Meta > R$ 10M por vendedor
+    Coluna: valor_meta, Valor: 17,833,053.45
+  - Meta > R$ 10M por vendedor
+    Coluna: valor_meta, Valor: 17,346,278.28
+
+⚠️  IDs DUPLICADOS:
+  - Coluna 'vendedor_id': 66 IDs duplicados
+    Exemplos: [{'id': 1, 'count': 12}, {'id': 2, 'count': 12}, {'id': 3, 'count': 12}]
+
+Tabela: supervisores
+Total de registros: 23
+Colunas: 8
+
+Tabela: vendas
+Total de registros: 3,773,856
+Colunas: 27
+Colunas de entidade: supervisor_id, supervisor_nome, vendedor_id, vendedor_nome, cliente_id, codigo_cliente, nome_cliente, cgc_cpf_cliente, cidade_cliente, departamento
+
+⚠️  TOTALIZADORES ENCONTRADOS: 400
+  - Coluna 'vendedor_nome' contém 'geral'
+    Registro: {'id': 1342, 'vendedor_nome': 'ROTA 58 GERAL'}
+  - Coluna 'vendedor_nome' contém 'geral'
+    Registro: {'id': 1343, 'vendedor_nome': 'ROTA 58 GERAL'}
+  - Coluna 'vendedor_nome' contém 'geral'
+    Registro: {'id': 1344, 'vendedor_nome': 'ROTA 58 GERAL'}
+  - Coluna 'vendedor_nome' contém 'geral'
+    Registro: {'id': 1345, 'vendedor_nome': 'ROTA 58 GERAL'}
+  - Coluna 'vendedor_nome' contém 'geral'
+    Registro: {'id': 1346, 'vendedor_nome': 'ROTA 58 GERAL'}
+
+⚠️  IDs NULOS:
+  - Coluna 'tempo_id': 3773856 registros nulos
+
+⚠️  IDs DUPLICADOS:
+  - Coluna 'supervisor_id': 12 IDs duplicados
+    Exemplos: [{'id': 1, 'count': 289155}, {'id': 2, 'count': 70938}, {'id': 3, 'count': 148194}]
+  - Coluna 'vendedor_id': 66 IDs duplicados
+    Exemplos: [{'id': 1, 'count': 46197}, {'id': 2, 'count': 70938}, {'id': 3, 'count': 49245}]
+  - Coluna 'cliente_id': 100 IDs duplicados
+    Exemplos: [{'id': 1, 'count': 141}, {'id': 2, 'count': 36}, {'id': 3, 'count': 165}]
+
+Tabela: vendedores
+Total de registros: 67
+Colunas: 9
+Colunas de entidade: rota_rca, supervisor_id
+
+⚠️  IDs NULOS:
+  - Coluna 'supervisor_id': 1 registros nulos
+
+⚠️  IDs DUPLICADOS:
+  - Coluna 'supervisor_id': 10 IDs duplicados
+    Exemplos: [{'id': 1, 'count': 5}, {'id': 3, 'count': 3}, {'id': 4, 'count': 11}]
+
+================================================================================
+RECOMENDAÇÕES
+================================================================================
+
+1. REMOVER TOTALIZADORES:
+   - 436 registros de totalizador encontrados
+   - Recomendação: Excluir linhas onde vendedor_nome/cliente_nome contém 'Total', 'Totais', etc.
+   - Usar filtros: WHERE LOWER(vendedor_nome) NOT LIKE '%total%'
+
+2. INVESTIGAR VALORES ABSURDOS:
+   - 36 valores suspeitos encontrados
+   - Verificar se são erros de importação ou dados legítimos
+
+3. CORRIGIR IDs NULOS:
+   - 3779603 registros com ID nulo
+   - Verificar integridade referencial
+
+4. CORRIGIR IDs DUPLICADOS:
+   - 267 IDs duplicados encontrados
+   - Verificar constraints de unicidade
