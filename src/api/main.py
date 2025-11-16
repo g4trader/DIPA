@@ -36,9 +36,27 @@ app = FastAPI(
 )
 
 # CORS middleware (para permitir chamadas de frontend)
+# IMPORTANTE: Em produção, especificar origens permitidas explicitamente
+# Isso evita problemas de CORS e melhora a segurança
+origins = [
+    "https://dipam.smartiasolutions.com.br",
+    "https://www.dipam.smartiasolutions.com.br",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+# Em desenvolvimento, adicionar localhost:8000 para testes locais
+if config.environment == "development":
+    origins.extend([
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Em produção, especificar origens permitidas
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

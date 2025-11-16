@@ -215,6 +215,37 @@ curl $SERVICE_URL/health/openai
 gcloud run services logs read dipam-ai-backend --region=us-central1 --limit=50
 ```
 
+### Testar CORS
+
+Após o deploy, teste se o CORS está funcionando corretamente:
+
+```bash
+# Testar preflight OPTIONS (simula requisição do navegador)
+curl -i -X OPTIONS \
+  -H "Origin: https://dipam.smartiasolutions.com.br" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: Content-Type" \
+  https://dipam-ai-backend-6arhlm3mha-uc.a.run.app/ask
+
+# Esperado:
+# Access-Control-Allow-Origin: https://dipam.smartiasolutions.com.br
+# Access-Control-Allow-Methods: POST, GET, OPTIONS, ...
+# Access-Control-Allow-Headers: Content-Type, ...
+# Status: 200 OK
+
+# Testar requisição real POST
+curl -i -X POST \
+  -H "Origin: https://dipam.smartiasolutions.com.br" \
+  -H "Content-Type: application/json" \
+  -d '{"pergunta": "qual a meta de outubro 2025", "papel": "diretor"}' \
+  https://dipam-ai-backend-6arhlm3mha-uc.a.run.app/ask
+
+# Esperado:
+# Access-Control-Allow-Origin: https://dipam.smartiasolutions.com.br
+# Status: 200 OK
+# Body: JSON com resposta da API
+```
+
 ### Passo 7: Testar Endpoint Principal
 
 ```bash
@@ -263,15 +294,20 @@ No painel da Vercel:
 3. Adicione:
 
 ```
-NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-xxx.run.app
+NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app
 ```
 
-**Importante**: 
-- Use a URL completa do Cloud Run (sem barra final)
+**⚠️ IMPORTANTE**: 
+- Use a URL completa do Cloud Run **SEM barra final** (ex: `https://dipam-ai-backend-xxx.run.app`)
+- O código remove barras no final automaticamente, mas é melhor não ter
 - Configure para **Production**, **Preview** e **Development** se necessário
 - Após adicionar, faça um novo deploy para aplicar as mudanças
 
-**Onde é usada**: `lib/dipamApi.ts:16`
+**Onde é usada**: `lib/dipamApi.ts` - A URL é normalizada automaticamente para evitar `//ask`
+
+**CORS no Backend**:
+- O backend já está configurado para permitir `https://dipam.smartiasolutions.com.br`
+- Verifique se o domínio está correto em `src/api/main.py`
 
 ### Passo 2: Deploy
 

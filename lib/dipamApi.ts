@@ -11,11 +11,29 @@
  * Lê da variável de ambiente NEXT_PUBLIC_API_BASE_URL (padrão) ou
  * NEXT_PUBLIC_DIPAM_API_URL (compatibilidade) ou usa
  * http://localhost:8000 como fallback apenas em desenvolvimento
+ * 
+ * IMPORTANTE: Remove barras no final para evitar URLs duplicadas (ex: ...run.app//ask)
  */
-export const DIPAM_API_BASE_URL =
+const rawBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_DIPAM_API_URL ||
   (typeof window !== "undefined" ? "http://localhost:8000" : "http://localhost:8000");
+
+// Remove barra extra no final, se houver
+export const DIPAM_API_BASE_URL = rawBaseUrl.replace(/\/+$/, "");
+
+/**
+ * Constrói uma URL completa a partir do caminho
+ * 
+ * Garante que não há barras duplicadas na URL final
+ * 
+ * @param path - Caminho do endpoint (ex: "/ask" ou "ask")
+ * @returns URL completa (ex: "https://api.example.com/ask")
+ */
+function buildUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${DIPAM_API_BASE_URL}${normalizedPath}`;
+}
 
 /**
  * Parâmetros para a função askDipamAgent
@@ -170,8 +188,9 @@ export class DipamApiError extends Error {
 export async function askDipamAgent(
   params: AskParams
 ): Promise<AskResponse> {
+  const url = buildUrl("/ask");
   try {
-    const response = await fetch(`${DIPAM_API_BASE_URL}/ask`, {
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -210,7 +229,7 @@ export async function askDipamAgent(
     // Erro de rede ou outro erro não esperado
     if (error instanceof TypeError && error.message.includes("fetch")) {
       throw new DipamApiError(
-        `Erro de conexão com a API: ${error.message}. Verifique se a API está rodando em ${DIPAM_API_BASE_URL}`,
+        `Erro de conexão com a API: ${error.message}. Verifique se a API está rodando em ${url}`,
         undefined,
         error
       );
@@ -245,11 +264,10 @@ export async function askDipamAgent(
 export async function previewVendedor(
   params: PreviewVendedorParams
 ): Promise<PreviewVendedorResponse> {
+  const url = buildUrl(
+    `/preview/vendedor/${encodeURIComponent(params.vendedor)}/${params.mesAno}`
+  );
   try {
-    const url = `${DIPAM_API_BASE_URL}/preview/vendedor/${encodeURIComponent(
-      params.vendedor
-    )}/${params.mesAno}`;
-
     const response = await fetch(url, {
       method: "GET",
       headers: {
@@ -284,7 +302,7 @@ export async function previewVendedor(
     // Erro de rede ou outro erro não esperado
     if (error instanceof TypeError && error.message.includes("fetch")) {
       throw new DipamApiError(
-        `Erro de conexão com a API: ${error.message}. Verifique se a API está rodando em ${DIPAM_API_BASE_URL}`,
+        `Erro de conexão com a API: ${error.message}. Verifique se a API está rodando em ${url}`,
         undefined,
         error
       );
