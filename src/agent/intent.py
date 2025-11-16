@@ -99,8 +99,15 @@ def parse_mes_ano_from_text(text: str) -> Tuple[Optional[str], Optional[int]]:
             return f"{ano}-{mes:02d}", None
 
     # 2) "outubro de 2025" / "outubro 2025"
-    for nome_mes, num_mes in MESES_PT.items():
-        if nome_mes in text_low:
+    # IMPORTANTE: Procura meses completos primeiro (mais específicos), depois abreviações
+    # Isso evita falsos positivos (ex.: "ago" dentro de "agosto" ou outras palavras)
+    meses_ordenados = sorted(MESES_PT.items(), key=lambda x: -len(x[0]))  # Mais longos primeiro
+    
+    for nome_mes, num_mes in meses_ordenados:
+        # Usa word boundary para evitar falsos positivos (ex.: "ago" em "agosto" ou "agora")
+        # Mas permite que "agosto" seja encontrado mesmo que "ago" também esteja no dicionário
+        pattern = r"\b" + re.escape(nome_mes) + r"\b"
+        if re.search(pattern, text_low):
             m2 = re.search(r"20\d{2}", text_low)
             if m2:
                 ano = int(m2.group(0))
@@ -322,13 +329,18 @@ def extract_entities(pergunta: str) -> Dict[str, Optional[str]]:
         
         # Prioridade 3: Mês isolado + ano isolado
         if not entities.get("mes_ano"):
-            # Extrai mês por nome
-            for mes_nome, mes_num in MESES_PT.items():
-                if mes_nome in pergunta_lower and len(mes_nome) >= 3:  # Evita falsos positivos
+            # Extrai mês por nome - PROCURA MESES COMPLETOS PRIMEIRO (mais específicos)
+            # Ordena por tamanho (mais longos primeiro) para evitar falsos positivos
+            meses_ordenados = sorted(MESES_PT.items(), key=lambda x: -len(x[0]))
+            
+            for mes_nome, mes_num in meses_ordenados:
+                # Usa word boundary para evitar falsos positivos
+                pattern = r"\b" + re.escape(mes_nome) + r"\b"
+                if re.search(pattern, pergunta_lower) and len(mes_nome) >= 3:  # Evita falsos positivos
                     entities["mes"] = f"{mes_num:02d}"
                     
                     # Tenta extrair ano
-                    ano_pattern = r"\b(\d{4})\b"
+                    ano_pattern = r"\b(20\d{2})\b"
                     ano_match = re.search(ano_pattern, pergunta_original)
                     if ano_match:
                         entities["ano"] = ano_match.group(1)

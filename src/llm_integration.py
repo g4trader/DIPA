@@ -548,6 +548,500 @@ def call_llm(
         return f"Erro ao processar pergunta: {str(e)}"
 
 
+def gerar_resposta_estruturada_consulta_meta(
+    pergunta: str,
+    contexto: Dict[str, Any]
+) -> Tuple[Dict[str, Any], str, float]:
+    """
+    Gera resposta estruturada (JSON) para consultas de meta.
+    
+    NOVA FUNÇÃO: Retorna JSON estruturado no formato CopilotStructuredResponse.
+    
+    Args:
+        pergunta: Pergunta do usuário em linguagem natural
+        contexto: Dicionário com dados estruturados do contexto
+        
+    Returns:
+        Tuple[Dict[str, Any], str, float]: (json_estruturado, texto_complementar, confianca)
+    """
+    logger.info(f"Gerando resposta estruturada (JSON) para consulta de meta: {pergunta[:100]}...")
+    
+    serie = contexto.get("serie_mensal", [])
+    detalhe = contexto.get("detalhe_vendedores_mes", {}) or contexto.get("detalhe_vendedores", {})
+    kpis = contexto.get("kpis", {})
+    piores_vendedores = contexto.get("pioresVendedores", []) or contexto.get("piores_vendedores", [])
+    melhores_vendedores = contexto.get("melhoresVendedores", []) or contexto.get("melhores_vendedores", [])
+    clientes_criticos = contexto.get("clientesCriticos", []) or contexto.get("clientesProblema", []) or contexto.get("clientes_criticos", [])
+    papel_usuario = contexto.get("papel", "usuario")
+    mes_ano = contexto.get("mes_ano") or contexto.get("mes_ano_analise")
+    
+    # Valida dados
+    tem_serie = isinstance(serie, list) and len(serie) > 0
+    tem_detalhe = isinstance(detalhe, dict) and detalhe.get("vendedores") and len(detalhe.get("vendedores", [])) > 0
+    
+    # Calcula confiança
+    confianca = 0.5
+    if tem_serie:
+        confianca += 0.2
+    if tem_detalhe:
+        confianca += 0.2
+    if kpis:
+        confianca += 0.05
+    if piores_vendedores:
+        confianca += 0.05
+    if clientes_criticos:
+        confianca += 0.05
+    confianca = min(confianca, 0.95)
+    
+    # Prepara dados para JSON
+    serie_json = serie if isinstance(serie, list) else []
+    detalhe_json = detalhe if isinstance(detalhe, dict) else {}
+    kpis_json = kpis if isinstance(kpis, dict) else {}
+    piores_json = piores_vendedores[:15] if isinstance(piores_vendedores, list) else []
+    clientes_json = clientes_criticos[:15] if isinstance(clientes_criticos, list) else []
+    
+    # Monta prompt para LLM gerar JSON estruturado
+    system_msg = (
+        "Você é um analista de inteligência comercial sênior da Dipam.\n"
+        "Use SOMENTE os dados fornecidos abaixo para gerar um JSON estruturado.\n"
+        "A resposta DEVE começar APENAS com um JSON válido, sem explicações antes ou depois.\n"
+        "NUNCA diga que não há dados se houver elementos nas listas fornecidas.\n"
+        "Use SEMPRE os dados fornecidos, mesmo que sejam poucos.\n"
+    )
+    
+    user_msg = f"""Pergunta do usuário: {pergunta}
+
+Dados disponíveis:
+
+KPIs gerais:
+{json.dumps(kpis_json, ensure_ascii=False, indent=2)}
+
+Piores vendedores (top 15):
+{json.dumps(piores_json, ensure_ascii=False, indent=2)}
+
+Clientes críticos (top 15):
+{json.dumps(clientes_json, ensure_ascii=False, indent=2)}
+
+Série mensal:
+{json.dumps(serie_json, ensure_ascii=False, indent=2)}
+
+Detalhe vendedores:
+{json.dumps(detalhe_json, ensure_ascii=False, indent=2)}
+
+Instruções:
+
+Gere um JSON válido seguindo EXATAMENTE esta estrutura (sem campos extras):
+
+{{
+  "resumoExecutivo": "Texto de 2-4 parágrafos explicando: se bateu meta, gap em R$ e %, quem puxou resultado para baixo, tendência geral. Use números reais dos dados fornecidos.",
+  
+  "kpis": [
+    {{
+      "label": "Meta Total",
+      "value": <número ou string>,
+      "variation": "<opcional: variação %>",
+      "color": "<positive|negative|neutral>",
+      "icon": "<emoji opcional>"
+    }},
+    {{
+      "label": "Realizado Total",
+      "value": <número ou string>,
+      "variation": "<opcional>",
+      "color": "<positive|negative|neutral>"
+    }},
+    {{
+      "label": "Atingimento Médio",
+      "value": "<número>%",
+      "variation": "<opcional>",
+      "color": "<positive|negative|neutral>"
+    }},
+    {{
+      "label": "Vendedores que Bateram",
+      "value": <número>,
+      "color": "<positive|negative|neutral>"
+    }}
+  ],
+  
+  "rankingVendedores": [
+    {{
+      "vendedor": "<nome>",
+      "meta": <número>,
+      "realizado": <número>,
+      "atingimento": <número>,
+      "gap": <número>,
+      "supervisor": "<opcional>",
+      "rank": <número>
+    }}
+  ],
+  
+  "clientesCriticos": [
+    {{
+      "cliente": "<nome>",
+      "faturamento": <número>,
+      "pedidos": <número>,
+      "variacao": <número opcional>,
+      "vendedor": "<opcional>",
+      "insight": "<texto opcional explicando problema>"
+    }}
+  ],
+  
+  "insightsRecomendacoes": [
+    "Ação prática específica 1",
+    "Ação prática específica 2",
+    "Ação prática específica 3"
+  ]
+}}
+
+REGRAS CRÍTICAS:
+
+1. A resposta DEVE começar APENAS com {{ (abre chave) e terminar com }} (fecha chave).
+2. NÃO adicione texto antes ou depois do JSON.
+3. Se piores_json tiver elementos, OBRIGATORIAMENTE preencha rankingVendedores (top 10).
+4. Se clientes_json tiver elementos, OBRIGATORIAMENTE preencha clientesCriticos (top 15).
+5. Se kpis_json tiver dados, OBRIGATORIAMENTE preencha kpis (4-6 KPIs principais).
+6. SEMPRE preencha resumoExecutivo usando números reais dos dados.
+7. SEMPRE preencha insightsRecomendacoes com 3-5 ações práticas específicas.
+8. NUNCA diga "não há dados" se as listas tiverem elementos.
+9. Use números reais do contexto. NUNCA invente números.
+
+Se não houver dados em nenhuma lista, retorne JSON com campos vazios [] e resumoExecutivo explicando que não há dados disponíveis."""
+    
+    try:
+        # Chama LLM para gerar JSON estruturado
+        resposta_llm = call_openai_llm(
+            prompt=user_msg,
+            system_prompt=system_msg,
+            temperature=0.2,  # Muito conservador para JSON estruturado
+            max_tokens=4000  # Mais tokens para JSON completo
+        )
+        
+        # Extrai JSON da resposta
+        json_str = _extrair_json_da_resposta(resposta_llm)
+        
+        if not json_str:
+            logger.warning("Não foi possível extrair JSON da resposta do LLM. Gerando automaticamente...")
+            # Fallback: gera JSON estruturado automaticamente a partir dos dados
+            json_estruturado = _gerar_json_fallback(contexto, pergunta)
+            texto_complementar = json_estruturado.get("resumoExecutivo", "")
+        else:
+            try:
+                json_estruturado = json.loads(json_str)
+                texto_complementar = json_estruturado.get("resumoExecutivo", "")
+                
+                # Valida e corrige JSON se necessário
+                json_estruturado = _validar_e_corrigir_json(json_estruturado, contexto)
+            except json.JSONDecodeError as e:
+                logger.error(f"Erro ao fazer parse do JSON: {str(e)}")
+                json_estruturado = _gerar_json_fallback(contexto, pergunta)
+                texto_complementar = json_estruturado.get("resumoExecutivo", "")
+        
+        # Adiciona jsonTecnico para debug
+        json_estruturado["jsonTecnico"] = {
+            "contexto_keys": list(contexto.keys()),
+            "tem_serie": tem_serie,
+            "tem_detalhe": tem_detalhe,
+            "qtd_piores_vendedores": len(piores_json),
+            "qtd_clientes_criticos": len(clientes_json),
+            "mes_ano": mes_ano
+        }
+        
+        logger.info(f"Resposta estruturada gerada: {len(str(json_estruturado))} caracteres, confiança: {confianca:.2f}")
+        return json_estruturado, texto_complementar, confianca
+        
+    except Exception as e:
+        logger.error(f"Erro ao gerar resposta estruturada: {str(e)}")
+        # Fallback: gera JSON básico
+        json_estruturado = _gerar_json_fallback(contexto, pergunta)
+        texto_complementar = json_estruturado.get("resumoExecutivo", "")
+        return json_estruturado, texto_complementar, 0.7
+
+
+def _extrair_json_da_resposta(texto: str) -> Optional[str]:
+    """Extrai JSON válido de uma resposta do LLM."""
+    import re
+    # Tenta encontrar JSON entre { }
+    pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+    matches = re.findall(pattern, texto, re.DOTALL)
+    
+    for match in matches:
+        try:
+            # Testa se é JSON válido
+            json.loads(match)
+            return match
+        except json.JSONDecodeError:
+            continue
+    
+    # Se não encontrou, tenta extrair primeiro bloco entre { }
+    inicio = texto.find('{')
+    fim = texto.rfind('}')
+    if inicio >= 0 and fim > inicio:
+        candidato = texto[inicio:fim+1]
+        try:
+            json.loads(candidato)
+            return candidato
+        except json.JSONDecodeError:
+            pass
+    
+    return None
+
+
+def _validar_e_corrigir_json(json_data: Dict[str, Any], contexto: Dict[str, Any]) -> Dict[str, Any]:
+    """Valida e corrige JSON estruturado baseado nos dados do contexto."""
+    # Garante que campos obrigatórios existam
+    if "resumoExecutivo" not in json_data:
+        json_data["resumoExecutivo"] = "Análise de metas e realizados baseada nos dados disponíveis."
+    
+    # Corrige rankingVendedores se necessário
+    if "rankingVendedores" not in json_data:
+        json_data["rankingVendedores"] = []
+    
+    # Preenche rankingVendedores se houver dados no contexto
+    piores = contexto.get("pioresVendedores", []) or contexto.get("piores_vendedores", [])
+    if piores and len(json_data.get("rankingVendedores", [])) == 0:
+        ranking = []
+        for idx, v in enumerate(piores[:10], 1):
+            ranking.append({
+                "vendedor": v.get("vendedor_nome") or v.get("nome") or "N/A",
+                "meta": float(v.get("meta", 0) or 0),
+                "realizado": float(v.get("realizado", 0) or 0),
+                "atingimento": float(v.get("atingimento", 0) or 0),
+                "gap": float(v.get("gap", 0) or 0),
+                "supervisor": v.get("supervisor_nome") or v.get("supervisor"),
+                "rank": idx
+            })
+        json_data["rankingVendedores"] = ranking
+    
+    # Corrige clientesCriticos se necessário
+    if "clientesCriticos" not in json_data:
+        json_data["clientesCriticos"] = []
+    
+    clientes = contexto.get("clientesCriticos", []) or contexto.get("clientesProblema", [])
+    if clientes and len(json_data.get("clientesCriticos", [])) == 0:
+        clientes_list = []
+        for c in clientes[:15]:
+            # Gera insight baseado em variação se disponível
+            insight = None
+            if c.get("variacao_percentual") is not None:
+                variacao = float(c.get("variacao_percentual", 0))
+                if variacao < -10:
+                    insight = f"Queda de {abs(variacao):.1f}% vs média dos últimos 3 meses"
+            elif c.get("qtd_pedidos", 0) < 5:
+                insight = "Poucos pedidos no mês (oportunidade de recuperação)"
+            
+            clientes_list.append({
+                "cliente": c.get("nome_cliente") or c.get("cliente") or "N/A",
+                "faturamento": float(c.get("faturamento_mes", 0) or 0),
+                "pedidos": int(c.get("qtd_pedidos", 0) or 0),
+                "variacao": float(c.get("variacao_percentual", 0)) if c.get("variacao_percentual") is not None else None,
+                "vendedor": c.get("vendedor_nome") or c.get("vendedor"),
+                "insight": insight
+            })
+        json_data["clientesCriticos"] = clientes_list
+    
+    # Corrige KPIs se necessário
+    if "kpis" not in json_data:
+        json_data["kpis"] = []
+    
+    kpis = contexto.get("kpis", {})
+    if kpis and len(json_data.get("kpis", [])) == 0:
+        kpis_list = []
+        
+        meta_total = float(kpis.get("metaTotal", 0) or 0)
+        realizado_total = float(kpis.get("realizadoTotal", 0) or 0)
+        atingimento_medio = float(kpis.get("atingimentoMedio", 0) or 0)
+        vendedores_que_bateram = int(kpis.get("vendedoresQueBateram", 0) or 0)
+        
+        if meta_total > 0:
+            kpis_list.append({
+                "label": "Meta Total",
+                "value": meta_total,
+                "color": "neutral",
+                "icon": "🎯"
+            })
+        
+        if realizado_total > 0:
+            gap = realizado_total - meta_total
+            variacao = (gap / meta_total * 100) if meta_total > 0 else 0
+            kpis_list.append({
+                "label": "Realizado Total",
+                "value": realizado_total,
+                "variation": f"{variacao:+.1f}%",
+                "color": "positive" if gap >= 0 else "negative",
+                "icon": "💰"
+            })
+        
+        if atingimento_medio > 0:
+            kpis_list.append({
+                "label": "Atingimento Médio",
+                "value": f"{atingimento_medio:.1f}%",
+                "color": "positive" if atingimento_medio >= 100 else "negative",
+                "icon": "📊"
+            })
+        
+        if vendedores_que_bateram >= 0:
+            kpis_list.append({
+                "label": "Vendedores que Bateram",
+                "value": vendedores_que_bateram,
+                "color": "positive" if vendedores_que_bateram > 0 else "neutral",
+                "icon": "✅"
+            })
+        
+        json_data["kpis"] = kpis_list
+    
+    # Corrige insightsRecomendacoes se necessário
+    if "insightsRecomendacoes" not in json_data:
+        json_data["insightsRecomendacoes"] = []
+    
+    if len(json_data.get("insightsRecomendacoes", [])) == 0:
+        # Gera recomendações básicas baseadas nos dados
+        insights = []
+        if piores:
+            top_3_piores = piores[:3]
+            nomes = [v.get("vendedor_nome") or v.get("nome") for v in top_3_piores if v.get("vendedor_nome") or v.get("nome")]
+            if nomes:
+                insights.append(f"Priorizar coaching imediato para: {', '.join(nomes)}")
+        
+        if clientes:
+            insights.append(f"Implementar plano de ação para {len(clientes)} clientes críticos identificados")
+        
+        if kpis and kpis.get("atingimentoMedio", 0) < 100:
+            gap = float(kpis.get("metaTotal", 0)) - float(kpis.get("realizadoTotal", 0))
+            if gap > 0:
+                insights.append(f"Recuperar gap de R$ {gap:,.2f} através de ações direcionadas")
+        
+        json_data["insightsRecomendacoes"] = insights if insights else ["Analisar dados detalhados para identificar oportunidades"]
+    
+    return json_data
+
+
+def _gerar_json_fallback(contexto: Dict[str, Any], pergunta: str) -> Dict[str, Any]:
+    """Gera JSON estruturado automaticamente quando LLM não retorna JSON válido."""
+    kpis = contexto.get("kpis", {})
+    piores = contexto.get("pioresVendedores", []) or contexto.get("piores_vendedores", [])
+    clientes = contexto.get("clientesCriticos", []) or contexto.get("clientesProblema", [])
+    mes_ano = contexto.get("mes_ano") or contexto.get("mes_ano_analise")
+    
+    # Gera resumo executivo básico
+    resumo = f"Análise de metas e realizados"
+    if mes_ano:
+        resumo += f" para {mes_ano}."
+    else:
+        resumo += "."
+    
+    if kpis:
+        meta = float(kpis.get("metaTotal", 0) or 0)
+        realizado = float(kpis.get("realizadoTotal", 0) or 0)
+        atingimento = float(kpis.get("atingimentoMedio", 0) or 0)
+        gap = realizado - meta
+        
+        resumo += f"\n\nMeta total: R$ {meta:,.2f} | Realizado: R$ {realizado:,.2f} | Atingimento: {atingimento:.1f}%"
+        if gap < 0:
+            resumo += f"\n\nGap negativo de R$ {abs(gap):,.2f} precisa ser recuperado."
+        elif gap > 0:
+            resumo += f"\n\nSuperação de R$ {gap:,.2f}."
+    
+    # Gera KPIs
+    kpis_list = []
+    if kpis:
+        meta_total = float(kpis.get("metaTotal", 0) or 0)
+        realizado_total = float(kpis.get("realizadoTotal", 0) or 0)
+        atingimento_medio = float(kpis.get("atingimentoMedio", 0) or 0)
+        vendedores_que_bateram = int(kpis.get("vendedoresQueBateram", 0) or 0)
+        
+        if meta_total > 0:
+            kpis_list.append({
+                "label": "Meta Total",
+                "value": meta_total,
+                "color": "neutral",
+                "icon": "🎯"
+            })
+        
+        if realizado_total > 0:
+            gap = realizado_total - meta_total
+            variacao = (gap / meta_total * 100) if meta_total > 0 else 0
+            kpis_list.append({
+                "label": "Realizado Total",
+                "value": realizado_total,
+                "variation": f"{variacao:+.1f}%",
+                "color": "positive" if gap >= 0 else "negative",
+                "icon": "💰"
+            })
+        
+        if atingimento_medio > 0:
+            kpis_list.append({
+                "label": "Atingimento Médio",
+                "value": f"{atingimento_medio:.1f}%",
+                "color": "positive" if atingimento_medio >= 100 else "negative",
+                "icon": "📊"
+            })
+        
+        if vendedores_que_bateram >= 0:
+            kpis_list.append({
+                "label": "Vendedores que Bateram",
+                "value": vendedores_que_bateram,
+                "color": "positive" if vendedores_que_bateram > 0 else "neutral",
+                "icon": "✅"
+            })
+    
+    # Gera ranking
+    ranking = []
+    for idx, v in enumerate(piores[:10], 1):
+        ranking.append({
+            "vendedor": v.get("vendedor_nome") or v.get("nome") or "N/A",
+            "meta": float(v.get("meta", 0) or 0),
+            "realizado": float(v.get("realizado", 0) or 0),
+            "atingimento": float(v.get("atingimento", 0) or 0),
+            "gap": float(v.get("gap", 0) or 0),
+            "supervisor": v.get("supervisor_nome") or v.get("supervisor"),
+            "rank": idx
+        })
+    
+    # Gera clientes críticos
+    clientes_list = []
+    for c in clientes[:15]:
+        insight = None
+        if c.get("variacao_percentual") is not None:
+            variacao = float(c.get("variacao_percentual", 0))
+            if variacao < -10:
+                insight = f"Queda de {abs(variacao):.1f}% vs média dos últimos 3 meses"
+        
+        clientes_list.append({
+            "cliente": c.get("nome_cliente") or c.get("cliente") or "N/A",
+            "faturamento": float(c.get("faturamento_mes", 0) or 0),
+            "pedidos": int(c.get("qtd_pedidos", 0) or 0),
+            "variacao": float(c.get("variacao_percentual", 0)) if c.get("variacao_percentual") is not None else None,
+            "vendedor": c.get("vendedor_nome") or c.get("vendedor"),
+            "insight": insight
+        })
+    
+    # Gera insights
+    insights = []
+    if piores:
+        top_3 = piores[:3]
+        nomes = [v.get("vendedor_nome") or v.get("nome") for v in top_3 if v.get("vendedor_nome") or v.get("nome")]
+        if nomes:
+            insights.append(f"Priorizar coaching imediato para: {', '.join(nomes)}")
+    
+    if clientes:
+        insights.append(f"Implementar plano de ação para {len(clientes)} clientes críticos identificados")
+    
+    if kpis and kpis.get("atingimentoMedio", 0) < 100:
+        gap = float(kpis.get("metaTotal", 0)) - float(kpis.get("realizadoTotal", 0))
+        if gap > 0:
+            insights.append(f"Recuperar gap de R$ {gap:,.2f} através de ações direcionadas")
+    
+    if not insights:
+        insights = ["Analisar dados detalhados para identificar oportunidades de melhoria"]
+    
+    return {
+        "resumoExecutivo": resumo,
+        "kpis": kpis_list,
+        "rankingVendedores": ranking,
+        "clientesCriticos": clientes_list,
+        "insightsRecomendacoes": insights
+    }
+
+
 def gerar_resposta_consulta_meta(pergunta: str, contexto: Dict[str, Any]) -> Tuple[str, float]:
     """
     Gera uma resposta em linguagem natural para consultas de meta,

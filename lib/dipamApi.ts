@@ -8,11 +8,14 @@
 /**
  * URL base da API do Dipam AI
  * 
- * Lê da variável de ambiente NEXT_PUBLIC_DIPAM_API_URL ou usa
- * http://localhost:8000 como fallback
+ * Lê da variável de ambiente NEXT_PUBLIC_API_BASE_URL (padrão) ou
+ * NEXT_PUBLIC_DIPAM_API_URL (compatibilidade) ou usa
+ * http://localhost:8000 como fallback apenas em desenvolvimento
  */
 export const DIPAM_API_BASE_URL =
-  process.env.NEXT_PUBLIC_DIPAM_API_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  process.env.NEXT_PUBLIC_DIPAM_API_URL ||
+  (typeof window !== "undefined" ? "http://localhost:8000" : "http://localhost:8000");
 
 /**
  * Parâmetros para a função askDipamAgent

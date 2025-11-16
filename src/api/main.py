@@ -51,6 +51,44 @@ async def startup_event():
     """Evento de startup da aplicação."""
     logger.info("Iniciando aplicação Dipam AI Agent...")
     
+    # Validação crítica de variáveis de ambiente em produção
+    environment = getattr(config, 'environment', 'development')
+    is_production = environment == "production"
+    
+    errors = []
+    
+    # Valida OPENAI_API_KEY (obrigatória em produção)
+    try:
+        from src.llm_openai_client import get_openai_client
+        get_openai_client()
+        logger.info("✅ OPENAI_API_KEY validada com sucesso")
+    except Exception as e:
+        error_msg = f"OPENAI_API_KEY não configurada ou inválida: {str(e)}"
+        logger.error(f"❌ {error_msg}")
+        if is_production:
+            errors.append(error_msg)
+        else:
+            logger.warning("⚠️  Continuando sem OPENAI_API_KEY (modo desenvolvimento)")
+    
+    # Valida DATABASE_URL ou configuração de banco
+    try:
+        db_connection_string = config.database.connection_string
+        if not db_connection_string:
+            raise ValueError("DATABASE_URL ou configuração de banco não encontrada")
+        logger.info(f"✅ Configuração de banco de dados validada: {config.database.db_type}")
+    except Exception as e:
+        error_msg = f"Configuração de banco de dados inválida: {str(e)}"
+        logger.error(f"❌ {error_msg}")
+        if is_production:
+            errors.append(error_msg)
+    
+    # Se houver erros críticos em produção, falha rápido
+    if errors and is_production:
+        error_summary = "\n".join(f"  - {e}" for e in errors)
+        logger.error(f"❌ ERROS CRÍTICOS DE CONFIGURAÇÃO:\n{error_summary}")
+        logger.error("Aplicação não pode iniciar em produção sem essas configurações.")
+        raise RuntimeError(f"Erros de configuração: {error_summary}")
+    
     try:
         # Verifica arquivo SQLite se estiver usando SQLite
         if config.database.db_type == "sqlite":
@@ -66,6 +104,8 @@ async def startup_event():
                 logger.error(f"❌ Arquivo SQLite NÃO encontrado em: {sqlite_path}")
                 logger.error(f"   Diretório /app/data existe? {os.path.exists('/app/data')}")
                 logger.error(f"   Listando /app/data: {os.listdir('/app/data') if os.path.exists('/app/data') else 'diretório não existe'}")
+                if is_production:
+                    raise FileNotFoundError(f"Arquivo SQLite não encontrado em produção: {sqlite_path}")
         
         # Inicializa conexão com banco de dados
         init_db()
@@ -82,6 +122,8 @@ async def startup_event():
                     logger.info(f"✅ Teste de conexão: {count} registros em metas_vendedor")
                 except Exception as e:
                     logger.error(f"❌ Erro ao testar conexão com metas_vendedor: {e}")
+                    if is_production:
+                        raise
         
         # Carrega modelos de ML (inicializa serviço do agente)
         agent_service = get_agent_service()
@@ -91,7 +133,9 @@ async def startup_event():
         logger.error(f"Erro ao inicializar aplicação: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
-        # Em produção, pode querer falhar rápido aqui
+        # Em produção, falha rápido
+        if is_production:
+            raise
 
 
 @app.on_event("shutdown")
@@ -229,7 +273,7 @@ class FeedbackResponse(BaseModel):
 @app.get("/health")
 async def health_check():
     """
-    Endpoint de health check.
+    Endpoint de health check básico.
     
     Retorna status da API e informações básicas do sistema.
     """
@@ -242,6 +286,119 @@ async def health_check():
             "database": config.database.db_type,
         }
     )
+
+
+@app.get("/health/db")
+async def health_check_db():
+    """
+    Endpoint de health check do banco de dados.
+    
+    Testa a conexão com o banco de dados executando uma query simples.
+    """
+    try:
+        from sqlalchemy import text
+        engine = get_db_engine()
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            result.scalar()
+        
+        # Tenta contar registros em uma tabela chave
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT COUNT(*) FROM metas_vendedor LIMIT 1"))
+                count = result.scalar()
+                return JSONResponse(
+                    content={
+                        "status": "healthy",
+                        "database": config.database.db_type,
+                        "connected": True,
+                        "test_query": "success",
+                        "metas_vendedor_count": count,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+        except Exception as e:
+            logger.warning(f"Erro ao contar registros em metas_vendedor: {str(e)}")
+            return JSONResponse(
+                content={
+                    "status": "healthy",
+                    "database": config.database.db_type,
+                    "connected": True,
+                    "test_query": "success",
+                    "warning": f"Não foi possível contar registros: {str(e)}",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+    except Exception as e:
+        logger.error(f"Erro ao verificar saúde do banco de dados: {str(e)}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "database": config.database.db_type,
+                "connected": False,
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+
+
+@app.get("/health/openai")
+async def health_check_openai():
+    """
+    Endpoint de health check da OpenAI.
+    
+    Testa a conexão com a API da OpenAI fazendo uma chamada mínima.
+    """
+    try:
+        from src.llm_openai_client import get_openai_client, call_llm
+        
+        # Valida configuração
+        client_config = get_openai_client()
+        
+        # Faz uma chamada mínima de teste (apenas validação, sem gerar resposta completa)
+        try:
+            # Testa apenas se a chave é válida fazendo uma chamada muito simples
+            test_response = call_llm(
+                prompt="Responda apenas: OK",
+                system_prompt="Você é um assistente de teste. Responda apenas 'OK'.",
+                max_tokens=5,
+                temperature=0
+            )
+            
+            return JSONResponse(
+                content={
+                    "status": "healthy",
+                    "openai_configured": True,
+                    "openai_connected": True,
+                    "test_response_length": len(test_response),
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+        except Exception as e:
+            logger.error(f"Erro ao testar chamada OpenAI: {str(e)}")
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "unhealthy",
+                    "openai_configured": True,
+                    "openai_connected": False,
+                    "error": str(e),
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+    except Exception as e:
+        logger.error(f"Erro ao verificar saúde da OpenAI: {str(e)}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "openai_configured": False,
+                "openai_connected": False,
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
 
 
 @app.get("/")
@@ -529,6 +686,7 @@ def _resumir_contexto(contexto: Dict[str, Any]) -> Dict[str, Any]:
     Resume o contexto mantendo apenas números chave.
     
     Remove listas extensas e mantém apenas sumários/metadados importantes.
+    Para consulta_vendedores_performance, preserva piores_meta e menores_venda.
     
     Args:
         contexto: Contexto completo da resposta
@@ -540,14 +698,39 @@ def _resumir_contexto(contexto: Dict[str, Any]) -> Dict[str, Any]:
     
     # Copia campos importantes diretamente
     campos_diretos = [
-        "tipo", "mes_ano", "periodo_dias", "criterio",
+        "tipo", "mes_ano", "mes_ano_analise", "mes_ano_solicitado",
+        "periodo_dias", "criterio",
         "faturamento_previsto", "intervalo_inferior", "intervalo_superior",
-        "observacoes", "erro"
+        "observacoes", "erro", "tem_dados"
     ]
     
     for campo in campos_diretos:
         if campo in contexto:
             resumo[campo] = contexto[campo]
+    
+    # Para consulta_vendedores_performance, preserva listas de vendedores
+    # (mas limita tamanho para não sobrecarregar)
+    if "piores_meta" in contexto:
+        piores = contexto["piores_meta"]
+        resumo["piores_meta"] = piores[:10] if isinstance(piores, list) else piores
+        resumo["total_piores_meta"] = len(piores) if isinstance(piores, list) else 0
+    
+    if "menores_venda" in contexto:
+        menores = contexto["menores_venda"]
+        resumo["menores_venda"] = menores[:10] if isinstance(menores, list) else menores
+        resumo["total_menores_venda"] = len(menores) if isinstance(menores, list) else 0
+    
+    # Para consulta_meta, preserva KPIs e top vendedores
+    if "kpis" in contexto:
+        resumo["kpis"] = contexto["kpis"]
+    
+    if "pioresVendedores" in contexto:
+        piores = contexto["pioresVendedores"]
+        resumo["pioresVendedores"] = piores[:10] if isinstance(piores, list) else piores
+    
+    if "melhoresVendedores" in contexto:
+        melhores = contexto["melhoresVendedores"]
+        resumo["melhoresVendedores"] = melhores[:10] if isinstance(melhores, list) else melhores
     
     # Resume listas grandes
     if "resumo" in contexto:
@@ -625,6 +808,7 @@ async def ask_question(
         # Mapeia resultado do agente para formato CopilotAnswerPayload
         from src.api.copilot_mapper import map_agent_to_copilot_payload
         
+        # Passa o contexto completo para o mapper (precisa dos dados de vendedores)
         copilot_payload = map_agent_to_copilot_payload(result, request.pergunta)
         
         # Prepara resposta com dados estruturados

@@ -388,7 +388,7 @@ class AgentService:
                 )
                 
                 if intent == IntentType.CONSULTA_META:
-                    contexto = self._handle_meta_query(intent, entities, session, contexto_memoria)
+                    contexto = self._handle_meta_query(intent, entities, session, contexto_memoria, papel=papel)
                     
                     # Adiciona contexto de memória se houver interações aprovadas
                     if contexto_memoria:
@@ -1402,7 +1402,8 @@ class AgentService:
         intent: IntentType,
         entities: Dict[str, Any],
         session: Session,
-        contexto_memoria: Optional[Dict[str, Any]] = None
+        contexto_memoria: Optional[Dict[str, Any]] = None,
+        papel: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Manipula consultas de meta de forma unificada.
@@ -1744,7 +1745,10 @@ class AgentService:
         mes_ano = entities.get("mes_ano")
         janela_meses = entities.get("janela_meses") or entities.get("n_meses") or 6
         
-        contexto_dados: Dict[str, Any] = {}
+        # IMPORTANTE: Inclui papel do usuário para análises mais ricas quando for diretor
+        contexto_dados: Dict[str, Any] = {
+            "papel": papel,  # Passa papel do usuário para contexto
+        }
         
         # Se há mês específico, usa análise profunda
         if mes_ano:
@@ -1827,21 +1831,78 @@ class AgentService:
         pergunta_original = entities.get("pergunta_original", "qual a meta")
         try:
             # Cria contexto rico para o LLM usando os dados estruturados
+            # IMPORTANTE: Inclui papel do usuário para ajustar nível de análise
             contexto_llm = {
                 "intent": "consulta_meta_geral",
                 "mes_ano": mes_ano,
                 "janela_meses": janela_meses,
+                "papel": entities.get("papel", "usuario"),  # "diretor", "supervisor", etc.
             }
             
             # Se temos análise profunda, usa ela
             if contexto_dados.get("kpis"):
+                kpis = contexto_dados["kpis"]
+                piores = contexto_dados.get("pioresVendedores", [])
+                melhores = contexto_dados.get("melhoresVendedores", [])
+                
+                # IMPORTANTE: Converte dados da análise profunda para o formato que gerar_resposta_consulta_meta espera
+                # Cria serie_mensal com o mês solicitado
+                if mes_ano and kpis.get("metaTotal"):
+                    contexto_llm["serie_mensal"] = [{
+                        "mes_ano": mes_ano,
+                        "meta": kpis.get("metaTotal", 0),
+                        "realizado": kpis.get("realizadoTotal", 0),
+                        "atingimento": kpis.get("atingimentoMedio", 0),
+                    }]
+                
+                # Converte piores/melhores vendedores para detalhe_vendedores_mes
+                # Combina piores e melhores, limitando a 15 vendedores
+                vendedores_combinados = []
+                for v in piores[:10]:
+                    vendedores_combinados.append({
+                        "vendedor_nome": v.get("vendedor_nome", "N/A"),
+                        "meta": v.get("meta", 0),
+                        "realizado": v.get("realizado", 0),
+                        "atingimento": v.get("atingimento", 0),
+                        "gap": v.get("gap", 0),
+                    })
+                for v in melhores[:5]:  # Top 5 melhores
+                    # Evita duplicatas
+                    if not any(v.get("vendedor_nome") == existente.get("vendedor_nome") for existente in vendedores_combinados):
+                        vendedores_combinados.append({
+                            "vendedor_nome": v.get("vendedor_nome", "N/A"),
+                            "meta": v.get("meta", 0),
+                            "realizado": v.get("realizado", 0),
+                            "atingimento": v.get("atingimento", 0),
+                            "gap": v.get("gap", 0),
+                        })
+                
+                if mes_ano and vendedores_combinados:
+                    contexto_llm["detalhe_vendedores_mes"] = {
+                        "mes_ano": mes_ano,
+                        "vendedores": vendedores_combinados,
+                    }
+                    # Também mantém compatibilidade com chave alternativa
+                    contexto_llm["detalhe_vendedores"] = contexto_llm["detalhe_vendedores_mes"]
+                
+                # Mantém os dados da análise profunda também
+                # IMPORTANTE: Passa também clientesProblema como alias para compatibilidade com frontend
+                clientes_criticos = contexto_dados.get("clientesCriticos", []) or contexto_dados.get("clientesProblema", [])
                 contexto_llm.update({
-                    "kpis": contexto_dados["kpis"],
-                    "pioresVendedores": contexto_dados.get("pioresVendedores", []),
-                    "melhoresVendedores": contexto_dados.get("melhoresVendedores", []),
-                    "clientesCriticos": contexto_dados.get("clientesCriticos", []),
+                    "kpis": kpis,
+                    "pioresVendedores": piores,
+                    "piores_vendedores": piores,  # Alias
+                    "melhoresVendedores": melhores,
+                    "melhores_vendedores": melhores,  # Alias
+                    "clientesCriticos": clientes_criticos,
+                    "clientesProblema": clientes_criticos,  # Alias para compatibilidade
+                    "clientes_criticos": clientes_criticos,  # Alias
                     "limitesDados": contexto_dados.get("limitesDados", {}),
                 })
+                
+                # Define flags corretamente baseado nos dados convertidos
+                contexto_llm["tem_serie_mensal"] = len(contexto_llm.get("serie_mensal", [])) > 0
+                contexto_llm["tem_detalhe_vendedores"] = len(vendedores_combinados) > 0
             else:
                 # Fallback: método antigo
                 contexto_llm["meses_disponiveis"] = contexto_dados.get("meses_disponiveis", [])[-12:] if contexto_dados.get("meses_disponiveis") else []
@@ -1859,13 +1920,16 @@ class AgentService:
                         contexto_llm["perc_atingido_serie"] = perc_atingido_serie
                 
                 # Adiciona detalhe por vendedor (se disponível)
+                # IMPORTANTE: Usa a chave "detalhe_vendedores_mes" que gerar_resposta_consulta_meta espera
                 if contexto_dados.get("tem_detalhe_vendedores"):
                     detalhe = contexto_dados["detalhe_vendedores_mes"]
-                    contexto_llm["detalhe_vendedores"] = {
+                    contexto_llm["detalhe_vendedores_mes"] = {
                         "mes_ano": detalhe["mes_ano"],
                         "vendedores": detalhe["vendedores"][:15],  # Top 15 vendedores
                         "total_vendedores": len(detalhe["vendedores"]),
                     }
+                    # Também mantém compatibilidade com chave alternativa
+                    contexto_llm["detalhe_vendedores"] = contexto_llm["detalhe_vendedores_mes"]
                     # Calcula totais do mês específico
                     if detalhe["vendedores"]:
                         total_meta_mes = sum(v.get("meta", 0) for v in detalhe["vendedores"])
@@ -1880,8 +1944,15 @@ class AgentService:
                 contexto_llm["observacao"] = contexto_dados["observacao"]
             
             # Adiciona flags de disponibilidade
-            contexto_llm["tem_serie_mensal"] = contexto_dados.get("tem_serie_mensal", False)
-            contexto_llm["tem_detalhe_vendedores"] = contexto_dados.get("tem_detalhe_vendedores", False)
+            # IMPORTANTE: Se já foram definidas na conversão da análise profunda, não sobrescrever
+            if "tem_serie_mensal" not in contexto_llm:
+                contexto_llm["tem_serie_mensal"] = contexto_dados.get("tem_serie_mensal", False)
+            if "tem_detalhe_vendedores" not in contexto_llm:
+                contexto_llm["tem_detalhe_vendedores"] = contexto_dados.get("tem_detalhe_vendedores", False)
+            
+            # IMPORTANTE: Garante que papel do usuário esteja no contexto para ajustar análise
+            if "papel" not in contexto_llm:
+                contexto_llm["papel"] = papel
             
             # Adiciona contexto de memória se disponível
             if contexto_memoria and contexto_memoria.get("interacoes_aprovadas"):
@@ -1890,13 +1961,28 @@ class AgentService:
                     "interacoes": contexto_memoria["interacoes_aprovadas"]
                 }
             
-            # Usa função especializada para consultas de meta
-            resposta, confianca_calculada = gerar_resposta_consulta_meta(
-                pergunta=pergunta_original,
-                contexto=contexto_llm
-            )
-            contexto["resposta"] = resposta
-            contexto["confianca"] = confianca_calculada
+            # NOVO: Tenta gerar resposta estruturada (JSON) primeiro
+            try:
+                from src.llm_integration import gerar_resposta_estruturada_consulta_meta
+                json_estruturado, texto_complementar, confianca_calculada = gerar_resposta_estruturada_consulta_meta(
+                    pergunta=pergunta_original,
+                    contexto=contexto_llm
+                )
+                # Adiciona resposta estruturada ao contexto
+                contexto["structured"] = json_estruturado
+                contexto["resposta"] = texto_complementar  # Texto complementar como fallback
+                contexto["confianca"] = confianca_calculada
+                logger.info("✅ Resposta estruturada (JSON) gerada com sucesso")
+            except Exception as e:
+                logger.warning(f"Erro ao gerar resposta estruturada, usando fallback: {str(e)}")
+                # Fallback para função antiga (compatibilidade)
+                from src.llm_integration import gerar_resposta_consulta_meta
+                resposta, confianca_calculada = gerar_resposta_consulta_meta(
+                    pergunta=pergunta_original,
+                    contexto=contexto_llm
+                )
+                contexto["resposta"] = resposta
+                contexto["confianca"] = confianca_calculada
         except Exception as e:
             logger.warning(f"Erro ao gerar resposta com LLM, usando template: {str(e)}")
             # Fallback para template usando os dados estruturados
@@ -1971,10 +2057,17 @@ class AgentService:
                     session, mes_ano_analise, limite=10
                 )
                 
+                # VALIDAÇÃO CRÍTICA: tem_dados deve ser True se houver dados nas listas
+                tem_dados_real = (isinstance(piores_meta, list) and len(piores_meta) > 0) or \
+                                 (isinstance(menores_venda, list) and len(menores_venda) > 0)
+                
                 contexto_dados["mes_ano_analise"] = mes_ano_analise
-                contexto_dados["tem_dados"] = True
+                contexto_dados["tem_dados"] = tem_dados_real  # Usa validação real, não apenas periodo_tem_dados
                 contexto_dados["piores_meta"] = piores_meta
                 contexto_dados["menores_venda"] = menores_venda
+                
+                if not tem_dados_real:
+                    logger.warning(f"[_handle_vendedores_performance] periodo_tem_dados retornou True, mas queries retornaram listas vazias para {mes_ano_analise}")
                 
             except Exception as e:
                 logger.error(f"Erro ao buscar dados de performance dos vendedores: {str(e)}")

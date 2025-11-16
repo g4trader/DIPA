@@ -212,29 +212,63 @@ def analisar_meta_mensal(session: Session, ano: int, mes: int) -> Dict[str, Any]
     
     # 6) Clientes críticos (maior queda vs média dos últimos 3 meses)
     try:
+        # Detecta se é SQLite ou PostgreSQL para usar função correta
+        from src.config import config
+        is_sqlite = config.database.db_type == "sqlite"
+        
         # Busca vendas do mês atual
-        vendas_mes = (
-            session.query(
-                Venda.cliente_id,
-                Cliente.nome.label("nome_cliente"),
-                Venda.vendedor_id,
-                Vendedor.nome.label("vendedor_nome"),
-                func.sum(Venda.valor_total).label("faturamento_mes")
+        # CORREÇÃO: Usa valor_total_liquido que é o campo correto no modelo Venda
+        if is_sqlite:
+            # Para SQLite, usa strftime
+            vendas_mes = (
+                session.query(
+                    Venda.cliente_id,
+                    Cliente.nome.label("nome_cliente"),
+                    Venda.vendedor_id,
+                    Vendedor.nome.label("vendedor_nome"),
+                    func.sum(Venda.valor_total_liquido).label("faturamento_mes"),
+                    func.count(Venda.id).label("qtd_pedidos")
+                )
+                .join(Cliente, Venda.cliente_id == Cliente.id)
+                .join(Vendedor, Venda.vendedor_id == Vendedor.id)
+                .filter(
+                    func.strftime('%Y', Venda.data_venda) == str(ano),
+                    func.strftime('%m', Venda.data_venda) == f"{mes:02d}"
+                )
+                .group_by(
+                    Venda.cliente_id,
+                    Cliente.nome,
+                    Venda.vendedor_id,
+                    Vendedor.nome
+                )
+                .all()
             )
-            .join(Cliente, Venda.cliente_id == Cliente.id)
-            .join(Vendedor, Venda.vendedor_id == Vendedor.id)
-            .filter(
-                extract('year', Venda.data_venda) == ano,
-                extract('month', Venda.data_venda) == mes
+        else:
+            # Para PostgreSQL, usa extract
+            from sqlalchemy import extract
+            vendas_mes = (
+                session.query(
+                    Venda.cliente_id,
+                    Cliente.nome.label("nome_cliente"),
+                    Venda.vendedor_id,
+                    Vendedor.nome.label("vendedor_nome"),
+                    func.sum(Venda.valor_total_liquido).label("faturamento_mes"),
+                    func.count(Venda.id).label("qtd_pedidos")
+                )
+                .join(Cliente, Venda.cliente_id == Cliente.id)
+                .join(Vendedor, Venda.vendedor_id == Vendedor.id)
+                .filter(
+                    extract('year', Venda.data_venda) == ano,
+                    extract('month', Venda.data_venda) == mes
+                )
+                .group_by(
+                    Venda.cliente_id,
+                    Cliente.nome,
+                    Venda.vendedor_id,
+                    Vendedor.nome
+                )
+                .all()
             )
-            .group_by(
-                Venda.cliente_id,
-                Cliente.nome,
-                Venda.vendedor_id,
-                Vendedor.nome
-            )
-            .all()
-        )
         
         # Para cada cliente, calcula média dos últimos 3 meses (se disponível)
         clientes_com_variacao = []
@@ -252,40 +286,78 @@ def analisar_meta_mensal(session: Session, ano: int, mes: int) -> Dict[str, Any]
                     ano_anterior -= 1
                 
                 try:
-                    faturamento_anterior = (
-                        session.query(func.sum(Venda.valor_total))
-                        .filter(
-                            Venda.cliente_id == cliente_id,
-                            extract('year', Venda.data_venda) == ano_anterior,
-                            extract('month', Venda.data_venda) == mes_anterior
+                    # CORREÇÃO: Usa valor_total_liquido e adapta para SQLite/PostgreSQL
+                    if is_sqlite:
+                        faturamento_anterior = (
+                            session.query(func.sum(Venda.valor_total_liquido))
+                            .filter(
+                                Venda.cliente_id == cliente_id,
+                                func.strftime('%Y', Venda.data_venda) == str(ano_anterior),
+                                func.strftime('%m', Venda.data_venda) == f"{mes_anterior:02d}"
+                            )
+                            .scalar()
                         )
-                        .scalar()
-                    )
+                    else:
+                        from sqlalchemy import extract
+                        faturamento_anterior = (
+                            session.query(func.sum(Venda.valor_total_liquido))
+                            .filter(
+                                Venda.cliente_id == cliente_id,
+                                extract('year', Venda.data_venda) == ano_anterior,
+                                extract('month', Venda.data_venda) == mes_anterior
+                            )
+                            .scalar()
+                        )
                     if faturamento_anterior:
                         meses_anteriores.append(float(faturamento_anterior))
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Erro ao calcular faturamento anterior para cliente {cliente_id}: {str(e)}")
                     pass
+            
+            # Adiciona informações do cliente, mesmo sem histórico
+            qtd_pedidos = int(venda_mes.qtd_pedidos or 0)
+            cliente_data = {
+                "cliente_id": cliente_id,
+                "nome_cliente": venda_mes.nome_cliente or "N/A",
+                "vendedor_nome": venda_mes.vendedor_nome or "N/A",
+                "faturamento_mes": round(faturamento_mes, 2),
+                "qtd_pedidos": qtd_pedidos,
+                "faturamento_medio_pedido": round(faturamento_mes / qtd_pedidos, 2) if qtd_pedidos > 0 else 0,
+            }
             
             if meses_anteriores:
                 faturamento_media_3m = sum(meses_anteriores) / len(meses_anteriores)
                 variacao_percentual = ((faturamento_mes - faturamento_media_3m) / faturamento_media_3m * 100.0) if faturamento_media_3m > 0 else 0.0
-                
-                clientes_com_variacao.append({
-                    "cliente_id": cliente_id,
-                    "nome_cliente": venda_mes.nome_cliente or "N/A",
-                    "vendedor_nome": venda_mes.vendedor_nome or "N/A",
-                    "faturamento_mes": faturamento_mes,
+                cliente_data.update({
                     "faturamento_media_3m": round(faturamento_media_3m, 2),
-                    "variacao_percentual": round(variacao_percentual, 2)
+                    "variacao_percentual": round(variacao_percentual, 2),
+                    "tem_historico": True
                 })
+            else:
+                cliente_data.update({
+                    "tem_historico": False,
+                    "variacao_percentual": None
+                })
+            
+            clientes_com_variacao.append(cliente_data)
         
-        # Ordena por maior queda (variacao_percentual mais negativo)
+        # Ordena por maior queda (variacao_percentual mais negativo) ou por menor faturamento
+        # Prioriza clientes com histórico e maior queda, depois clientes com baixo faturamento
+        def sort_key(x):
+            if x.get("tem_historico") and x.get("variacao_percentual") is not None:
+                # Prioriza maior queda (mais negativo primeiro)
+                return (0, x["variacao_percentual"])
+            else:
+                # Clientes sem histórico: ordena por menor faturamento
+                return (1, x["faturamento_mes"])
+        
         clientes_criticos = sorted(
             clientes_com_variacao,
-            key=lambda x: x["variacao_percentual"]
-        )[:10]  # Top 10 com maior queda
+            key=sort_key
+        )[:15]  # Top 15 clientes problemáticos
         
         resultado["clientesCriticos"] = clientes_criticos
+        resultado["clientesProblema"] = clientes_criticos  # Alias para compatibilidade
         
     except Exception as e:
         logger.warning(f"Erro ao calcular clientes críticos: {str(e)}")
