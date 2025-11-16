@@ -1174,6 +1174,11 @@ async def ask_question(
         dados_estruturados = _extrair_dados_estruturados(result, request.pergunta)
         dados_estruturados["payload"] = copilot_payload  # Adiciona payload estruturado
         
+        # IMPORTANTE: Se o copilot_payload tem structured, usa ele diretamente
+        # Isso garante que o formato novo (CopilotStructuredResponse) seja preservado
+        if copilot_payload.get("structured"):
+            dados_estruturados["structured"] = copilot_payload["structured"]
+        
         response = AskResponse(**dados_estruturados)
         
         # Calcula tempo de processamento
