@@ -38,19 +38,21 @@ app = FastAPI(
 # CORS middleware (para permitir chamadas de frontend)
 # IMPORTANTE: Em produção, especificar origens permitidas explicitamente
 # Isso evita problemas de CORS e melhora a segurança
-origins = [
-    "https://dipam.smartiasolutions.com.br",  # Domínio de produção (sem www)
-    # Frontend Cloud Run (URL principal e alternativa)
+# REGRA CRÍTICA: NÃO colocar barra no final das origens (ex.: NUNCA usar "https://dipam.smartiasolutions.com.br/")
+allowed_origins = [
+    # Produção
+    "https://dipam.smartiasolutions.com.br",
     "https://dipam-copilot-frontend-6arhlm3mha-uc.a.run.app",
-    "https://dipam-copilot-frontend-642830139828.us-central1.run.app",
     # Local development
     "http://localhost:3000",
+    "http://localhost:5173",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
 ]
 
-# Em desenvolvimento, adicionar localhost:8000 para testes locais
+# Em desenvolvimento, adicionar localhost:8000 e localhost:8080 para testes locais
 if config.environment == "development":
-    origins.extend([
+    allowed_origins.extend([
         "http://localhost:8000",
         "http://127.0.0.1:8000",
         "http://localhost:8080",
@@ -59,10 +61,11 @@ if config.environment == "development":
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -942,9 +945,12 @@ async def ask_question(
         # Verifica se agent service está disponível (modelos ML podem estar carregando)
         if not app.state.agent_service_available:
             logger.warning("⚠️  AgentService ainda não está disponível (modelos ML carregando em background)")
-            return JSONResponse(
+            # IMPORTANTE: Usa HTTPException ao invés de JSONResponse para garantir que passa pelo CORSMiddleware
+            # HTTPException sempre passa pelo pipeline do FastAPI, incluindo middlewares de CORS
+            from fastapi import HTTPException
+            raise HTTPException(
                 status_code=503,
-                content={
+                detail={
                     "error": "Serviço temporariamente indisponível",
                     "message": "Os modelos de ML ainda estão carregando. Por favor, aguarde alguns segundos e tente novamente.",
                     "detail": "AgentService está carregando em background. Isso geralmente leva 20-30 segundos após o startup.",
@@ -1005,18 +1011,22 @@ async def ask_question(
         
         return response
     
+    except HTTPException:
+        # Re-lança HTTPException para manter status code e passar pelo CORS corretamente
+        raise
     except Exception as e:
         # IMPORTANTE: Captura TODAS as exceções para garantir que sempre retornamos uma resposta com CORS
-        # JSONResponse garante que o middleware CORS adicione os headers mesmo em erros
-        # Isso evita que o worker morra e o Google Frontend retorne 503 sem headers CORS
+        # Usa HTTPException ao invés de JSONResponse para garantir que passa pelo CORSMiddleware
+        # HTTPException sempre passa pelo pipeline do FastAPI, incluindo middlewares de CORS
         logger.error(f"❌ Erro ao processar pergunta: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
         
-        # Retorna erro estruturado COM headers CORS (via JSONResponse)
-        return JSONResponse(
+        # Levanta HTTPException ao invés de retornar JSONResponse diretamente
+        # Isso garante que o CORSMiddleware adicione os headers CORS corretamente
+        raise HTTPException(
             status_code=500,
-            content={
+            detail={
                 "error": "Erro interno do servidor",
                 "message": "Ocorreu um erro ao processar sua pergunta. Por favor, tente novamente.",
                 "detail": str(e) if config.environment == "development" else "Erro interno do servidor",
