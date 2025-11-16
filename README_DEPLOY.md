@@ -298,7 +298,16 @@ curl http://localhost:8080/health/openai
 ```bash
 # Ativa venv, valida envs e executa testes automaticamente
 ./scripts/run_deploy_checks.sh
+
+# Se tudo OK, seguir para o deploy no Cloud Run
 ```
+
+**O que o script valida**:
+1. ✅ Variáveis de ambiente obrigatórias
+2. ✅ Conexão com banco de dados
+3. ✅ Conexão com OpenAI
+4. ✅ Serviço do agente com perguntas críticas
+5. ✅ Validação de respostas (não genéricas/fallback)
 
 #### Opção 2: Manual
 
@@ -350,35 +359,59 @@ Para cada pergunta, o script mostra:
 
 ### Teste de Health Checks
 
+Após o deploy, substitua `SUA_URL_CLOUD_RUN` pela URL real do serviço:
+
 ```bash
 # Health básico
-curl https://dipam-ai-backend-xxx.run.app/health
+curl https://SUA_URL_CLOUD_RUN/health
 
 # Health do banco
-curl https://dipam-ai-backend-xxx.run.app/health/db
+curl https://SUA_URL_CLOUD_RUN/health/db
 
 # Health da OpenAI
-curl https://dipam-ai-backend-xxx.run.app/health/openai
+curl https://SUA_URL_CLOUD_RUN/health/openai
 ```
+
+**Resposta esperada do `/health`**:
+```json
+{
+  "status": "healthy",
+  "environment": "production",
+  "database": "sqlite",
+  "components": {
+    "database": "available",
+    "openai": "available",
+    "agent_service": "available"
+  }
+}
+```
+
+Se algum componente não estiver disponível, o status será `"degraded"` mas o servidor continua funcionando.
 
 ### Teste de Perguntas Críticas
 
+Após o deploy, substitua `SUA_URL_CLOUD_RUN` pela URL real do serviço:
+
 ```bash
 # Pergunta 1: Meta de outubro 2025
-curl -X POST https://dipam-ai-backend-xxx.run.app/ask \
+curl -X POST https://SUA_URL_CLOUD_RUN/ask \
   -H "Content-Type: application/json" \
   -d '{"pergunta": "qual a meta de vendas do mês de outubro 2025", "papel": "diretor"}'
 
 # Pergunta 2: Por que não batemos a meta em agosto 2025
-curl -X POST https://dipam-ai-backend-xxx.run.app/ask \
+curl -X POST https://SUA_URL_CLOUD_RUN/ask \
   -H "Content-Type: application/json" \
   -d '{"pergunta": "Sou o Diretor e preciso saber de forma detalhada porque não batemos a meta no mês de agosto 2025", "papel": "diretor"}'
 
 # Pergunta 3: Vendedores com impacto negativo
-curl -X POST https://dipam-ai-backend-xxx.run.app/ask \
+curl -X POST https://SUA_URL_CLOUD_RUN/ask \
   -H "Content-Type: application/json" \
   -d '{"pergunta": "quais foram os vendedores que mais geraram impacto negativo no realizado do mês de agosto 2025", "papel": "diretor"}'
 ```
+
+**Importante**: Não codificar a chave da OpenAI em texto plano. Use Secret Manager do Google Cloud:
+1. Criar secret: `echo -n "sk-..." | gcloud secrets create openai-api-key --data-file=-`
+2. Referenciar no Cloud Run: `--set-secrets="OPENAI_API_KEY=openai-api-key:latest"`
 
 ## 🔍 Troubleshooting
 

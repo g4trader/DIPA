@@ -178,12 +178,58 @@ curl http://localhost:8080/health/openai
 5. ✅ Não há `sys.exit()` ou `raise` fatal no startup
 6. ✅ Comando CMD no Dockerfile compatível com Cloud Run
 
+## 🔄 Comandos de Deploy e Verificação
+
+### Deploy no Cloud Run
+
+```bash
+# IMPORTANTE: Ajustar PROJECT_ID, SERVICE_NAME e REGION conforme seu projeto
+gcloud run deploy SERVICE_NAME \
+  --project=PROJECT_ID \
+  --region=REGION \
+  --source=. \
+  --platform=managed \
+  --allow-unauthenticated \
+  --port=8080 \
+  --memory=2Gi \
+  --cpu=1 \
+  --timeout=300s \
+  --max-instances=10 \
+  --min-instances=0 \
+  --set-env-vars="ENVIRONMENT=production,DB_TYPE=sqlite,SQLITE_PATH=/app/data/dipam_dw.db,LOG_LEVEL=INFO" \
+  --set-secrets="OPENAI_API_KEY=openai-api-key:latest"
+```
+
+**Importante**: Não codificar `OPENAI_API_KEY` em texto plano. Use Secret Manager:
+1. Criar secret: `echo -n "sk-..." | gcloud secrets create openai-api-key --data-file=-`
+2. Referenciar no deploy: `--set-secrets="OPENAI_API_KEY=openai-api-key:latest"`
+
+### Verificação Após Deploy
+
+Após o deploy, substitua `SUA_URL_CLOUD_RUN` pela URL real retornada pelo Cloud Run:
+
+```bash
+# Health básico
+curl https://SUA_URL_CLOUD_RUN/health
+
+# Health do banco
+curl https://SUA_URL_CLOUD_RUN/health/db
+
+# Health da OpenAI
+curl https://SUA_URL_CLOUD_RUN/health/openai
+
+# Teste de pergunta real
+curl -X POST https://SUA_URL_CLOUD_RUN/ask \
+  -H "Content-Type: application/json" \
+  -d '{"pergunta": "qual a meta de vendas do mês de outubro 2025", "papel": "diretor"}'
+```
+
 ## 🔄 Próximos Passos
 
-1. Testar script `run_cloud_run_local.sh` localmente
-2. Fazer deploy no Cloud Run
-3. Verificar logs para confirmar que servidor sobe corretamente
-4. Testar health endpoints em produção
+1. ✅ Testar script `run_cloud_run_local.sh` localmente
+2. ⏳ Fazer deploy no Cloud Run usando comandos acima
+3. ⏳ Verificar logs para confirmar que servidor sobe corretamente
+4. ⏳ Testar health endpoints em produção
 
 ---
 

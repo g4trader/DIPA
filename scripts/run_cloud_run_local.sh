@@ -7,6 +7,8 @@
 # Este script configura variáveis de ambiente como no Cloud Run e inicia o servidor.
 # Se o servidor subir em http://localhost:8080/health, então o problema provavelmente
 # é apenas configuração no Cloud Run (não código).
+#
+# Para tornar executável: chmod +x scripts/run_cloud_run_local.sh
 
 set -e  # Para em caso de erro
 
@@ -46,28 +48,17 @@ echo -e "${GREEN}🔧 Configurando variáveis de ambiente (Cloud Run mode)...${N
 
 export PORT=8080
 export ENVIRONMENT=production
+
+# Banco em modo Cloud Run-like
 export DB_TYPE=sqlite
 export SQLITE_PATH="data/dipam_dw.db"
 
+# NÃO colocar chave real aqui, apenas placeholder/comment
+# export OPENAI_API_KEY="SUA_CHAVE_DE_TESTE"
 # Carrega OPENAI_API_KEY do .env se existir (mas não hardcode aqui)
 if [ -f ".env" ]; then
     echo -e "${GREEN}📝 Carregando OPENAI_API_KEY do .env...${NC}"
     export $(grep -v '^#' .env | grep OPENAI_API_KEY | xargs)
-fi
-
-# Verifica se OPENAI_API_KEY está configurada
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo -e "${YELLOW}⚠️  OPENAI_API_KEY não configurada${NC}"
-    echo -e "${YELLOW}   O servidor subirá, mas funcionalidades de LLM não estarão disponíveis${NC}"
-    echo -e "${YELLOW}   Configure: export OPENAI_API_KEY='sk-...'${NC}"
-    echo ""
-fi
-
-# Verifica se arquivo SQLite existe
-if [ ! -f "$SQLITE_PATH" ]; then
-    echo -e "${RED}❌ Arquivo SQLite não encontrado: ${SQLITE_PATH}${NC}"
-    echo -e "${YELLOW}   O servidor subirá, mas consultas ao banco podem falhar${NC}"
-    echo ""
 fi
 
 echo -e "${GREEN}✅ Variáveis configuradas:${NC}"
@@ -78,17 +69,9 @@ echo "   SQLITE_PATH=$SQLITE_PATH"
 echo "   OPENAI_API_KEY=${OPENAI_API_KEY:+configurada (oculta)}"
 echo ""
 
-# Inicia servidor
 echo -e "${GREEN}🚀 Iniciando servidor FastAPI...${NC}"
 echo -e "${GREEN}   URL: http://localhost:${PORT}${NC}"
 echo -e "${GREEN}   Health: http://localhost:${PORT}/health${NC}"
-echo ""
-echo -e "${YELLOW}💡 Para testar após iniciar:${NC}"
-echo -e "   curl http://localhost:${PORT}/health"
-echo -e "   curl http://localhost:${PORT}/health/db"
-echo -e "   curl http://localhost:${PORT}/health/openai"
-echo ""
-echo -e "${YELLOW}💡 Pressione Ctrl+C para parar o servidor${NC}"
 echo ""
 
 # Executa o servidor

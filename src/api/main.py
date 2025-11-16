@@ -84,6 +84,7 @@ async def startup_event():
         logger.error(f"❌ {error_msg}")
         app.state.startup_errors.append(error_msg)
         logger.warning("⚠️  Servidor continuará funcionando, mas funcionalidades de LLM podem não estar disponíveis")
+        # NÃO faz raise - apenas registra o erro
     
     # 2. Validação e inicialização do banco de dados (não crítica para o servidor subir)
     logger.info("Verificando configuração de banco de dados...")
@@ -1110,10 +1111,13 @@ async def feedback_interacao(
 
 
 # Configuração para Cloud Run
+# IMPORTANTE: Este bloco é executado quando rodamos: python -m src.api.main
+# Cloud Run espera que o servidor escute em 0.0.0.0:PORT (onde PORT=8080)
 if __name__ == "__main__":
     import uvicorn
+    import os
     
-    # IMPORTANTE: Cloud Run define PORT=8080 via env var
+    # Cloud Run define PORT=8080 via env var
     # Fallback para 8080 (padrão Cloud Run) em vez de 8000 (dev local)
     port = int(os.getenv("PORT", 8080))
     
@@ -1121,9 +1125,9 @@ if __name__ == "__main__":
     
     uvicorn.run(
         "src.api.main:app",
-        host="0.0.0.0",  # IMPORTANTE: 0.0.0.0 para Cloud Run
+        host="0.0.0.0",  # IMPORTANTE: 0.0.0.0 para Cloud Run (não localhost/127.0.0.1)
         port=port,
-        reload=getattr(config, 'debug', False),
-        log_level=getattr(config, 'log_level', 'info').lower()
+        reload=getattr(config, "debug", False),  # reload=False em produção
+        log_level=getattr(config, "log_level", "info").lower(),
     )
 
