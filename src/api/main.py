@@ -162,23 +162,36 @@ async def startup_event():
         # NÃO faz raise - apenas registra o erro
     
     # 3. Carrega modelos de ML (não crítico para o servidor subir)
-    logger.info("Carregando modelos de ML...")
-    try:
-        agent_service = get_agent_service()
-        if agent_service:
-            app.state.agent_service_available = True
-            logger.info("✅ Modelos de ML carregados")
-        else:
-            logger.warning("⚠️  AgentService retornou None")
-            app.state.startup_errors.append("AgentService: retornou None")
-    except Exception as e:
-        error_msg = f"Erro ao carregar modelos de ML: {str(e)}"
-        logger.error(f"❌ {error_msg}")
-        import traceback
-        logger.error(traceback.format_exc())
-        app.state.startup_errors.append(error_msg)
-        logger.warning("⚠️  Servidor continuará funcionando, mas funcionalidades de ML podem não estar disponíveis")
-        # NÃO faz raise - apenas registra o erro
+    # IMPORTANTE: Modelos ML podem demorar para carregar (~20s para arquivos grandes)
+    # Em vez de bloquear o startup, carregamos de forma assíncrona após o servidor subir
+    # O servidor sobe imediatamente e os modelos são carregados em background
+    # Isso evita timeouts do Cloud Run (container precisa responder rápido no startup)
+    logger.info("Carregando modelos de ML em background...")
+    from threading import Thread
+    
+    def load_models_async():
+        """Carrega modelos ML em thread separada para não bloquear startup"""
+        try:
+            logger.info("📦 Iniciando carregamento de modelos ML em background...")
+            agent_service = get_agent_service()
+            if agent_service:
+                app.state.agent_service_available = True
+                logger.info("✅ Modelos de ML carregados com sucesso")
+            else:
+                logger.warning("⚠️  AgentService retornou None")
+                app.state.startup_errors.append("AgentService: retornou None")
+        except Exception as e:
+            error_msg = f"Erro ao carregar modelos de ML: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            import traceback
+            logger.error(traceback.format_exc())
+            app.state.startup_errors.append(error_msg)
+            logger.warning("⚠️  Modelos ML não carregados, mas servidor continua funcionando")
+    
+    # Inicia carregamento em thread separada (daemon=True para não bloquear shutdown)
+    thread = Thread(target=load_models_async, daemon=True, name="LoadModelsThread")
+    thread.start()
+    logger.info("🚀 Servidor pronto - modelos ML carregando em background (não bloqueia requests)")
     
     # Resumo final do startup
     if app.state.startup_errors:
