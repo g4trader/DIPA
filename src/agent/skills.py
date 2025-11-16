@@ -32,9 +32,19 @@ def buscar_skill_por_intent(session: Session, intent: str) -> Optional[Skill]:
         intent: Intent detectada (ex.: "clientes_churn_produto")
         
     Returns:
-        Skill ou None se não encontrar skill ativa
+        Skill ou None se não encontrar skill ativa ou se houver erro
     """
     try:
+        # Verifica se a tabela skills existe antes de fazer a query
+        # Isso evita travar se a tabela não existir
+        from sqlalchemy import inspect, text
+        inspector = inspect(session.bind)
+        tables = inspector.get_table_names()
+        
+        if 'skills' not in tables:
+            logger.debug(f"Tabela 'skills' não existe no banco - retornando None para intent {intent}")
+            return None
+        
         skill = session.query(Skill).filter(
             and_(
                 Skill.intent_alvo == intent,
@@ -49,7 +59,14 @@ def buscar_skill_por_intent(session: Session, intent: str) -> Optional[Skill]:
         
         return skill
     except Exception as e:
-        logger.error(f"Erro ao buscar skill por intent {intent}: {str(e)}")
+        error_msg = str(e)
+        # Se for erro de tabela não encontrada, apenas loga como debug
+        if "no such table" in error_msg.lower() or "does not exist" in error_msg.lower():
+            logger.debug(f"Tabela 'skills' não existe - retornando None para intent {intent}")
+        else:
+            logger.error(f"Erro ao buscar skill por intent {intent}: {error_msg}")
+            import traceback
+            logger.debug(traceback.format_exc())
         return None
 
 
