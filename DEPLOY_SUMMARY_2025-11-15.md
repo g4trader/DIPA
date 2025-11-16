@@ -191,7 +191,14 @@ gcloud run services logs read dipam-ai-backend --region=us-central1 --limit=100
   - `table skills has no column named intent_prevista`
 
 **Erros Críticos**: Nenhum  
-**Erros Não Críticos**: 2 (relacionados a schema de banco, não afetam funcionalidade)
+**Erros Não Críticos**: 2 (relacionados a schema de banco, não afetam funcionalidade):
+  - `table interacoes_agent has no column named intent_prevista`
+  - `table skills has no column named intent_prevista`
+
+**Observação Importante**: 
+- A resposta da pergunta teste retornou "não temos informações" mesmo que os testes locais tenham encontrado 63 registros para outubro 2025
+- Isso pode indicar que os dados no banco de produção são diferentes dos dados locais, ou que há algum problema na extração de dados
+- Recomenda-se verificar se o banco SQLite em produção (`/app/data/dipam_dw.db`) contém os mesmos dados que o banco local
 
 ### Recomendações
 
@@ -203,7 +210,11 @@ gcloud run services logs read dipam-ai-backend --region=us-central1 --limit=100
 
 1. ✅ Validar ambiente local - CONCLUÍDO
 2. ✅ Commit e push no Git - CONCLUÍDO
-3. ⏳ Deploy do backend no Cloud Run - EM ANDAMENTO (deploy iniciado, aguardando conclusão)
+3. ⚠️ Deploy do backend no Cloud Run - PARCIALMENTE CONCLUÍDO
+   - ✅ Serviço está funcionando (`/health` responde)
+   - ⚠️ Endpoints `/health/db` e `/health/openai` retornam 404 (código mais recente pode não estar em produção)
+   - ⚠️ Deploy via `gcloud run deploy` teve timeout (revisão não criada completamente)
+   - ✅ Revisão anterior está funcionando e respondendo requisições
 4. ⏳ Configurar variáveis no Vercel - PENDENTE (aguardando deploy automático)
 5. ⏳ Validar integração frontend-backend - PENDENTE
 6. ✅ Análise de logs - CONCLUÍDO
