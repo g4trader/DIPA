@@ -1,0 +1,57 @@
+# Dockerfile para deploy do frontend Next.js no Cloud Run
+# Este Dockerfile cria uma imagem Docker para a aplicação Next.js
+
+FROM node:20-alpine AS base
+
+# Instala dependências apenas quando necessário
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Copia arquivos de dependências
+COPY package.json package-lock.json* ./
+# Usa npm install se não houver package-lock.json, caso contrário usa npm ci
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+# Rebuild do código fonte apenas quando necessário
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Desabilita telemetria do Next.js durante o build
+ENV NEXT_TELEMETRY_DISABLED 1
+
+# Faz o build da aplicação
+RUN npm run build
+
+# Imagem de produção, copia todos os arquivos e roda next start
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV production
+ENV NEXT_TELEMETRY_DISABLED 1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copia node_modules de produção (apenas dependências necessárias)
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+
+# Copia arquivos necessários
+# Cria diretório public se não existir
+RUN mkdir -p /app/public
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/next.config.mjs ./next.config.mjs
+
+USER nextjs
+
+EXPOSE 8080
+
+ENV PORT 8080
+ENV HOSTNAME "0.0.0.0"
+
+# Cloud Run espera que a aplicação escute na porta definida por PORT
+# Usa next start que lê PORT da env var
+CMD ["npm", "run", "start"]

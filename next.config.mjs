@@ -9,6 +9,15 @@ const __dirname = path.dirname(__filename);
 const nextConfig = {
   reactStrictMode: true,
   
+  // Habilita standalone output para Cloud Run
+  // Isso cria um servidor Node.js otimizado que pode ser executado independentemente
+  output: 'standalone',
+  
+  // Configura variáveis de ambiente públicas (acessíveis no navegador)
+  env: {
+    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_DIPAM_API_URL,
+  },
+  
   // Configuração explícita de path aliases para garantir compatibilidade com Vercel
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
     // Resolve caminho absoluto da raiz do projeto

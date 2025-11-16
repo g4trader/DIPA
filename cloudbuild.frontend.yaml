@@ -1,0 +1,61 @@
+# Cloud Build configuration para deploy do frontend Next.js no Cloud Run
+
+steps:
+  # Build da imagem Docker do frontend
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile.frontend'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/dipam-copilot-frontend:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/dipam-copilot-frontend:latest'
+      - '.'
+
+  # Push da imagem para Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'gcr.io/$PROJECT_ID/dipam-copilot-frontend'
+
+  # Deploy no Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'dipam-copilot-frontend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/dipam-copilot-frontend:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '1'
+      - '--timeout'
+      - '300s'
+      - '--max-instances'
+      - '10'
+      - '--min-instances'
+      - '0'
+      - '--set-env-vars'
+      - 'NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app,NODE_ENV=production'
+
+images:
+  - 'gcr.io/$PROJECT_ID/dipam-copilot-frontend:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/dipam-copilot-frontend:latest'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '1800s'
+

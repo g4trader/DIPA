@@ -1,0 +1,62 @@
+# .dockerignore para build do frontend - temporário
+# Ignora arquivos do backend Python durante build do frontend
+
+# Backend Python
+src/
+venv/
+*.py
+requirements.txt
+*.pyc
+__pycache__/
+*.db
+*.sqlite
+*.joblib
+*.pkl
+
+# Backend específico
+Dockerfile
+main.py
+cloudbuild.yaml
+alembic.ini
+migrations/
+pytest.ini
+run_tests.py
+setup.sh
+make_env.py
+
+# Arquivos de dados
+data/
+dados/
+data_processed/
+data_raw/
+models/
+
+# Notebooks
+notebooks/
+*.ipynb
+
+# Scripts Python
+scripts/*.py
+
+# Logs
+logs/
+
+# Git
+.git/
+.gitignore
+
+# Documentação (exceto README)
+*.md
+!README.md
+!README_DEPLOY.md
+
+# Configuração Python
+pyproject.toml
+poetry.lock
+Pipfile
+.python-version
+
+# Outros
+node_modules/.cache/
+.next/cache/
+
