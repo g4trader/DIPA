@@ -117,15 +117,17 @@ async def startup_event():
         init_db()
         logger.info("Conexão com banco de dados inicializada")
         
-        # Testa conexão com uma query simples
+        # Testa conexão com uma query simples (otimizada para não demorar)
         if config.database.db_type == "sqlite":
             from sqlalchemy import text
             engine = get_db_engine()
             with engine.connect() as conn:
                 try:
-                    result = conn.execute(text("SELECT COUNT(*) FROM metas_vendedor LIMIT 1"))
-                    count = result.scalar()
-                    logger.info(f"✅ Teste de conexão: {count} registros em metas_vendedor")
+                    # Query rápida: apenas verifica se a tabela existe e tem pelo menos 1 registro
+                    # Usa LIMIT 1 para evitar full scan em bancos grandes
+                    result = conn.execute(text("SELECT 1 FROM metas_vendedor LIMIT 1"))
+                    result.fetchone()  # Apenas busca primeira linha
+                    logger.info("✅ Teste de conexão: banco acessível (metas_vendedor)")
                     app.state.db_available = True
                 except Exception as e:
                     error_msg = f"Erro ao testar conexão com metas_vendedor: {str(e)}"
