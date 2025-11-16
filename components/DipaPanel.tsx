@@ -1368,7 +1368,14 @@ export default function DipaPanel() {
         observacoes: Array.isArray(response.observacoes) 
           ? response.observacoes.join("\n") 
           : (typeof response.observacoes === "string" ? response.observacoes : undefined),
+        // FASE 5: Inclui structured se disponível diretamente na resposta
+        structured: response.structured,
       };
+      
+      // Se não houver structured no payload mas houver no response, adiciona
+      if (!copilotPayload.structured && response.structured) {
+        copilotPayload.structured = response.structured;
+      }
       
       const agentMessage: ChatMessage = {
         id: crypto.randomUUID(),

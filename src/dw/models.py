@@ -411,15 +411,25 @@ class InteracaoAgent(Base):
     
     # Resumo da resposta (para aprendizado)
     resposta_resumida = Column(Text, nullable=True)  # Resumo curto da resposta
+    resumo_executivo = Column(Text, nullable=True)  # Resumo executivo extraído da resposta estruturada (FASE 4)
     
     # Contexto resumido (apenas números chave, não o contexto completo)
     # Usa JSON para flexibilidade, ou Text como fallback para SQLite
     contexto_resumido = Column(JSON, nullable=True)
+    debug_payload = Column(JSON, nullable=True)  # Contexto de debug completo (FASE 4)
+    
+    # Fonte de dados e métricas de processamento (FASE 4)
+    fonte_dados_principal = Column(String(100), nullable=True)  # Ex.: "analytics_vendedor_mes", "analytics_cliente_mes"
+    num_registros_usados = Column(Integer, nullable=True)  # Quantidade de linhas de analytics consultadas
+    tempo_processamento_ms = Column(Integer, nullable=True)  # Latência total da pergunta em milissegundos
     
     # Feedback do usuário e sucesso (para aprendizado contínuo)
     sucesso = Column(Boolean, nullable=True, index=True)  # True = resposta baseada em dados reais, False = fallback
+    sucesso_resposta = Column(Boolean, nullable=True, index=True)  # Alias para sucesso (FASE 4 - compatibilidade)
     feedback_usuario = Column(String(20), nullable=True)  # 👍/👎 (opcional, futuro)
+    feedback_qualidade = Column(Integer, nullable=True, index=True)  # Escala 1-5 (FASE 4)
     comentario = Column(Text, nullable=True)  # Comentário do usuário sobre a resposta
+    feedback_comentario = Column(Text, nullable=True)  # Alias para comentario (FASE 4 - compatibilidade)
     
     # Tags opcionais para categorização
     tags = Column(Text, nullable=True)

@@ -225,6 +225,36 @@ def run_ingestion_pipeline():
                 stats['unknown']['arquivos'] += 1
                 print_warning(f"  {csv_file.name} - Tipo não identificado")
         
+        # Build de Analytics (opcional, após carga de dados)
+        mes_anos_processados = set()
+        for file_type in ['metas_vendedor', 'metas_departamento', 'vendas']:
+            if files_by_type.get(file_type):
+                for csv_file, metadata in files_by_type[file_type]:
+                    mes_ano = metadata.get('mes_ano')
+                    if mes_ano and mes_ano != 'N/A':
+                        mes_anos_processados.add(mes_ano)
+        
+        if mes_anos_processados:
+            print_section("Construindo Tabelas de Analytics")
+            try:
+                from scripts.build_analytics import run_all_analytics
+                
+                # Processa analytics para cada mes_ano único encontrado
+                for mes_ano in sorted(mes_anos_processados):
+                    print(f"  Construindo analytics para {mes_ano}...", end=' ', flush=True)
+                    try:
+                        stats_analytics = run_all_analytics(mes_ano=mes_ano)
+                        total = sum(stats_analytics.values())
+                        print_success(f"{total} registros de analytics criados")
+                    except Exception as e:
+                        print_error(f"Erro: {str(e)}")
+                        logger.exception(f"Erro ao construir analytics para {mes_ano}")
+            except ImportError:
+                print_warning("Módulo build_analytics não encontrado - pulando construção de analytics")
+            except Exception as e:
+                print_warning(f"Erro ao construir analytics: {str(e)}")
+                logger.exception("Erro ao construir analytics")
+        
         # Resumo final
         print_header("Resumo Final")
         

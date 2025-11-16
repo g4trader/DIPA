@@ -99,6 +99,35 @@ export type CopilotAnswerPayload = {
   kpis?: KpisData;
   topVendedores?: TopVendedor[];
   respostaMarkdown?: string;
+  /** Resposta estruturada com seções, tabelas e insights preditivos (FASE 3 + FASE 5) */
+  structured?: {
+    resumo_executivo?: string;
+    secoes?: Array<{
+      titulo: string;
+      tipo: string;
+      dados: any[];
+    }>;
+    detalhe_tabela?: {
+      titulo?: string;
+      colunas: string[];
+      linhas: any[][];
+    };
+    contexto_debug?: any;
+    insights_preditivos?: {
+      churn?: {
+        total_clientes_risco_alto: number;
+        top_clientes: any[];
+      };
+      meta_risk?: {
+        vendedores_risco_alto: number;
+        detalhes: any[];
+      };
+      oportunidades?: {
+        total_clientes_potencial: number;
+        top_clientes: any[];
+      };
+    };
+  };
 };
 
 export type AskResponse = {
@@ -124,6 +153,8 @@ export type AskResponse = {
   timestamp: string;
   /** Payload estruturado para o CopilotAnswerCard */
   payload?: CopilotAnswerPayload;
+  /** Resposta estruturada direta (FASE 3 + FASE 5) */
+  structured?: CopilotAnswerPayload["structured"];
 };
 
 /**

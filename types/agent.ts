@@ -113,21 +113,123 @@ export type ClienteCriticoItem = {
 };
 
 /**
- * Resposta estruturada do Copilot (formato dashboard)
- * Este é o formato que o backend deve retornar quando há dados estruturados
+ * Seção de resposta estruturada
+ */
+export interface SecaoResposta {
+  /** Título da seção */
+  titulo: string;
+  /** Tipo da seção: lista_vendedores, lista_clientes, lista_produtos, lista_recomendacoes, texto */
+  tipo: string;
+  /** Dados da seção (formato varia conforme o tipo) */
+  dados: any[];
+}
+
+/**
+ * Tabela detalhada para botão "Ver detalhamento"
+ */
+export interface DetalheTabela {
+  /** Nomes das colunas */
+  colunas: string[];
+  /** Linhas de dados (array de arrays) */
+  linhas: any[][];
+  /** Título opcional da tabela */
+  titulo?: string;
+}
+
+/**
+ * Contexto de debug (colapsado)
+ */
+export interface ContextoDebug {
+  /** Intent detectada */
+  intent: string;
+  /** Entidades extraídas */
+  entidades: Record<string, any>;
+  /** Fonte dos dados usados */
+  fonte_dados: string;
+  /** Mês/ano resolvido */
+  mes_ano_resolvido?: string;
+  /** Total de registros processados */
+  total_registros?: number;
+  /** Tempo de processamento em ms */
+  tempo_processamento_ms?: number;
+}
+
+/**
+ * Insights preditivos de ML (FASE 5)
+ */
+export interface InsightsPreditivos {
+  /** Insights de churn de clientes */
+  churn?: {
+    /** Total de clientes em alto risco de churn */
+    total_clientes_risco_alto: number;
+    /** Top clientes com maior probabilidade de churn */
+    top_clientes: Array<{
+      cliente_id: number;
+      cliente_nome: string;
+      prob_churn: number;
+      vendedor_id?: number;
+      dias_desde_ultima_compra?: number;
+      faturamento_12m?: number;
+    }>;
+  };
+  /** Insights de risco de meta de vendedores */
+  meta_risk?: {
+    /** Número de vendedores com alto risco de não bater meta */
+    vendedores_risco_alto: number;
+    /** Detalhes dos vendedores em risco */
+    detalhes: Array<{
+      vendedor_id: number;
+      vendedor_nome: string;
+      prob_nao_bater_meta: number;
+      meta: number;
+      realizado: number;
+      atingimento: number;
+      gap: number;
+    }>;
+  };
+  /** Insights de oportunidades de crescimento */
+  oportunidades?: {
+    /** Total de clientes com potencial de crescimento */
+    total_clientes_potencial: number;
+    /** Top clientes com maior potencial */
+    top_clientes: Array<{
+      cliente_id: number;
+      cliente_nome: string;
+      score_oportunidade: number;
+      fat_atual: number;
+      fat_max_12m: number;
+      percentual_vs_max: number;
+      vendedor_id?: number;
+    }>;
+  };
+}
+
+/**
+ * Resposta estruturada do Copilot (formato dashboard FASE 3 + FASE 5)
+ * Este é o formato que o backend retorna quando há dados estruturados
  */
 export interface CopilotStructuredResponse {
-  /** Resumo executivo em texto (2-4 parágrafos) */
+  /** Resumo executivo em texto (3-5 frases) */
+  resumo_executivo: string;
+  /** Lista de seções com dados organizados */
+  secoes: SecaoResposta[];
+  /** Tabela detalhada para botão "Ver detalhamento" */
+  detalhe_tabela?: DetalheTabela;
+  /** Contexto técnico para debug (colapsado) */
+  contexto_debug?: ContextoDebug;
+  /** Insights preditivos de ML (FASE 5) */
+  insights_preditivos?: InsightsPreditivos;
+  
+  // Compatibilidade com formato antigo (DEPRECATED)
+  /** @deprecated Use resumo_executivo */
   resumoExecutivo?: string;
-  /** KPIs do mês/período */
-  kpis?: KpiItem[];
-  /** Ranking de vendedores */
+  /** @deprecated Use secoes com tipo="lista_vendedores" */
   rankingVendedores?: RankingVendedorItem[];
-  /** Clientes críticos/problemáticos */
+  /** @deprecated Use secoes com tipo="lista_clientes" */
   clientesCriticos?: ClienteCriticoItem[];
-  /** Insights e recomendações (lista de strings) */
+  /** @deprecated Use secoes com tipo="lista_recomendacoes" */
   insightsRecomendacoes?: string[];
-  /** JSON técnico completo (opcional, para debug) */
+  /** @deprecated Use contexto_debug */
   jsonTecnico?: any;
 }
 

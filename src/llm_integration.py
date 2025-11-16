@@ -1204,6 +1204,103 @@ mas ainda assim não invente números.
         return f"Erro ao processar pergunta: {str(e)}", 0.2
 
 
+def gerar_resposta_llm_diretor(
+    contexto: Dict[str, Any],
+    pergunta: str,
+    tipo: str = "resumo_executivo"
+) -> str:
+    """
+    Gera resposta do LLM no estilo "Diretor Comercial Digital" (FASE 3).
+    
+    Args:
+        contexto: Dicionário com dados estruturados (analytics)
+        pergunta: Pergunta do usuário
+        tipo: Tipo de resposta ("resumo_executivo", "recomendacoes")
+        
+    Returns:
+        str: Resposta do LLM em linguagem de Diretor
+    """
+    logger.info(f"Gerando resposta LLM Diretor (tipo={tipo}) para: {pergunta[:100]}...")
+    
+    # System prompt estilo Diretor Comercial
+    system_prompt = """Você é o DIPAM COPILOT, um Diretor Comercial Digital da DIPAM.
+
+PERSONA:
+- Fale sempre com foco em negócios, em tom executivo e direto
+- Profissional mas acessível
+- Focado em insights acionáveis
+
+REGRAS FUNDAMENTAIS - ZERO INVENÇÃO DE DADOS:
+1. Use APENAS os dados numéricos fornecidos no contexto JSON
+2. NUNCA invente valores, períodos, produtos, quantidades, vendedores ou clientes
+3. Se um dado não estiver presente no contexto, NÃO cite
+4. Use formatação brasileira: R$ 1.000,00 e 85,5%
+5. Seja preciso: use números exatos do contexto
+
+ESTRUTURA PARA RESUMO EXECUTIVO:
+- 3-5 frases em linguagem de Diretor
+- Cite números-chave (R$, %, ranking) de forma resumida
+- Explique o que está acontecendo de forma geral
+- Identifique principais responsáveis (vendedores, rotas)
+- Mencione o impacto (gap total, % do gap)
+
+NUNCA diga "não tenho dados" se o contexto indicar que há dados.
+Se a camada de código marcar tem_dados = true, sempre traga alguma análise."""
+    
+    # Monta prompt específico
+    if tipo == "resumo_executivo":
+        # FASE 5: Adiciona informações sobre insights preditivos se disponíveis
+        insights_texto = ""
+        insights_preditivos = contexto.get("insights_preditivos", {})
+        
+        if insights_preditivos.get("meta_risk"):
+            meta_risk = insights_preditivos["meta_risk"]
+            vendedores_risco_alto = meta_risk.get("vendedores_risco_alto", 0)
+            detalhes = meta_risk.get("detalhes", [])
+            
+            if vendedores_risco_alto > 0:
+                insights_texto = f"\n\nINSIGHTS PREDITIVOS (ML):\n"
+                insights_texto += f"- Há {vendedores_risco_alto} vendedores com probabilidade acima de 70% de não bater a meta (baseado em modelo de ML).\n"
+                if detalhes:
+                    top_vendedores = detalhes[:3]  # Top 3
+                    nomes_risco = ", ".join([v.get("vendedor_nome", "N/A") for v in top_vendedores])
+                    insights_texto += f"- Principais vendedores em risco: {nomes_risco}.\n"
+        
+        prompt = f"""Com base nos dados abaixo, escreva um resumo executivo de 3-5 frases explicando por que não batemos a meta no mês {contexto.get('mes_ano', 'N/A')}.
+
+Dados:
+- Meta total: R$ {contexto.get('meta_total', 0):,.2f}
+- Realizado total: R$ {contexto.get('realizado_total', 0):,.2f}
+- Gap total: R$ {contexto.get('gap_total', 0):,.2f}
+- Atingimento médio: {contexto.get('atingimento_medio', 0):.1f}%
+- Total de vendedores: {contexto.get('total_vendedores', 0)}
+- Vendedores em risco: {contexto.get('total_vendedores_em_risco', 0)}
+{insights_texto}
+Principais responsáveis:
+{json.dumps(contexto.get('piores_vendedores', [])[:5], ensure_ascii=False, indent=2)}
+
+Escreva o resumo executivo em linguagem de Diretor, citando os principais vendedores e o impacto deles no gap total.{" Se houver insights preditivos acima, mencione-os explicitamente no resumo." if insights_texto else ""}"""
+    else:
+        prompt = f"""Com base nos dados abaixo, gere recomendações práticas para o Diretor.
+
+Dados:
+{json.dumps(contexto, ensure_ascii=False, indent=2)}
+
+Gere 3-7 ações claras e práticas."""
+    
+    try:
+        resposta = call_openai_llm(
+            system_prompt=system_prompt,
+            user_prompt=prompt,
+            temperature=0.3,  # Mais determinístico para respostas de Diretor
+            max_tokens=500
+        )
+        return resposta.strip()
+    except Exception as e:
+        logger.error(f"Erro ao gerar resposta LLM Diretor: {str(e)}")
+        raise
+
+
 def gerar_resposta_performance_vendedores(
     pergunta: str,
     contexto: Dict[str, Any]

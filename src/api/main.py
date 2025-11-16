@@ -349,6 +349,8 @@ class AskResponse(BaseModel):
     timestamp: str = Field(..., description="Timestamp da resposta")
     # Payload estruturado para o CopilotAnswerCard
     payload: Optional[Dict[str, Any]] = Field(None, description="Payload estruturado CopilotAnswerPayload")
+    # NOVO FASE 3: Resposta estruturada completa (CopilotStructuredResponse)
+    structured: Optional[Dict[str, Any]] = Field(None, description="Resposta estruturada completa com secoes, detalhe_tabela, contexto_debug")
     
     class Config:
         json_schema_extra = {
@@ -400,6 +402,22 @@ class FeedbackRequest(BaseModel):
             "example": {
                 "sucesso": True,
                 "comentario": "Resposta muito clara e útil para entender a situação da meta."
+            }
+        }
+
+
+class FeedbackRequestFase4(BaseModel):
+    """Modelo de requisição para endpoint /feedback (FASE 4 - novo formato)."""
+    interacao_id: int = Field(..., description="ID da interação a receber feedback", gt=0)
+    feedback_qualidade: int = Field(..., description="Qualidade da resposta em escala 1-5", ge=1, le=5)
+    feedback_comentario: Optional[str] = Field(None, description="Comentário opcional do Diretor (máx. 2000 caracteres)", max_length=2000)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "interacao_id": 123,
+                "feedback_qualidade": 4,
+                "feedback_comentario": "Resposta boa, mas poderia detalhar mais os clientes em risco."
             }
         }
 
@@ -958,6 +976,13 @@ def _extrair_dados_estruturados(result: Dict[str, Any], pergunta: str) -> Dict[s
     # Extrai observações da seção "Observações sobre os dados"
     observacoes = _extrair_lista_markdown(resposta_texto, "Observações sobre os dados")
     
+    # NOVO FASE 3: Verifica se há resposta estruturada (CopilotStructuredResponse)
+    structured = None
+    if "structured" in contexto:
+        structured = contexto["structured"]
+    elif "structured" in result:
+        structured = result["structured"]
+    
     return {
         "question": pergunta,
         "intent": result.get("intent", "outros"),
@@ -968,7 +993,8 @@ def _extrair_dados_estruturados(result: Dict[str, Any], pergunta: str) -> Dict[s
         "insights": insights if insights else None,
         "observacoes": observacoes if observacoes else None,
         "contexto": _resumir_contexto(contexto),
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        "structured": structured  # NOVO: formato estruturado FASE 3
     }
 
 
@@ -1083,6 +1109,9 @@ async def ask_question(
         }
     """
     try:
+        import time
+        start_time = time.perf_counter()
+        
         logger.info(f"Pergunta recebida: {request.pergunta[:100]}...")
         
         # Obtém serviço do agente (com lazy loading/retry)
@@ -1147,32 +1176,77 @@ async def ask_question(
         
         response = AskResponse(**dados_estruturados)
         
-        # Salva interação no banco de dados (não bloqueia se falhar)
+        # Calcula tempo de processamento
+        tempo_processamento_ms = int((time.perf_counter() - start_time) * 1000)
+        
+        # FASE 4: Registra interação com todos os metadados necessários
         try:
-            # Cria um contexto resumido com apenas números chave (não o contexto completo)
-            contexto_resumido = _resumir_contexto(result.get("contexto", {}))
+            from src.agent.interaction_registry import registrar_interacao_agent
             
-            interacao = InteracaoAgent(
-                usuario_id=request.usuario_id,
-                papel=request.papel,
-                pergunta=request.pergunta,
-                resposta=result["resposta"],
-                intent=result["intent"],
-                confianca=result["confianca"],
-                contexto_resumido=contexto_resumido,
-                sucesso=None  # Será preenchido depois pelo feedback do usuário
+            # Extrai entidades do resultado
+            entidades = result.get("entities", {}) or result.get("contexto", {}).get("entities", {})
+            
+            # Determina se a resposta foi bem-sucedida (tem dados reais)
+            sucesso_resposta = bool(
+                result.get("structured") or 
+                result.get("contexto", {}).get("piores_meta") or
+                result.get("contexto", {}).get("detalhe_vendedores_mes") or
+                copilot_payload.get("structured")
             )
             
-            session.add(interacao)
-            session.commit()
+            # Determina fonte de dados principal
+            fonte_dados_principal = None
+            contexto_debug = None
+            if copilot_payload.get("structured"):
+                contexto_debug = copilot_payload["structured"].get("contexto_debug", {})
+                if isinstance(contexto_debug, dict):
+                    fonte_dados_principal = contexto_debug.get("fonte_dados")
             
-            logger.info(f"Interação salva com sucesso (ID: {interacao.id})")
+            # Conta número de registros usados
+            num_registros_usados = None
+            contexto = result.get("contexto", {})
+            if contexto:
+                # Tenta contar registros de diferentes fontes
+                if "piores_meta" in contexto and isinstance(contexto["piores_meta"], list):
+                    num_registros_usados = len(contexto["piores_meta"])
+                elif "detalhe_vendedores_mes" in contexto:
+                    vendedores = contexto["detalhe_vendedores_mes"].get("vendedores", [])
+                    if isinstance(vendedores, list):
+                        num_registros_usados = len(vendedores)
+                elif contexto_debug and isinstance(contexto_debug, dict):
+                    num_registros_usados = contexto_debug.get("total_registros")
+            
+            # Prepara resposta completa para registro
+            resposta_completa = {
+                "structured": copilot_payload.get("structured"),
+                "resposta": result.get("resposta", ""),
+                "confianca": result.get("confianca", 0.0),
+                "contexto_debug": contexto_debug,
+                "resumoExecutivo": copilot_payload.get("resumoExecutivo"),
+            }
+            
+            # Registra interação
+            interacao_id = registrar_interacao_agent(
+                session=session,
+                papel_usuario=request.papel,
+                pergunta=request.pergunta,
+                intent=result.get("intent", "outros"),
+                entidades=entidades,
+                resposta=resposta_completa,
+                sucesso_resposta=sucesso_resposta,
+                fonte_dados_principal=fonte_dados_principal,
+                num_registros_usados=num_registros_usados,
+                tempo_processamento_ms=tempo_processamento_ms
+            )
+            
+            if interacao_id:
+                logger.info(f"✅ Interação registrada (ID: {interacao_id}, tempo: {tempo_processamento_ms}ms)")
         
         except Exception as e:
-            # Não bloqueia a resposta se o insert falhar
-            logger.error(f"Erro ao salvar interação no banco: {str(e)}")
-            session.rollback()
-            # Continua normalmente
+            # NÃO bloqueia a resposta se falhar
+            logger.warning(f"⚠️  Erro ao registrar interação (não bloqueia resposta): {str(e)}")
+            import traceback
+            logger.debug(traceback.format_exc())
         
         return response
     
@@ -1253,6 +1327,131 @@ async def preview_vendedor(
     except Exception as e:
         logger.error(f"Erro ao buscar dados: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro ao buscar dados: {str(e)}")
+
+
+@app.get("/ml/status", response_model=Dict[str, Any])
+async def ml_status():
+    """
+    Endpoint de status dos modelos ML (FASE 5).
+    
+    Retorna informações sobre quais modelos estão treinados e disponíveis.
+    
+    Returns:
+        Dict com status de cada modelo (churn, meta_risk, oportunidades)
+    """
+    try:
+        from src.ml.model_registry import list_models
+        
+        registry = list_models()
+        
+        modelos_status = {}
+        tipos_modelos = ["churn", "meta_risk", "oportunidades"]
+        
+        for tipo in tipos_modelos:
+            if tipo in registry and registry[tipo].get("treinado"):
+                modelos_status[tipo] = {
+                    "treinado": True,
+                    "trained_at": registry[tipo].get("trained_at"),
+                    "mes_inicio": registry[tipo].get("mes_inicio"),
+                    "mes_fim": registry[tipo].get("mes_fim"),
+                    "mes_referencia": registry[tipo].get("mes_referencia"),  # Para oportunidades
+                    "n_samples": registry[tipo].get("n_samples"),
+                    "accuracy": registry[tipo].get("accuracy"),
+                    "roc_auc": registry[tipo].get("roc_auc")
+                }
+            else:
+                modelos_status[tipo] = {
+                    "treinado": False
+                }
+        
+        return {
+            "status": "ok",
+            "modelos": modelos_status
+        }
+    
+    except Exception as e:
+        logger.error(f"Erro ao obter status dos modelos ML: {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "modelos": {
+                "churn": {"treinado": False},
+                "meta_risk": {"treinado": False},
+                "oportunidades": {"treinado": False}
+            }
+        }
+
+
+@app.post("/feedback", response_model=Dict[str, Any])
+async def feedback_interacao_fase4(
+    feedback: FeedbackRequestFase4 = ...,
+    session: Session = Depends(get_db_session)
+):
+    """
+    Endpoint de feedback sobre uma interação do agente (FASE 4).
+    
+    Permite que o Diretor avalie a qualidade da resposta em escala 1-5
+    e forneça comentários para melhorar o sistema.
+    
+    Args:
+        feedback: Dados do feedback (interacao_id, feedback_qualidade, feedback_comentario)
+        session: Sessão de banco de dados (injetada)
+        
+    Returns:
+        Dict com status e mensagem
+        
+    Raises:
+        HTTPException 404: Se a interação não for encontrada
+        HTTPException 500: Em caso de erro ao atualizar
+        
+    Example:
+        POST /feedback
+        {
+            "interacao_id": 123,
+            "feedback_qualidade": 4,
+            "feedback_comentario": "Resposta boa, mas poderia detalhar mais os clientes em risco."
+        }
+    """
+    try:
+        logger.info(f"Recebendo feedback FASE 4 para interação {feedback.interacao_id}: qualidade={feedback.feedback_qualidade}")
+        
+        # Busca a interação no banco
+        interacao = session.query(InteracaoAgent).filter(
+            InteracaoAgent.id == feedback.interacao_id
+        ).first()
+        
+        if not interacao:
+            logger.warning(f"Interação {feedback.interacao_id} não encontrada")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Interação com ID {feedback.interacao_id} não encontrada"
+            )
+        
+        # Atualiza os campos de feedback
+        interacao.feedback_qualidade = feedback.feedback_qualidade
+        if feedback.feedback_comentario:
+            interacao.feedback_comentario = feedback.feedback_comentario
+            interacao.comentario = feedback.feedback_comentario  # Mantém compatibilidade
+        
+        session.commit()
+        
+        logger.info(f"✅ Feedback FASE 4 salvo com sucesso para interação {feedback.interacao_id}")
+        
+        return {
+            "status": "ok",
+            "message": "Feedback registrado com sucesso",
+            "interacao_id": interacao.id
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao salvar feedback FASE 4 para interação {feedback.interacao_id}: {str(e)}")
+        session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao salvar feedback: {str(e)}"
+        )
 
 
 @app.post("/feedback/{interacao_id}", response_model=FeedbackResponse)

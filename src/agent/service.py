@@ -30,6 +30,25 @@ from src.agent.queries import (
     query_vendedores_menor_venda,
     analisar_meta_mensal
 )
+from src.agent.queries_analytics import (
+    get_resumo_meta_por_vendedor,
+    get_piores_vendedores_por_gap,
+    get_melhores_vendedores_por_atingimento,
+    get_clientes_criticos_churn,
+    get_produtos_em_queda,
+    get_alertas_criticos
+)
+from src.agent.structured_response_builder import (
+    construir_secao_vendedores,
+    construir_secao_clientes,
+    construir_secao_produtos,
+    construir_secao_recomendacoes,
+    construir_detalhe_tabela_vendedores,
+    construir_contexto_debug,
+    construir_resposta_estruturada
+)
+from src.agent.schemas_structured import CopilotStructuredResponse
+from src.dw.models_analytics import AnalyticsVendedorMes, AnalyticsClienteMes, AnalyticsProdutoMes, AnalyticsAlerta
 from src.models_ml import MetaModel, ChurnModel
 from src.dw.connection import get_db_session
 from src.dw.models import MetaVendedor, Venda
@@ -1483,11 +1502,232 @@ class AgentService:
         meta_valor = dados.get("meta_valor", dados.get("total_meta", 0))
         realizado_valor = dados.get("realizado_valor", dados.get("total_realizado", 0))
         perc_atingido = dados.get("perc_atingido", dados.get("perc_atingido_geral", 0))
+    
+    def _handle_meta_query_diretor_analytics(
+        self,
+        session: Session,
+        mes_ano: str,
+        entities: Dict[str, Any],
+        contexto_memoria: Optional[Dict[str, Any]] = None,
+        papel: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Manipula consultas de meta do Diretor usando analytics_* (FASE 3).
         
-        resposta = f"A meta para {mes_ano_formatado} foi de **R$ {meta_valor:,.2f}**.\n\n"
-        resposta += f"O faturado foi de **R$ {realizado_valor:,.2f}**, resultando em **{perc_atingido:.1f}% de atingimento**.\n"
+        Usa tabelas analytics_vendedor_mes, analytics_alertas para construir
+        resposta estruturada com cards "wow" para o frontend.
         
-        return resposta
+        Args:
+            session: Sessão SQLAlchemy
+            mes_ano: Mês/ano no formato "YYYY-MM"
+            entities: Entidades extraídas
+            contexto_memoria: Contexto de memória
+            papel: Papel do usuário
+            
+        Returns:
+            dict: Contexto com resposta estruturada (CopilotStructuredResponse)
+        """
+        t_start = time.perf_counter()
+        logger.info(f"[_handle_meta_query_diretor_analytics] Processando consulta de meta com analytics para {mes_ano}")
+        
+        # 1. Busca dados de analytics_vendedor_mes
+        vendedores_analytics = session.query(AnalyticsVendedorMes).filter(
+            AnalyticsVendedorMes.mes_ano == mes_ano
+        ).all()
+        
+        if not vendedores_analytics:
+            # Sem dados para o período
+            return {
+                "intent": "consulta_meta",
+                "entities": entities,
+                "mes_ano": mes_ano,
+                "resposta": f"Não encontrei dados de metas e realizados para {mes_ano}. Verifique se os dados foram carregados e se o período está correto.",
+                "confianca": 0.5,
+                "structured": None
+            }
+        
+        # 2. Calcula resumo agregado
+        meta_total = sum(float(v.meta_total) for v in vendedores_analytics)
+        realizado_total = sum(float(v.realizado_total) for v in vendedores_analytics)
+        gap_total = realizado_total - meta_total
+        atingimento_medio = (realizado_total / meta_total * 100) if meta_total > 0 else 0.0
+        
+        # 3. Busca piores vendedores (por gap negativo e meta_risk_flag)
+        piores_vendedores = session.query(AnalyticsVendedorMes).filter(
+            AnalyticsVendedorMes.mes_ano == mes_ano,
+            AnalyticsVendedorMes.meta_risk_flag == True
+        ).order_by(
+            AnalyticsVendedorMes.gap_valor.asc().nulls_last(),
+            AnalyticsVendedorMes.meta_risk_score.desc().nulls_last()
+        ).limit(10).all()
+        
+        # 4. Busca alertas críticos
+        alertas = session.query(AnalyticsAlerta).filter(
+            AnalyticsAlerta.mes_ano == mes_ano,
+            AnalyticsAlerta.nivel.in_(["alto", "medio"])
+        ).order_by(
+            AnalyticsAlerta.nivel.asc()  # alto primeiro
+        ).limit(10).all()
+        
+        # 4.5. FASE 5: Previsões ML (meta_risk)
+        insights_preditivos = {}
+        try:
+            from src.ml.predictor import prever_risco_meta_vendedores
+            previsoes_meta_risk = prever_risco_meta_vendedores(
+                session=session,
+                mes_referencia=mes_ano,
+                limite=10
+            )
+            
+            if previsoes_meta_risk:
+                insights_preditivos["meta_risk"] = {
+                    "vendedores_risco_alto": len([p for p in previsoes_meta_risk if p["prob_nao_bater_meta"] >= 0.7]),
+                    "detalhes": previsoes_meta_risk[:5]  # Top 5
+                }
+                logger.info(f"[_handle_meta_query_diretor_analytics] Previsões ML: {len(previsoes_meta_risk)} vendedores com risco")
+        except Exception as e:
+            logger.warning(f"⚠️  Erro ao obter previsões ML de meta_risk: {str(e)}")
+            # Continua sem previsões ML
+        
+        # 5. Constrói seções
+        secoes = []
+        
+        # Seção: Piores vendedores
+        if piores_vendedores:
+            secoes.append(construir_secao_vendedores(
+                piores_vendedores,
+                titulo="Principais responsáveis pelo não atingimento da meta"
+            ))
+        
+        # Seção: Alertas críticos (se houver)
+        if alertas:
+            alertas_data = []
+            for a in alertas:
+                alertas_data.append({
+                    "tipo_alerta": a.tipo_alerta,
+                    "descricao": a.descricao,
+                    "nivel": a.nivel,
+                    "referencia_nome": a.referencia_nome,
+                    "detalhes": a.detalhes_json
+                })
+            secoes.append(SecaoResposta(
+                titulo="Alertas críticos de meta",
+                tipo="texto",
+                dados=[{"texto": "\n".join([f"• {a.descricao}" for a in alertas])}]
+            ))
+        
+        # 6. Constrói tabela detalhada
+        detalhe_tabela = construir_detalhe_tabela_vendedores(
+            piores_vendedores if piores_vendedores else vendedores_analytics[:20],
+            titulo="Detalhamento de Vendedores"
+        )
+        
+        # 7. Gera resumo executivo usando LLM
+        contexto_llm = {
+            "mes_ano": mes_ano,
+            "meta_total": meta_total,
+            "realizado_total": realizado_total,
+            "gap_total": gap_total,
+            "atingimento_medio": atingimento_medio,
+            "piores_vendedores": [
+                {
+                    "vendedor_nome": v.vendedor_nome,
+                    "gap_valor": float(v.gap_valor) if v.gap_valor else 0,
+                    "atingimento_pct": float(v.atingimento_pct) if v.atingimento_pct else 0,
+                    "meta_risk_score": float(v.meta_risk_score) if v.meta_risk_score else 0
+                }
+                for v in piores_vendedores[:5]
+            ],
+            "total_vendedores": len(vendedores_analytics),
+            "total_vendedores_em_risco": len(piores_vendedores),
+            # FASE 5: Adiciona insights preditivos
+            "insights_preditivos": insights_preditivos
+        }
+        
+        pergunta_original = entities.get("pergunta_original", "por que não batemos a meta")
+        
+        # Chama LLM para gerar resumo executivo
+        try:
+            from src.llm_integration import gerar_resposta_llm_diretor
+            resumo_executivo = gerar_resposta_llm_diretor(
+                contexto_llm,
+                pergunta_original,
+                tipo="resumo_executivo"
+            )
+        except Exception as e:
+            logger.warning(f"Erro ao gerar resumo executivo com LLM: {str(e)}")
+            # Fallback: resumo simples
+            piores_nomes = ", ".join([v.vendedor_nome for v in piores_vendedores[:3]])
+            resumo_executivo = (
+                f"No mês de {mes_ano}, a DIPAM não atingiu a meta principalmente por causa de "
+                f"{len(piores_vendedores)} rotas com grande gap de faturamento. "
+                f"As principais responsáveis foram: {piores_nomes}. "
+                f"Juntas, elas deixaram de faturar R$ {abs(gap_total):,.2f} em relação à meta planejada."
+            )
+        
+        # 8. Gera recomendações
+        recomendacoes = []
+        for v in piores_vendedores[:5]:
+            recomendacoes.append({
+                "descricao": f"Agendar reunião com supervisor da rota {v.vendedor_nome} para análise do gap de R$ {abs(float(v.gap_valor)):,.2f}",
+                "prioridade": "alta" if v.meta_risk_score and float(v.meta_risk_score) >= 80 else "media",
+                "tipo": "vendedor",
+                "referencia_id": v.vendedor_id,
+                "referencia_nome": v.vendedor_nome
+            })
+        
+        if recomendacoes:
+            secoes.append(construir_secao_recomendacoes(recomendacoes))
+        
+        # 9. Constrói contexto de debug
+        t_end = time.perf_counter()
+        tempo_ms = (t_end - t_start) * 1000
+        
+        contexto_debug = construir_contexto_debug(
+            intent="consulta_meta",
+            entities=entities,
+            mes_ano=mes_ano,
+            fonte_dados="analytics_vendedor_mes, analytics_alertas",
+            total_registros=len(vendedores_analytics),
+            tempo_processamento_ms=tempo_ms
+        )
+        
+        # 10. Constrói resposta estruturada completa
+        resposta_estruturada = construir_resposta_estruturada(
+            resumo_executivo=resumo_executivo,
+            secoes=secoes,
+            detalhe_tabela=detalhe_tabela,
+            contexto_debug=contexto_debug
+        )
+        
+        # 11. Converte para dict para retornar
+        resposta_dict = resposta_estruturada.dict()
+        
+        # FASE 5: Adiciona insights preditivos à resposta estruturada
+        if insights_preditivos:
+            resposta_dict["insights_preditivos"] = insights_preditivos
+        
+        # 12. Retorna contexto compatível com formato antigo + novo formato estruturado
+        contexto = {
+            "intent": "consulta_meta",
+            "entities": entities,
+            "mes_ano": mes_ano,
+            "resposta": resumo_executivo,  # Mantém compatibilidade
+            "confianca": 0.95,
+            "structured": resposta_dict,  # NOVO: formato estruturado
+            "resumo": {
+                "meta_total": meta_total,
+                "realizado_total": realizado_total,
+                "gap_total": gap_total,
+                "atingimento_medio": atingimento_medio,
+                "total_vendedores": len(vendedores_analytics),
+                "total_vendedores_em_risco": len(piores_vendedores)
+            }
+        }
+        
+        logger.info(f"[_handle_meta_query_diretor_analytics] Resposta estruturada construída em {tempo_ms:.1f}ms")
+        
+        return contexto
     
     def _handle_meta_query(
         self,
@@ -1566,9 +1806,35 @@ class AgentService:
             "mes_ano": mes_ano
         }
         
-        # Verifica se pergunta "quem bateu meta"
+        # NOVA LÓGICA FASE 3: Detecta perguntas do Diretor e usa analytics
         pergunta_original = entities.get("pergunta_original", "")
         pergunta_lower = pergunta_original.lower() if pergunta_original else ""
+        is_diretor_query = (
+            papel and "diretor" in papel.lower()
+        ) or (
+            "diretor" in pergunta_lower or
+            "por que não batemos" in pergunta_lower or
+            "porque não batemos" in pergunta_lower or
+            "não batemos a meta" in pergunta_lower or
+            "detalhada" in pergunta_lower or
+            "detalhado" in pergunta_lower
+        )
+        
+        # Se for pergunta do Diretor sobre meta, usa analytics
+        if is_diretor_query and mes_ano:
+            try:
+                return self._handle_meta_query_diretor_analytics(
+                    session=session,
+                    mes_ano=mes_ano,
+                    entities=entities,
+                    contexto_memoria=contexto_memoria,
+                    papel=papel
+                )
+            except Exception as e:
+                logger.warning(f"Erro ao processar consulta de meta com analytics (fallback para método antigo): {str(e)}")
+                # Continua com fluxo normal se analytics falhar
+        
+        # Verifica se pergunta "quem bateu meta"
         if "quem" in pergunta_lower and "bateu" in pergunta_lower:
             # Query: quem bateu meta
             vendedores = query_vendedores_que_bateram_meta(session, mes_ano)

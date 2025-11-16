@@ -576,6 +576,259 @@ gcloud run services logs read dipam-ai-backend --region=us-central1 --limit=100
    - Taxa de erro
    - Uso de memória/CPU
 
+## ⏰ Jobs Agendados (Analytics + Aprendizado) - FASE 4
+
+O DIPAM COPILOT™ mantém os dados sempre atualizados através de jobs agendados que recalculam analytics e scores automaticamente.
+
+### Objetivo
+
+Manter o sistema sempre atualizado com:
+- ✅ Novos meses de dados
+- ✅ Ajustes de scores (churn_score, meta_risk_score, queda_score)
+- ✅ Novos alertas baseados em analytics
+- ✅ Dados prontos para treino futuro de modelos ML
+
+### Script de Recálculo
+
+O script `scripts/run_analytics_job.py` orquestra o recálculo completo:
+
+```bash
+# Recalcular apenas o mês corrente (último mês fechado)
+DB_TYPE=sqlite SQLITE_PATH=data/dipam_dw.db python -m scripts.run_analytics_job
+
+# Recalcular um mês específico
+DB_TYPE=sqlite SQLITE_PATH=data/dipam_dw.db python -m scripts.run_analytics_job --mes_ano=2025-08
+
+# Recalcular últimos N meses
+DB_TYPE=sqlite SQLITE_PATH=data/dipam_dw.db python -m scripts.run_analytics_job --ultimos_n_meses=6
+```
+
+**O que o script faz**:
+1. Determina quais meses processar (baseado em argumentos ou mês anterior)
+2. Para cada mês:
+   - Recalcula `analytics_vendedor_mes`
+   - Recalcula `analytics_cliente_mes`
+   - Recalcula `analytics_produto_mes`
+   - Aplica scores (churn_score, meta_risk_score, queda_score)
+   - Gera `analytics_alertas`
+3. Registra logs e estatísticas
+
+### Agendamento em Produção
+
+#### Opção 1: Cloud Scheduler (Recomendado)
+
+Crie um job no Cloud Scheduler que executa o script via Cloud Run Job ou HTTP endpoint:
+
+```bash
+# Criar Cloud Run Job (se implementado endpoint /admin/run_analytics_job)
+gcloud scheduler jobs create http dipam-analytics-daily \
+  --schedule="0 2 * * *" \
+  --uri="https://dipam-ai-backend-xxx.run.app/admin/run_analytics_job" \
+  --http-method=POST \
+  --headers="Content-Type=application/json" \
+  --message-body='{"ultimos_n_meses": 6}' \
+  --time-zone="America/Sao_Paulo" \
+  --region=us-central1
+```
+
+**Horário sugerido**: 02:00 AM (madrugada) para processar dados do dia anterior.
+
+#### Opção 2: Cloud Run Job (Execução Direta)
+
+Crie um Cloud Run Job que executa o script diretamente:
+
+```bash
+# Criar Cloud Run Job
+gcloud run jobs create dipam-analytics-job \
+  --image=gcr.io/PROJECT_ID/dipam-analytics:latest \
+  --region=us-central1 \
+  --set-env-vars="ENVIRONMENT=production,DB_TYPE=sqlite,SQLITE_PATH=data/dipam_dw.db" \
+  --set-secrets="OPENAI_API_KEY=openai-api-key:latest" \
+  --command="python" \
+  --args="-m,scripts.run_analytics_job,--ultimos_n_meses,6" \
+  --max-retries=3 \
+  --task-timeout=1800
+
+# Agendar execução diária via Cloud Scheduler
+gcloud scheduler jobs create http dipam-analytics-daily \
+  --schedule="0 2 * * *" \
+  --uri="https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/PROJECT_ID/jobs/dipam-analytics-job:run" \
+  --http-method=POST \
+  --oauth-service-account-email=PROJECT_NUMBER-compute@developer.gserviceaccount.com \
+  --time-zone="America/Sao_Paulo" \
+  --region=us-central1
+```
+
+#### Opção 3: Pipeline Externo (Cron, Airflow, etc.)
+
+Se você usa um orquestrador externo (Airflow, Prefect, etc.), configure um job que executa:
+
+```bash
+# Exemplo com cron (não recomendado para Cloud Run, mas útil para VMs)
+0 2 * * * cd /path/to/dipa && DB_TYPE=sqlite SQLITE_PATH=data/dipam_dw.db python -m scripts.run_analytics_job --ultimos_n_meses=6 >> /var/log/dipam-analytics.log 2>&1
+```
+
+### Monitoramento
+
+Após configurar o agendamento, monitore os logs:
+
+```bash
+# Ver logs do Cloud Run Job
+gcloud run jobs executions list --job=dipam-analytics-job --region=us-central1
+
+# Ver logs de uma execução específica
+gcloud run jobs executions logs read EXECUTION_NAME --job=dipam-analytics-job --region=us-central1
+```
+
+### Validação
+
+Após o job rodar, valide que os dados foram atualizados:
+
+```sql
+-- Verificar analytics mais recentes
+SELECT mes_ano, COUNT(*) as total 
+FROM analytics_vendedor_mes 
+GROUP BY mes_ano 
+ORDER BY mes_ano DESC 
+LIMIT 5;
+
+-- Verificar alertas mais recentes
+SELECT mes_ano, COUNT(*) as total_alertas 
+FROM analytics_alertas 
+GROUP BY mes_ano 
+ORDER BY mes_ano DESC 
+LIMIT 5;
+```
+
+### Frequência Recomendada
+
+- **Diário**: Recalcular últimos 6 meses (garante que novos dados sejam processados)
+- **Semanal**: Recalcular últimos 12 meses (ajusta scores com mais histórico)
+- **Mensal**: Recalcular todos os meses (reprocessamento completo)
+
+### Próximos Passos (FASE 6)
+
+Na próxima fase, será implementado:
+- Endpoint `/admin/run_analytics_job` para execução via HTTP
+- Dashboard de monitoramento de jobs
+- Alertas quando jobs falharem
+- Treinamento automático de modelos ML (já implementado na FASE 5, pode ser agendado)
+
+## 🤖 Treino de Modelos de ML (FASE 5)
+
+O DIPAM COPILOT™ utiliza modelos de Machine Learning para previsões de churn, risco de meta e oportunidades de crescimento.
+
+### Pré-requisitos
+
+- Banco de dados com analytics_* populados (execute `run_analytics_job.py` primeiro)
+- Dados históricos suficientes (recomendado: pelo menos 6 meses)
+
+### Treinar Modelos
+
+#### Treinar Todos os Modelos
+
+```bash
+# Treinar churn, meta_risk e oportunidades
+DB_TYPE=sqlite SQLITE_PATH=data/dipam_dw.db \
+  python -m scripts.train_ml_models \
+  --tipo_modelo=all \
+  --mes_inicio=2024-11 \
+  --mes_fim=2025-10 \
+  --mes_referencia=2025-10
+```
+
+#### Treinar Modelo Específico
+
+```bash
+# Apenas churn
+DB_TYPE=sqlite SQLITE_PATH=data/dipam_dw.db \
+  python -m scripts.train_ml_models \
+  --tipo_modelo=churn \
+  --mes_inicio=2024-11 \
+  --mes_fim=2025-10
+
+# Apenas meta_risk
+DB_TYPE=sqlite SQLITE_PATH=data/dipam_dw.db \
+  python -m scripts.train_ml_models \
+  --tipo_modelo=meta_risk \
+  --mes_inicio=2024-11 \
+  --mes_fim=2025-10
+
+# Apenas oportunidades (usa apenas mes_referencia)
+DB_TYPE=sqlite SQLITE_PATH=data/dipam_dw.db \
+  python -m scripts.train_ml_models \
+  --tipo_modelo=oportunidades \
+  --mes_referencia=2025-10
+```
+
+### Verificar Status dos Modelos
+
+```bash
+# Via API
+curl https://SUA_URL_CLOUD_RUN/ml/status
+
+# Resposta esperada:
+{
+  "status": "ok",
+  "modelos": {
+    "churn": {
+      "treinado": true,
+      "trained_at": "2025-01-16T12:34:56",
+      "mes_inicio": "2024-11",
+      "mes_fim": "2025-10",
+      "n_samples": 12345,
+      "accuracy": 0.85,
+      "roc_auc": 0.92
+    },
+    "meta_risk": {
+      "treinado": true,
+      ...
+    },
+    "oportunidades": {
+      "treinado": false
+    }
+  }
+}
+```
+
+### Localização dos Modelos
+
+Os modelos treinados são salvos em:
+- `models/churn_model.joblib`
+- `models/meta_risk_model.joblib`
+- `models/oportunidades_model.joblib`
+- `models/registry.json` (metadados)
+
+### Agendamento de Retreino
+
+Recomenda-se retreinar os modelos periodicamente:
+
+- **Mensal**: Retreinar com dados dos últimos 12 meses
+- **Trimestral**: Retreinar com dados dos últimos 18 meses
+
+Exemplo de agendamento via Cloud Scheduler:
+
+```bash
+# Criar job mensal de retreino
+gcloud scheduler jobs create http dipam-ml-retrain-monthly \
+  --schedule="0 3 1 * *" \
+  --uri="https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/PROJECT_ID/jobs/dipam-ml-retrain:run" \
+  --http-method=POST \
+  --oauth-service-account-email=PROJECT_NUMBER-compute@developer.gserviceaccount.com \
+  --time-zone="America/Sao_Paulo" \
+  --region=us-central1
+```
+
+### Uso dos Modelos
+
+Os modelos são carregados automaticamente pelo `AgentService` quando disponíveis:
+
+- **Churn**: Usado em consultas sobre clientes em risco
+- **Meta Risk**: Usado em consultas sobre metas (intent `consulta_meta`)
+- **Oportunidades**: Usado em consultas sobre crescimento potencial
+
+As previsões aparecem automaticamente nas respostas estruturadas quando os modelos estão treinados.
+
 ## 🔄 Atualizações
 
 ### Atualizar Backend
@@ -602,6 +855,61 @@ git push origin main
 # Vercel fará deploy automaticamente (se configurado)
 # Ou executar manualmente:
 vercel --prod
+```
+
+## 🧪 Testes em Produção
+
+### Testar Endpoint /ask
+
+Use o script `test_prod_agent.py` para validar se o endpoint `/ask` está respondendo corretamente em produção:
+
+```bash
+# Testar com URL de produção
+DIPAM_API_BASE_URL="https://dipam-ai-backend-xxxxx-uc.a.run.app" \
+  python -m scripts.test_prod_agent
+
+# Ou com URL customizada
+python -m scripts.test_prod_agent --url https://outra-url.com
+
+# Com timeout customizado
+python -m scripts.test_prod_agent --url https://... --timeout 60
+```
+
+O script testa 6 perguntas diferentes (Diretor, Supervisor, RCA) e valida:
+- ✅ Status HTTP 200
+- ✅ Respostas não genéricas (sem fallback)
+- ✅ Estrutura de resposta correta (resumo_executivo, tabelas, etc.)
+- ✅ Tempo de resposta razoável (< 10s recomendado)
+
+**Saída esperada:**
+```
+🧪 TESTES DO ENDPOINT /ask - DIPAM COPILOT™
+================================================================================
+URL base: https://dipam-ai-backend-xxxxx-uc.a.run.app
+Timeout: 30s
+================================================================================
+
+[1/6] Diretor - Meta não batida (agosto 2025)
+Pergunta: Sou o Diretor e preciso saber de forma detalhada porque não batemos...
+Papel: diretor
+Testando... ✅
+  Status: OK
+  Tempo: 2345ms
+  HTTP: 200
+  Resumo:
+    No mês de agosto de 2025, a DIPAM não atingiu a meta principalmente...
+    ...
+
+📊 RESUMO FINAL
+================================================================================
+Total de testes: 6
+✅ Sucessos: 6
+❌ Falhas/Problemas: 0
+
+Tempos de resposta:
+  Média: 2156ms
+  Mínimo: 1890ms
+  Máximo: 3456ms
 ```
 
 ## ✅ Checklist de Deploy
