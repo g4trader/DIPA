@@ -131,11 +131,11 @@ async def startup_event():
         init_db()
         logger.info("Conexão com banco de dados inicializada")
         
-            # Marca banco como disponível se init_db não deu erro
-            # IMPORTANTE: NÃO faz teste de conexão síncrono aqui para não bloquear startup
-            # O teste de conexão será feito no primeiro request ou no endpoint /health/db
-            app.state.db_available = True
-            logger.info("✅ Banco de dados configurado (teste de conexão será feito sob demanda)")
+        # Marca banco como disponível se init_db não deu erro
+        # IMPORTANTE: NÃO faz teste de conexão síncrono aqui para não bloquear startup
+        # O teste de conexão será feito no primeiro request ou no endpoint /health/db
+        app.state.db_available = True
+        logger.info("✅ Banco de dados configurado (teste de conexão será feito sob demanda)")
         
     except Exception as e:
         error_msg = f"Erro ao inicializar banco de dados: {str(e)}"
