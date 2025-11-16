@@ -309,17 +309,49 @@ async def health_check():
     """
     Endpoint de health check básico.
     
-    Retorna status da API e informações básicas do sistema.
+    Retorna status da API, informações básicas do sistema e status dos componentes.
+    IMPORTANTE: Este endpoint SEMPRE retorna 200 se o servidor estiver rodando,
+    mesmo que componentes individuais (DB, OpenAI) estejam com problemas.
     """
-    return JSONResponse(
-        content={
-            "status": "healthy",
+    try:
+        environment = getattr(config, 'environment', 'development')
+        
+        # Calcula status geral baseado nos componentes
+        status = "healthy"
+        if not app.state.db_available or not app.state.openai_available:
+            status = "degraded"  # Funciona, mas com limitações
+        
+        health_data = {
+            "status": status,
             "timestamp": datetime.utcnow().isoformat(),
-            "environment": getattr(config, 'environment', 'development'),
+            "environment": environment,
             "version": "1.0.0",
             "database": config.database.db_type,
+            "components": {
+                "database": "available" if app.state.db_available else "unavailable",
+                "openai": "available" if app.state.openai_available else "unavailable",
+                "agent_service": "available" if app.state.agent_service_available else "unavailable"
+            }
         }
-    )
+        
+        # Adiciona erros se houver
+        if app.state.startup_errors:
+            health_data["startup_errors"] = app.state.startup_errors
+            health_data["warnings"] = f"{len(app.state.startup_errors)} componente(s) com problemas"
+        
+        # Retorna 200 mesmo com problemas - o status indica "degraded"
+        return JSONResponse(content=health_data)
+    except Exception as e:
+        logger.error(f"Erro ao verificar saúde da aplicação: {str(e)}")
+        # Retorna 503 apenas se houver erro no próprio endpoint
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
 
 
 @app.get("/health/db")

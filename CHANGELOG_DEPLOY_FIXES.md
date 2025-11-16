@@ -318,6 +318,134 @@ Todas as respostas do agente são baseadas em:
 
 ---
 
+## Ajustes para Cloud Run – servidor sempre sobe e escuta na porta correta (2025-11-15)
+
+### 🎯 Objetivo
+
+Corrigir problema de deploy no Cloud Run onde o container falhava ao iniciar:
+> "The user-provided container failed to start and listen on the port defined provided by the PORT=8080 environment variable within the allocated timeout."
+
+### 🔧 Problemas Identificados e Corrigidos
+
+#### 1. Startup Event Fazendo Raise em Produção ❌ → ✅
+
+**Problema**: O `startup_event` em `src/api/main.py` fazia `raise RuntimeError` ou `raise FileNotFoundError` em produção se:
+- `OPENAI_API_KEY` não configurada
+- Banco de dados não encontrado
+- Erro ao inicializar DB
+
+**Impacto**: Qualquer `raise` no `startup_event` derruba o container ANTES de escutar na porta, causando timeout no Cloud Run.
+
+**Correção**:
+- Removidos TODOS os `raise` do `startup_event`
+- Implementado sistema de flags em `app.state`:
+  - `app.state.db_available = False`
+  - `app.state.openai_available = False`
+  - `app.state.agent_service_available = False`
+  - `app.state.startup_errors = []`
+- Cada componente tenta inicializar, se falhar: loga erro, seta flag `False`, **NÃO faz raise**
+- Servidor **SEMPRE** sobe, mesmo que componentes falhem
+
+#### 2. Porta do Servidor 🔌
+
+**Problema**: Fallback da porta era 8000 (dev local) em vez de 8080 (Cloud Run padrão).
+
+**Correção**:
+- Alterado fallback de `os.getenv("PORT", 8000)` para `os.getenv("PORT", 8080)`
+- Adicionado log claro: `"🚀 Iniciando servidor FastAPI na porta {port}"`
+
+#### 3. Comando CMD no Dockerfile 🐳
+
+**Problema**: `CMD exec uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT:-8080}` pode ter problemas com expansão de variáveis.
+
+**Correção**:
+- Alterado para: `CMD ["python", "-m", "src.api.main"]`
+- O bloco `if __name__ == "__main__"` em `src/api/main.py` inicia o uvicorn corretamente
+- Garante que o módulo seja carregado antes de iniciar o servidor
+
+#### 4. Health Endpoints Atualizados 🏥
+
+**Correção**:
+- `/health`: Agora usa flags `app.state.*` e retorna status `"healthy"` ou `"degraded"`
+- `/health/db`: Verifica `app.state.db_available` antes de fazer query
+- `/health/openai`: Verifica `app.state.openai_available` antes de fazer chamada
+- Endpoints retornam 503 se componente não disponível, mas servidor continua rodando
+
+#### 5. Script de Teste Local Criado 🧪
+
+**Novo**: `scripts/run_cloud_run_local.sh`
+- Simula exatamente o ambiente Cloud Run (`PORT=8080`, `ENVIRONMENT=production`)
+- Permite testar se servidor sobe localmente antes do deploy
+- Inclui instruções de teste via curl
+
+### 📝 Arquivos Modificados
+
+1. **`src/api/main.py`**:
+   - `startup_event()`: Removidos todos os `raise`, implementado sistema de flags
+   - Health endpoints: Atualizados para usar `app.state.*`
+   - `if __name__ == "__main__"`: Fallback porta alterado para 8080, adicionado log
+
+2. **`Dockerfile`**:
+   - CMD alterado para `["python", "-m", "src.api.main"]`
+
+3. **`scripts/run_cloud_run_local.sh`** (NOVO):
+   - Script para simular ambiente Cloud Run localmente
+
+4. **`NOTES_CLOUD_RUN.md`** (NOVO):
+   - Documentação completa do fluxo de inicialização
+   - Como o servidor é iniciado, como porta é definida, o que startup_event faz
+
+5. **`README_DEPLOY.md`**:
+   - Adicionada seção "Simular Ambiente Cloud Run Localmente"
+   - Atualizada seção de deploy com opção de deploy direto
+
+### ✅ Garantias Implementadas
+
+1. ✅ Servidor **SEMPRE** escuta na porta `PORT` (8080 no Cloud Run)
+2. ✅ Servidor **SEMPRE** sobe, mesmo que DB/OpenAI falhem
+3. ✅ Health endpoints reportam status real dos componentes
+4. ✅ Erros são logados claramente para diagnóstico
+5. ✅ Não há `sys.exit()` ou `raise` fatal no startup
+6. ✅ Comando CMD no Dockerfile compatível com Cloud Run
+
+### 🧪 Como Testar
+
+```bash
+# 1. Teste local simulando Cloud Run
+./scripts/run_cloud_run_local.sh
+
+# 2. Em outro terminal, testar health endpoints
+curl http://localhost:8080/health
+curl http://localhost:8080/health/db
+curl http://localhost:8080/health/openai
+
+# 3. Se funcionar localmente, fazer deploy no Cloud Run
+gcloud run deploy dipam-ai-backend \
+  --source . \
+  --region=us-central1 \
+  --set-env-vars="ENVIRONMENT=production,DB_TYPE=sqlite,SQLITE_PATH=/app/data/dipam_dw.db,LOG_LEVEL=INFO" \
+  --set-secrets="OPENAI_API_KEY=openai-api-key:latest"
+```
+
+### 📊 Fluxo de Inicialização (Corrigido)
+
+```
+1. Cloud Run inicia container
+2. Executa: python -m src.api.main
+3. Carrega src/api/main.py
+4. Cria app FastAPI
+5. Define flags app.state.* (todas False inicialmente)
+6. Executa startup_event():
+   a. Tenta validar OpenAI → se falhar: loga erro, seta flag False (NÃO faz raise)
+   b. Tenta inicializar DB → se falhar: loga erro, seta flag False (NÃO faz raise)
+   c. Tenta carregar modelos → se falhar: loga erro, seta flag False (NÃO faz raise)
+7. uvicorn.run() inicia servidor na porta PORT (8080)
+8. Servidor escuta em 0.0.0.0:8080 ✅
+9. Health endpoints podem ser chamados e reportam status real
+```
+
+---
+
 **Data**: 2025-01-XX
 **Versão**: 2.0.0
 **Status**: ✅ Pronto para Deploy - 100% Funcional
