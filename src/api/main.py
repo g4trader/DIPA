@@ -41,6 +41,10 @@ app = FastAPI(
 origins = [
     "https://dipam.smartiasolutions.com.br",
     "https://www.dipam.smartiasolutions.com.br",
+    # Frontend Cloud Run (URL principal e alternativa)
+    "https://dipam-copilot-frontend-6arhlm3mha-uc.a.run.app",
+    "https://dipam-copilot-frontend-642830139828.us-central1.run.app",
+    # Local development
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
