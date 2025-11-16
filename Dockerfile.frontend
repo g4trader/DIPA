@@ -41,15 +41,11 @@ ENV NEXT_TELEMETRY_DISABLED 1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copia node_modules de produção (apenas dependências necessárias)
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
-
-# Copia arquivos necessários
-# Cria diretório public se não existir
-RUN mkdir -p /app/public
-COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/next.config.mjs ./next.config.mjs
+# Com output: 'standalone', Next.js cria servidor otimizado em .next/standalone
+# Copia standalone output (mais otimizado - inclui apenas dependências necessárias)
+# O standalone output já inclui todos os arquivos necessários, incluindo public/ se existir
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
@@ -59,5 +55,7 @@ ENV PORT 8080
 ENV HOSTNAME "0.0.0.0"
 
 # Cloud Run espera que a aplicação escute na porta definida por PORT
-# Usa next start que lê PORT da env var
-CMD ["npm", "run", "start"]
+# Com output: 'standalone', Next.js cria servidor em server.js na raiz
+# IMPORTANTE: Quando standalone está ativo, NÃO use "next start" (não funciona)
+# O standalone output já inclui um servidor Node.js otimizado em server.js
+CMD ["node", "server.js"]
