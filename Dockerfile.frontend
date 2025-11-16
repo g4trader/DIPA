@@ -22,6 +22,12 @@ COPY . .
 # Desabilita telemetria do Next.js durante o build
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# IMPORTANTE: Variáveis NEXT_PUBLIC_* precisam estar disponíveis durante o BUILD
+# Essas variáveis são embutidas no código JavaScript durante o build
+# Se não estiverem definidas aqui, o código usará o fallback (localhost)
+ARG NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+
 # Faz o build da aplicação
 RUN npm run build
 

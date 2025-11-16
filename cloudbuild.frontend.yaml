@@ -47,7 +47,7 @@ steps:
       - '--min-instances'
       - '0'
       - '--set-env-vars'
-      - 'NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app,NODE_ENV=production'
+      - 'NODE_ENV=production'
 
 images:
   - 'gcr.io/$PROJECT_ID/dipam-copilot-frontend:$COMMIT_SHA'
