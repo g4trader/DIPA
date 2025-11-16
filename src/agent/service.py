@@ -464,7 +464,15 @@ class AgentService:
                 )
                 
                 if intent == IntentType.CONSULTA_META:
-                    contexto = self._handle_meta_query(intent, entities, session, contexto_memoria, papel=papel)
+                    logger.info(f"[process_question: chamando _handle_meta_query] Intent: {intent.value}")
+                    try:
+                        contexto = self._handle_meta_query(intent, entities, session, contexto_memoria, papel=papel)
+                        logger.info(f"[process_question: _handle_meta_query concluído] Contexto montado com {len(contexto)} chaves")
+                    except Exception as e:
+                        logger.error(f"[process_question: ERRO em _handle_meta_query] {str(e)}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                        raise
                     
                     # Adiciona contexto de memória se houver interações aprovadas
                     if contexto_memoria:
