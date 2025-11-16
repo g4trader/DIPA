@@ -82,10 +82,9 @@ EXPOSE 8080
 
 # Comando para executar a aplicação
 # Cloud Run espera que a aplicação escute na porta definida por PORT
-# IMPORTANTE: Usa gunicorn com main:app para compatibilidade com Cloud Run buildpack
+# IMPORTANTE: FastAPI é ASGI, não WSGI, então precisa usar uvicorn.workers.UvicornWorker
 # main:app refere-se ao arquivo main.py na raiz que expõe app de src.api.main
-# Alternativa: CMD ["python", "-m", "src.api.main"] (se preferir uvicorn direto)
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "--workers", "1", "--timeout", "300", "--log-level", "info", "main:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--timeout", "300", "--log-level", "info", "main:app"]
 
 
 
