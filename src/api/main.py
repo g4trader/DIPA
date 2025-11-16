@@ -39,8 +39,7 @@ app = FastAPI(
 # IMPORTANTE: Em produção, especificar origens permitidas explicitamente
 # Isso evita problemas de CORS e melhora a segurança
 origins = [
-    "https://dipam.smartiasolutions.com.br",
-    "https://www.dipam.smartiasolutions.com.br",
+    "https://dipam.smartiasolutions.com.br",  # Domínio de produção (sem www)
     # Frontend Cloud Run (URL principal e alternativa)
     "https://dipam-copilot-frontend-6arhlm3mha-uc.a.run.app",
     "https://dipam-copilot-frontend-642830139828.us-central1.run.app",
