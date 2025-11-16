@@ -110,7 +110,8 @@ def map_agent_to_copilot_payload(agent_result: Dict[str, Any], question: str) ->
         logger.info(f"[copilot_mapper] menores_venda: {len(contexto['menores_venda'])} registros")
     
     # NOVO: Se houver resposta estruturada, usa ela diretamente
-    structured = agent_result.get("structured")
+    # Verifica tanto no nível superior quanto dentro de contexto
+    structured = agent_result.get("structured") or (contexto.get("structured") if contexto else None)
     if structured and isinstance(structured, dict):
         # Resposta estruturada já está pronta - passa diretamente
         payload: Dict[str, Any] = {
