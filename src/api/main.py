@@ -936,6 +936,19 @@ async def ask_question(
     try:
         logger.info(f"Pergunta recebida: {request.pergunta[:100]}...")
         
+        # Verifica se agent service está disponível (modelos ML podem estar carregando)
+        if not app.state.agent_service_available:
+            logger.warning("⚠️  AgentService ainda não está disponível (modelos ML carregando em background)")
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "Serviço temporariamente indisponível",
+                    "message": "Os modelos de ML ainda estão carregando. Por favor, aguarde alguns segundos e tente novamente.",
+                    "detail": "AgentService está carregando em background. Isso geralmente leva 20-30 segundos após o startup.",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+        
         # Obtém serviço do agente
         agent_service = get_agent_service()
         
