@@ -51,13 +51,19 @@
 
 ### Variáveis de Ambiente
 
-```
-NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app
-NODE_ENV=production
-```
+**⚠️ IMPORTANTE**: Variáveis `NEXT_PUBLIC_*` no Next.js precisam estar disponíveis durante o BUILD, não apenas no runtime.
 
-**⚠️ IMPORTANTE**: A URL do backend está configurada para `https://dipam-ai-backend-6arhlm3mha-uc.a.run.app`  
-**Verificar**: Se esta é a URL correta do backend em produção.
+As variáveis são embutidas no código JavaScript durante o build do Next.js. Por isso:
+
+1. **Durante o build** (Dockerfile.frontend):
+   - Passado como `ARG` e `ENV` no Dockerfile
+   - `NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app`
+
+2. **No runtime** (Cloud Run):
+   - `NODE_ENV=production`
+   - `NEXT_PUBLIC_API_BASE_URL` NÃO precisa estar nas env vars de runtime (já embutida no build)
+
+**Verificar**: Se a URL do backend está correta: `https://dipam-ai-backend-6arhlm3mha-uc.a.run.app`
 
 ## 🔧 Comandos de Deploy
 
@@ -65,12 +71,30 @@ NODE_ENV=production
 
 ```bash
 # Build e deploy automático
+# IMPORTANTE: A variável NEXT_PUBLIC_API_BASE_URL é passada como --build-arg no cloudbuild.frontend.yaml
+# Isso garante que ela seja embutida no código JavaScript durante o build
 gcloud builds submit --config=cloudbuild.frontend.yaml --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)
 ```
 
+**Nota**: O `cloudbuild.frontend.yaml` passa `--build-arg NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app` durante o build do Docker.
+
 ### Deploy Direto (alternativa)
 
+**⚠️ ATENÇÃO**: Para deploy direto via `--source`, você precisa:
+
+1. **Usar Dockerfile.frontend**: O Cloud Run não aceita `--dockerfile`, então precisa renomear temporariamente
+2. **Passar build args**: Variáveis `NEXT_PUBLIC_*` precisam estar disponíveis durante o build
+
+**Recomendação**: Use `cloudbuild.frontend.yaml` que já está configurado corretamente.
+
+**Se necessário fazer deploy direto**:
 ```bash
+# Temporariamente renomear Dockerfile.frontend para Dockerfile
+cp Dockerfile.frontend Dockerfile.frontend.backup
+mv Dockerfile.frontend Dockerfile
+
+# Deploy (variável NEXT_PUBLIC_API_BASE_URL não pode ser passada via --source diretamente)
+# Será necessário fazer build local com docker build --build-arg primeiro
 gcloud run deploy dipam-copilot-frontend \
   --source . \
   --region=us-central1 \
@@ -81,11 +105,12 @@ gcloud run deploy dipam-copilot-frontend \
   --cpu=1 \
   --timeout=300s \
   --max-instances=10 \
-  --min-instances=0 \
-  --set-env-vars="NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app,NODE_ENV=production"
-```
+  --min-instances=0
 
-**⚠️ NOTA**: Para deploy direto via `--source`, é necessário usar um Dockerfile específico. Atualmente, o deploy usa `Dockerfile.frontend` via Cloud Build.
+# Restaurar Dockerfile original
+mv Dockerfile Dockerfile.frontend
+mv Dockerfile.frontend.backup Dockerfile.frontend
+```
 
 ### Permitir Acesso Público (se necessário)
 
