@@ -151,42 +151,118 @@ class AgentService:
         """Inicializa o serviço do agente."""
         self.meta_model = None
         self.churn_model = None
+        self._ready = False
+        self._loading = False
+        self._last_error = None
         self._load_models()
     
     def _load_models(self):
         """Carrega modelos de ML treinados."""
+        self._loading = True
+        self._last_error = None
+        
         try:
+            logger.info("🔧 Iniciando carregamento de modelos ML...")
             from pathlib import Path
             from src.config import config
             
             artifacts_dir = Path(config.ml.models_dir) / "artefacts"
+            logger.info(f"📁 Diretório de artefatos: {artifacts_dir}")
+            logger.info(f"📁 Diretório existe? {artifacts_dir.exists()}")
             
             # Tenta carregar modelo de meta
             try:
                 meta_model_path = artifacts_dir / "meta_model_latest.joblib"
+                logger.info(f"🔍 Procurando modelo de meta em: {meta_model_path}")
                 if meta_model_path.exists():
+                    logger.info(f"✅ Arquivo de modelo de meta encontrado")
                     self.meta_model = MetaModel(model_type='gradient_boosting')
                     self.meta_model.load(str(meta_model_path))
-                    logger.info("Modelo de meta carregado com sucesso")
+                    logger.info("✅ Modelo de meta carregado com sucesso")
                 else:
-                    logger.warning(f"Modelo de meta não encontrado em: {meta_model_path}")
+                    logger.warning(f"⚠️  Modelo de meta não encontrado em: {meta_model_path}")
+                    logger.warning(f"   Diretório pai existe? {meta_model_path.parent.exists()}")
             except Exception as e:
-                logger.warning(f"Erro ao carregar modelo de meta: {str(e)}")
+                error_msg = f"Erro ao carregar modelo de meta: {str(e)}"
+                logger.error(f"❌ {error_msg}")
+                import traceback
+                logger.error(traceback.format_exc())
+                self._last_error = error_msg
             
             # Tenta carregar modelo de churn
             try:
                 churn_model_path = artifacts_dir / "churn_model_latest.joblib"
+                logger.info(f"🔍 Procurando modelo de churn em: {churn_model_path}")
                 if churn_model_path.exists():
+                    logger.info(f"✅ Arquivo de modelo de churn encontrado")
                     self.churn_model = ChurnModel(model_type='gradient_boosting')
                     self.churn_model.load(str(churn_model_path))
-                    logger.info("Modelo de churn carregado com sucesso")
+                    logger.info("✅ Modelo de churn carregado com sucesso")
                 else:
-                    logger.warning(f"Modelo de churn não encontrado em: {churn_model_path}")
+                    logger.warning(f"⚠️  Modelo de churn não encontrado em: {churn_model_path}")
+                    logger.warning(f"   Diretório pai existe? {churn_model_path.parent.exists()}")
             except Exception as e:
-                logger.warning(f"Erro ao carregar modelo de churn: {str(e)}")
+                error_msg = f"Erro ao carregar modelo de churn: {str(e)}"
+                logger.error(f"❌ {error_msg}")
+                import traceback
+                logger.error(traceback.format_exc())
+                if self._last_error:
+                    self._last_error += f"; {error_msg}"
+                else:
+                    self._last_error = error_msg
+            
+            # Marca como ready mesmo se alguns modelos não carregaram
+            # O agente pode funcionar sem modelos ML (usa apenas LLM)
+            self._ready = True
+            logger.info("✅ AgentService inicializado (modelos ML são opcionais)")
         
         except Exception as e:
-            logger.error(f"Erro ao carregar modelos: {str(e)}")
+            error_msg = f"Erro crítico ao carregar modelos: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            import traceback
+            logger.error(traceback.format_exc())
+            self._last_error = error_msg
+            # Mesmo com erro, marca como ready se não for erro crítico
+            # O agente pode funcionar sem modelos ML
+            self._ready = True
+            logger.warning("⚠️  AgentService marcado como ready mesmo com erros (modelos ML são opcionais)")
+        finally:
+            self._loading = False
+    
+    def is_ready(self) -> bool:
+        """
+        Verifica se o AgentService está pronto para processar perguntas.
+        
+        Returns:
+            bool: True se o serviço está pronto, False caso contrário
+        """
+        return self._ready and not self._loading
+    
+    def get_last_error(self) -> Optional[str]:
+        """
+        Retorna o último erro ocorrido durante a inicialização.
+        
+        Returns:
+            str ou None: Mensagem de erro ou None se não houver erro
+        """
+        return self._last_error
+    
+    def ensure_ready(self) -> bool:
+        """
+        Garante que o AgentService está pronto, tentando carregar se necessário.
+        
+        Returns:
+            bool: True se está pronto (ou ficou pronto após tentativa), False caso contrário
+        """
+        if self.is_ready():
+            return True
+        
+        # Se não está pronto e não está carregando, tenta carregar novamente
+        if not self._loading:
+            logger.info("🔄 AgentService não está pronto, tentando carregar novamente...")
+            self._load_models()
+        
+        return self.is_ready()
     
     def process_question(
         self,
@@ -2401,19 +2477,58 @@ class AgentService:
 
 # Instância singleton do serviço
 _agent_service: Optional[AgentService] = None
+_agent_service_lock = None
 
 
-def get_agent_service() -> AgentService:
+def get_agent_service() -> Optional[AgentService]:
     """
     Retorna instância do serviço do agente (singleton).
     
+    Tenta criar a instância se não existir, mas não bloqueia se houver erro.
+    
     Returns:
-        AgentService: Instância do serviço
+        AgentService ou None: Instância do serviço ou None se houver erro crítico
     """
-    global _agent_service
+    global _agent_service, _agent_service_lock
     
-    if _agent_service is None:
-        _agent_service = AgentService()
+    if _agent_service is not None:
+        return _agent_service
     
-    return _agent_service
+    # Thread-safe: usa lock se disponível (importa apenas quando necessário)
+    try:
+        import threading
+        if _agent_service_lock is None:
+            _agent_service_lock = threading.Lock()
+        
+        with _agent_service_lock:
+            # Double-check após adquirir lock
+            if _agent_service is not None:
+                return _agent_service
+            
+            try:
+                logger.info("🏗️  Criando instância do AgentService...")
+                _agent_service = AgentService()
+                logger.info(f"✅ AgentService criado - Ready: {_agent_service.is_ready()}")
+                return _agent_service
+            except Exception as e:
+                error_msg = f"Erro crítico ao criar AgentService: {str(e)}"
+                logger.error(f"❌ {error_msg}")
+                import traceback
+                logger.error(traceback.format_exc())
+                # Não retorna None - tenta criar uma instância mesmo com erro
+                # O AgentService pode funcionar parcialmente
+                try:
+                    _agent_service = AgentService()
+                    return _agent_service
+                except:
+                    logger.error("❌ Falha total ao criar AgentService")
+                    return None
+    except Exception as e:
+        logger.error(f"❌ Erro ao criar lock ou AgentService: {str(e)}")
+        # Fallback: tenta criar sem lock
+        try:
+            _agent_service = AgentService()
+            return _agent_service
+        except:
+            return None
 

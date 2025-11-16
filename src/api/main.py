@@ -229,8 +229,31 @@ async def startup_event():
             logger.info("📦 Iniciando carregamento de modelos ML em background...")
             agent_service = get_agent_service()
             if agent_service:
-                app.state.agent_service_available = True
-                logger.info("✅ Modelos de ML carregados com sucesso")
+                # Aguarda um pouco para garantir que a inicialização terminou
+                import time
+                max_wait = 60  # 60 segundos máximo
+                wait_interval = 1  # Verifica a cada 1 segundo
+                waited = 0
+                
+                while not agent_service.is_ready() and waited < max_wait:
+                    time.sleep(wait_interval)
+                    waited += wait_interval
+                    if waited % 5 == 0:  # Log a cada 5 segundos
+                        logger.info(f"⏳ Aguardando AgentService ficar pronto... ({waited}s/{max_wait}s)")
+                
+                if agent_service.is_ready():
+                    app.state.agent_service_available = True
+                    logger.info("✅ Modelos de ML carregados com sucesso - AgentService está pronto")
+                else:
+                    last_error = agent_service.get_last_error()
+                    error_msg = f"AgentService não ficou pronto após {max_wait}s"
+                    if last_error:
+                        error_msg += f" - Último erro: {last_error}"
+                    logger.warning(f"⚠️  {error_msg}")
+                    app.state.startup_errors.append(error_msg)
+                    # Mesmo assim, marca como disponível se o serviço existe (pode funcionar parcialmente)
+                    app.state.agent_service_available = True
+                    logger.warning("⚠️  AgentService marcado como disponível mesmo não estando totalmente pronto")
             else:
                 logger.warning("⚠️  AgentService retornou None")
                 app.state.startup_errors.append("AgentService: retornou None")
@@ -1005,23 +1028,46 @@ async def ask_question(
     try:
         logger.info(f"Pergunta recebida: {request.pergunta[:100]}...")
         
-        # Verifica se agent service está disponível (modelos ML podem estar carregando)
-        if not app.state.agent_service_available:
-            logger.warning("⚠️  AgentService ainda não está disponível (modelos ML carregando em background)")
-            # IMPORTANTE: Usa HTTPException ao invés de JSONResponse para garantir que passa pelo CORSMiddleware
-            # HTTPException sempre passa pelo pipeline do FastAPI, incluindo middlewares de CORS
+        # Obtém serviço do agente (com lazy loading/retry)
+        agent_service = get_agent_service()
+        
+        if agent_service is None:
+            logger.error("❌ AgentService retornou None - erro crítico na inicialização")
             raise HTTPException(
                 status_code=503,
                 detail={
                     "error": "Serviço temporariamente indisponível",
-                    "message": "Os modelos de ML ainda estão carregando. Por favor, aguarde alguns segundos e tente novamente.",
-                    "detail": "AgentService está carregando em background. Isso geralmente leva 20-30 segundos após o startup.",
+                    "message": "Erro ao inicializar o agente de IA. Verifique os logs do backend.",
+                    "detail": "AgentService não pôde ser criado. Verifique configuração de modelos ML e banco de dados.",
                     "timestamp": datetime.utcnow().isoformat(),
                 }
             )
         
-        # Obtém serviço do agente
-        agent_service = get_agent_service()
+        # Tenta garantir que o agent está pronto (lazy loading)
+        if not agent_service.is_ready():
+            logger.warning("⚠️  AgentService não está pronto, tentando garantir readiness...")
+            if not agent_service.ensure_ready():
+                # Ainda não está pronto após tentativa
+                last_error = agent_service.get_last_error()
+                error_detail = "AgentService está carregando em background. Isso geralmente leva 20-30 segundos após o startup."
+                if last_error:
+                    error_detail += f" Último erro: {last_error}"
+                
+                logger.warning(f"⚠️  AgentService ainda não está pronto após ensure_ready() - {error_detail}")
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error": "Serviço temporariamente indisponível",
+                        "message": "Os modelos de ML ainda estão carregando. Por favor, aguarde alguns segundos e tente novamente.",
+                        "detail": error_detail,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+        
+        # Atualiza flag global se necessário
+        if not app.state.agent_service_available:
+            app.state.agent_service_available = True
+            logger.info("✅ AgentService agora está disponível")
         
         # Processa pergunta
         result = agent_service.process_question(
