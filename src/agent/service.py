@@ -1701,7 +1701,13 @@ class AgentService:
         )
         
         # 11. Converte para dict para retornar
+        # IMPORTANTE: .dict() mantém snake_case por padrão (sem by_alias=True)
         resposta_dict = resposta_estruturada.dict()
+        
+        # Log para debug: verificar formato
+        logger.info(f"[_handle_meta_query_diretor_analytics] Structured keys: {list(resposta_dict.keys())[:5]}")
+        logger.info(f"[_handle_meta_query_diretor_analytics] Tem resumo_executivo: {'resumo_executivo' in resposta_dict}")
+        logger.info(f"[_handle_meta_query_diretor_analytics] Tem secoes: {'secoes' in resposta_dict}")
         
         # FASE 5: Adiciona insights preditivos à resposta estruturada
         if insights_preditivos:

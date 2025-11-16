@@ -977,12 +977,15 @@ def _extrair_dados_estruturados(result: Dict[str, Any], pergunta: str) -> Dict[s
     observacoes = _extrair_lista_markdown(resposta_texto, "Observações sobre os dados")
     
     # NOVO FASE 3: Verifica se há resposta estruturada (CopilotStructuredResponse)
+    # IMPORTANTE: Prioriza structured do contexto (vem de _handle_meta_query_diretor_analytics)
     structured = None
     if "structured" in contexto:
         structured = contexto["structured"]
     elif "structured" in result:
         structured = result["structured"]
     
+    # Se encontrou structured válido no formato novo (snake_case), preserva ele
+    # O copilot_mapper já vai tratar e passar adiante corretamente
     return {
         "question": pergunta,
         "intent": result.get("intent", "outros"),
@@ -994,7 +997,7 @@ def _extrair_dados_estruturados(result: Dict[str, Any], pergunta: str) -> Dict[s
         "observacoes": observacoes if observacoes else None,
         "contexto": _resumir_contexto(contexto),
         "timestamp": datetime.utcnow().isoformat(),
-        "structured": structured  # NOVO: formato estruturado FASE 3
+        "structured": structured  # NOVO: formato estruturado FASE 3 (pode ser snake_case ou camelCase)
     }
 
 
