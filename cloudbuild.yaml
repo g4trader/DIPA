@@ -42,9 +42,9 @@ steps:
       - '--port'
       - '8080'
       - '--memory'
-      - '2Gi'  # Ajuste conforme necessidade
+      - '4Gi'  # Aumentado para suportar modelos ML e evitar OOM
       - '--cpu'
-      - '1'
+      - '2'  # Aumentado para melhor performance com modelos ML
       - '--timeout'
       - '300s'
       - '--max-instances'

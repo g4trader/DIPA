@@ -140,8 +140,8 @@ gcloud run deploy dipam-ai-backend \
   --platform=managed \
   --allow-unauthenticated \
   --port=8080 \
-  --memory=2Gi \
-  --cpu=1 \
+  --memory=4Gi \
+  --cpu=2 \
   --timeout=300s \
   --max-instances=10 \
   --min-instances=0 \
