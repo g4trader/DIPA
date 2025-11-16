@@ -535,6 +535,62 @@ async def health_check_db():
         )
 
 
+@app.get("/health/agent")
+async def health_agent():
+    """
+    Health check específico do AgentService.
+    
+    Retorna o status de readiness do agente de IA, incluindo:
+    - Se está pronto para processar perguntas
+    - Último erro ocorrido (se houver)
+    - Timestamp da verificação
+    
+    Returns:
+        JSON com status do AgentService
+    """
+    try:
+        agent_service = get_agent_service()
+        
+        if agent_service is None:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "not_ready",
+                    "ready": False,
+                    "last_error": "AgentService não pôde ser criado",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+        
+        is_ready = agent_service.is_ready()
+        last_error = agent_service.get_last_error()
+        
+        status_code = 200 if is_ready else 503
+        
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "status": "ready" if is_ready else "not_ready",
+                "ready": is_ready,
+                "last_error": last_error,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erro ao verificar health do agent: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "ready": False,
+                "last_error": f"Erro ao verificar status: {str(e)}",
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+
+
 @app.get("/health/openai")
 async def health_check_openai():
     """

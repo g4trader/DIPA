@@ -145,7 +145,28 @@ def testar_agent_service():
         from src.dw.connection import get_db_session
         from src.agent.utils.date_extraction import extrair_mes_ano_explicito
         
+        # Verifica readiness do agent
         agent_service = get_agent_service()
+        if agent_service is None:
+            logger.error("❌ AgentService retornou None")
+            return False
+        
+        # Verifica se está pronto
+        is_ready = agent_service.is_ready()
+        last_error = agent_service.get_last_error()
+        
+        logger.info(f"📊 Status do AgentService:")
+        logger.info(f"   - Ready: {is_ready}")
+        if last_error:
+            logger.warning(f"   - Último erro: {last_error}")
+        
+        if not is_ready:
+            logger.warning("⚠️  AgentService não está pronto, tentando ensure_ready()...")
+            if agent_service.ensure_ready():
+                logger.info("✅ AgentService ficou pronto após ensure_ready()")
+            else:
+                logger.warning("⚠️  AgentService ainda não está pronto após ensure_ready()")
+                # Continua mesmo assim - pode funcionar parcialmente
         
         todas_passaram = True
         
