@@ -31,12 +31,9 @@ from src.agent.queries import (
     analisar_meta_mensal
 )
 from src.agent.queries_analytics import (
-    get_resumo_meta_por_vendedor,
     get_piores_vendedores_por_gap,
-    get_melhores_vendedores_por_atingimento,
-    get_clientes_criticos_churn,
-    get_produtos_em_queda,
-    get_alertas_criticos
+    # Nota: get_metas_realizado_por_mes é importado localmente quando necessário
+    # para evitar importação circular
 )
 from src.agent.structured_response_builder import (
     construir_secao_vendedores,
