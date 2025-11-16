@@ -172,12 +172,10 @@ def main():
     # Remove barra no final se houver
     base_url = base_url.rstrip("/")
     
-    # Origens a testar
+    # Origens a testar (apenas as de produção para o script)
     origins = [
         "https://dipam.smartiasolutions.com.br",
         "https://dipam-copilot-frontend-6arhlm3mha-uc.a.run.app",
-        "http://localhost:3000",
-        "http://localhost:5173",
     ]
     
     print(f"{YELLOW}🌐 API Base URL: {base_url}{RESET}")

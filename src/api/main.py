@@ -5,8 +5,8 @@ Este módulo expõe endpoints REST para o agente conversacional,
 permitindo interação em linguagem natural com os dados da empresa.
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Query, Path
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Depends, Query, Path, Request
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
@@ -59,6 +59,7 @@ if config.environment == "development":
         "http://127.0.0.1:8080",
     ])
 
+# CORSMiddleware padrão (primeira camada)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -67,6 +68,68 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# Middleware CORS manual por cima de TUDO (segunda camada - garante CORS mesmo em erros)
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    """
+    Middleware HTTP que SEMPRE adiciona headers CORS, mesmo em erros.
+    Esta é uma camada extra de segurança para garantir que TODAS as respostas
+    (200, 4xx, 5xx, 503) incluam headers CORS corretos.
+    """
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        # Se der erro dentro da aplicação, ainda assim queremos CORS
+        logger.error(f"Erro capturado no middleware CORS: {str(exc)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        # Cria resposta de erro com CORS
+        response = Response(
+            content='{"detail": "Internal server error"}',
+            status_code=500,
+            media_type="application/json",
+        )
+    
+    # Adiciona headers CORS se a origem for permitida
+    origin = request.headers.get("origin")
+    if origin and origin in allowed_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        
+        # Garante que caches respeitem origem
+        vary = response.headers.get("Vary")
+        if vary:
+            if "Origin" not in vary:
+                response.headers["Vary"] = vary + ", Origin"
+        else:
+            response.headers["Vary"] = "Origin"
+    
+    return response
+
+# Handler global para OPTIONS (preflight) - funciona para QUALQUER rota
+@app.options("/{path:path}")
+async def options_cors_handler(path: str, request: Request):
+    """
+    Handler genérico de preflight CORS para qualquer rota.
+    Este endpoint captura TODAS as requisições OPTIONS e retorna headers CORS corretos.
+    """
+    origin = request.headers.get("origin")
+    request_method = request.headers.get("Access-Control-Request-Method", "POST")
+    request_headers = request.headers.get("Access-Control-Request-Headers", "Content-Type")
+    
+    response = Response(status_code=200)
+    
+    if origin and origin in allowed_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = request_method
+        response.headers["Access-Control-Allow-Headers"] = request_headers
+        response.headers["Access-Control-Max-Age"] = "600"
+        response.headers["Vary"] = "Origin"
+    
+    return response
 
 
 # Inicializa flags de estado da aplicação (para health checks)
