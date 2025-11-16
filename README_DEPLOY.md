@@ -107,7 +107,31 @@ echo -n "sk-..." | gcloud secrets create openai-api-key --data-file=-
 echo -n "valor" | gcloud secrets create postgres-password --data-file=-
 ```
 
-### Passo 3: Deploy via Cloud Build
+### Passo 3: Deploy via Cloud Build (ou Deploy Direto)
+
+#### Opção A: Deploy Direto (Recomendado - Mais Rápido)
+
+```bash
+# Deploy direto usando source (Cloud Run builda automaticamente)
+gcloud run deploy dipam-ai-backend \
+  --source . \
+  --region=us-central1 \
+  --platform=managed \
+  --allow-unauthenticated \
+  --port=8080 \
+  --memory=2Gi \
+  --cpu=1 \
+  --timeout=300s \
+  --max-instances=10 \
+  --min-instances=0 \
+  --set-env-vars="ENVIRONMENT=production,DB_TYPE=sqlite,SQLITE_PATH=/app/data/dipam_dw.db,LOG_LEVEL=INFO" \
+  --set-secrets="OPENAI_API_KEY=openai-api-key:latest"
+```
+
+**Observação**: O Cloud Run espera que o servidor escute na porta definida por `PORT` (8080).
+O Dockerfile usa `CMD ["python", "-m", "src.api.main"]` que inicia o uvicorn na porta correta.
+
+#### Opção B: Deploy via Cloud Build
 
 ```bash
 # Fazer commit das mudanças
@@ -119,6 +143,8 @@ git push origin main
 # Ou executar manualmente:
 gcloud builds submit --config cloudbuild.yaml
 ```
+
+**Nota**: O `cloudbuild.yaml` pode precisar de ajustes para usar `SHORT_SHA` corretamente.
 
 ### Passo 4: Configurar Variáveis de Ambiente no Cloud Run
 
@@ -244,9 +270,30 @@ git push origin main
 
 ## 🧪 Testes
 
-### Testar Local como se fosse Produção
+### Simular Ambiente Cloud Run Localmente
 
-#### Opção 1: Script Auxiliar (Recomendado)
+#### Opção 1: Script de Simulação Cloud Run (Recomendado para Debug de Startup)
+
+```bash
+# Simula exatamente o ambiente Cloud Run (PORT=8080, produção, etc.)
+./scripts/run_cloud_run_local.sh
+```
+
+Este script:
+- Configura variáveis de ambiente como no Cloud Run (`PORT=8080`, `ENVIRONMENT=production`)
+- Inicia o servidor com `python -m src.api.main`
+- Permite testar se o servidor sobe corretamente antes do deploy
+
+**Testar após iniciar**:
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/health/db
+curl http://localhost:8080/health/openai
+```
+
+**Se o servidor subir localmente neste script mas falhar no Cloud Run**, o problema é configuração no Cloud Run (não código).
+
+#### Opção 2: Script de Validação Completa (Recomendado para Validação Pré-Deploy)
 
 ```bash
 # Ativa venv, valida envs e executa testes automaticamente

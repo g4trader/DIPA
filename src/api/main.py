@@ -45,54 +45,56 @@ app.add_middleware(
 )
 
 
+# Inicializa flags de estado da aplicação (para health checks)
+# IMPORTANTE: Essas flags são setadas no startup_event e usadas pelos endpoints de health
+# O servidor SEMPRE sobe, mesmo que DB ou OpenAI falhem - os health endpoints reportam o status
+app.state.db_available = False
+app.state.openai_available = False
+app.state.agent_service_available = False
+app.state.startup_errors = []
+
 # Eventos de startup/shutdown
 @app.on_event("startup")
 async def startup_event():
-    """Evento de startup da aplicação."""
+    """
+    Evento de startup da aplicação.
+    
+    IMPORTANTE: Este evento NUNCA deve fazer raise ou derrubar o container.
+    Em vez disso, seta flags em app.state que são usadas pelos health endpoints.
+    Isso garante que o servidor sempre sobe e os health checks podem reportar problemas.
+    """
     logger.info("Iniciando aplicação Dipam AI Agent...")
     
-    # Validação crítica de variáveis de ambiente em produção
-    environment = getattr(config, 'environment', 'development')
-    is_production = environment == "production"
+    # Limpa erros anteriores (se houver restart)
+    app.state.startup_errors = []
     
-    errors = []
-    
-    # Valida OPENAI_API_KEY (obrigatória em produção)
+    # 1. Validação de OpenAI (não crítica para o servidor subir)
+    logger.info("Verificando configuração OpenAI...")
     try:
         from src.llm_openai_client import get_openai_client
-        get_openai_client()
-        logger.info("✅ OPENAI_API_KEY validada com sucesso")
+        client = get_openai_client()
+        if client:
+            app.state.openai_available = True
+            logger.info("✅ OPENAI_API_KEY validada com sucesso")
+        else:
+            logger.warning("⚠️  OpenAI client retornou None")
+            app.state.startup_errors.append("OPENAI_API_KEY: client retornou None")
     except Exception as e:
         error_msg = f"OPENAI_API_KEY não configurada ou inválida: {str(e)}"
         logger.error(f"❌ {error_msg}")
-        if is_production:
-            errors.append(error_msg)
-        else:
-            logger.warning("⚠️  Continuando sem OPENAI_API_KEY (modo desenvolvimento)")
+        app.state.startup_errors.append(error_msg)
+        logger.warning("⚠️  Servidor continuará funcionando, mas funcionalidades de LLM podem não estar disponíveis")
     
-    # Valida DATABASE_URL ou configuração de banco
+    # 2. Validação e inicialização do banco de dados (não crítica para o servidor subir)
+    logger.info("Verificando configuração de banco de dados...")
     try:
         db_connection_string = config.database.connection_string
         if not db_connection_string:
             raise ValueError("DATABASE_URL ou configuração de banco não encontrada")
         logger.info(f"✅ Configuração de banco de dados validada: {config.database.db_type}")
-    except Exception as e:
-        error_msg = f"Configuração de banco de dados inválida: {str(e)}"
-        logger.error(f"❌ {error_msg}")
-        if is_production:
-            errors.append(error_msg)
-    
-    # Se houver erros críticos em produção, falha rápido
-    if errors and is_production:
-        error_summary = "\n".join(f"  - {e}" for e in errors)
-        logger.error(f"❌ ERROS CRÍTICOS DE CONFIGURAÇÃO:\n{error_summary}")
-        logger.error("Aplicação não pode iniciar em produção sem essas configurações.")
-        raise RuntimeError(f"Erros de configuração: {error_summary}")
-    
-    try:
+        
         # Verifica arquivo SQLite se estiver usando SQLite
         if config.database.db_type == "sqlite":
-            import os
             sqlite_path = config.database.sqlite_path
             logger.info(f"Usando SQLite - Caminho: {sqlite_path}")
             
@@ -101,11 +103,14 @@ async def startup_event():
                 file_size = os.path.getsize(sqlite_path)
                 logger.info(f"✅ Arquivo SQLite encontrado - Tamanho: {file_size / (1024*1024):.2f} MB")
             else:
-                logger.error(f"❌ Arquivo SQLite NÃO encontrado em: {sqlite_path}")
+                error_msg = f"Arquivo SQLite NÃO encontrado em: {sqlite_path}"
+                logger.error(f"❌ {error_msg}")
                 logger.error(f"   Diretório /app/data existe? {os.path.exists('/app/data')}")
                 logger.error(f"   Listando /app/data: {os.listdir('/app/data') if os.path.exists('/app/data') else 'diretório não existe'}")
-                if is_production:
-                    raise FileNotFoundError(f"Arquivo SQLite não encontrado em produção: {sqlite_path}")
+                app.state.startup_errors.append(error_msg)
+                logger.warning("⚠️  Servidor continuará funcionando, mas consultas ao banco podem falhar")
+                # NÃO faz raise - apenas registra o erro
+            return  # Não tenta inicializar DB se arquivo não existe
         
         # Inicializa conexão com banco de dados
         init_db()
@@ -117,25 +122,54 @@ async def startup_event():
             engine = get_db_engine()
             with engine.connect() as conn:
                 try:
-                    result = conn.execute(text("SELECT COUNT(*) FROM metas_vendedor"))
+                    result = conn.execute(text("SELECT COUNT(*) FROM metas_vendedor LIMIT 1"))
                     count = result.scalar()
                     logger.info(f"✅ Teste de conexão: {count} registros em metas_vendedor")
+                    app.state.db_available = True
                 except Exception as e:
-                    logger.error(f"❌ Erro ao testar conexão com metas_vendedor: {e}")
-                    if is_production:
-                        raise
+                    error_msg = f"Erro ao testar conexão com metas_vendedor: {str(e)}"
+                    logger.error(f"❌ {error_msg}")
+                    app.state.startup_errors.append(error_msg)
+                    logger.warning("⚠️  Servidor continuará funcionando, mas consultas podem falhar")
+        else:
+            # Para PostgreSQL, apenas marca como disponível se init_db não deu erro
+            app.state.db_available = True
         
-        # Carrega modelos de ML (inicializa serviço do agente)
-        agent_service = get_agent_service()
-        logger.info("Modelos de ML carregados")
-    
     except Exception as e:
-        logger.error(f"Erro ao inicializar aplicação: {str(e)}")
+        error_msg = f"Erro ao inicializar banco de dados: {str(e)}"
+        logger.error(f"❌ {error_msg}")
         import traceback
         logger.error(traceback.format_exc())
-        # Em produção, falha rápido
-        if is_production:
-            raise
+        app.state.startup_errors.append(error_msg)
+        logger.warning("⚠️  Servidor continuará funcionando, mas consultas ao banco podem falhar")
+        # NÃO faz raise - apenas registra o erro
+    
+    # 3. Carrega modelos de ML (não crítico para o servidor subir)
+    logger.info("Carregando modelos de ML...")
+    try:
+        agent_service = get_agent_service()
+        if agent_service:
+            app.state.agent_service_available = True
+            logger.info("✅ Modelos de ML carregados")
+        else:
+            logger.warning("⚠️  AgentService retornou None")
+            app.state.startup_errors.append("AgentService: retornou None")
+    except Exception as e:
+        error_msg = f"Erro ao carregar modelos de ML: {str(e)}"
+        logger.error(f"❌ {error_msg}")
+        import traceback
+        logger.error(traceback.format_exc())
+        app.state.startup_errors.append(error_msg)
+        logger.warning("⚠️  Servidor continuará funcionando, mas funcionalidades de ML podem não estar disponíveis")
+        # NÃO faz raise - apenas registra o erro
+    
+    # Resumo final do startup
+    if app.state.startup_errors:
+        logger.warning(f"⚠️  Startup concluído com {len(app.state.startup_errors)} erro(s) (servidor funcionando):")
+        for error in app.state.startup_errors:
+            logger.warning(f"   - {error}")
+    else:
+        logger.info("✅ Startup concluído com sucesso - todos os componentes disponíveis")
 
 
 @app.on_event("shutdown")
@@ -294,7 +328,22 @@ async def health_check_db():
     Endpoint de health check do banco de dados.
     
     Testa a conexão com o banco de dados executando uma query simples.
+    IMPORTANTE: Retorna 503 se o banco não estiver disponível, mas o servidor continua rodando.
     """
+    # Verifica flag do startup primeiro
+    if not app.state.db_available:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "database": config.database.db_type,
+                "connected": False,
+                "error": "Database não disponível (verifique logs do startup)",
+                "startup_errors": [e for e in app.state.startup_errors if "banco" in e.lower() or "database" in e.lower() or "sqlite" in e.lower()],
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+    
     try:
         from sqlalchemy import text
         engine = get_db_engine()
@@ -319,18 +368,22 @@ async def health_check_db():
                 )
         except Exception as e:
             logger.warning(f"Erro ao contar registros em metas_vendedor: {str(e)}")
+            # Atualiza flag se conexão falhar durante runtime
+            app.state.db_available = False
             return JSONResponse(
+                status_code=503,
                 content={
-                    "status": "healthy",
+                    "status": "unhealthy",
                     "database": config.database.db_type,
-                    "connected": True,
-                    "test_query": "success",
-                    "warning": f"Não foi possível contar registros: {str(e)}",
+                    "connected": False,
+                    "error": f"Não foi possível contar registros: {str(e)}",
                     "timestamp": datetime.utcnow().isoformat(),
                 }
             )
     except Exception as e:
         logger.error(f"Erro ao verificar saúde do banco de dados: {str(e)}")
+        # Atualiza flag se conexão falhar durante runtime
+        app.state.db_available = False
         return JSONResponse(
             status_code=503,
             content={
@@ -349,12 +402,39 @@ async def health_check_openai():
     Endpoint de health check da OpenAI.
     
     Testa a conexão com a API da OpenAI fazendo uma chamada mínima.
+    IMPORTANTE: Retorna 503 se OpenAI não estiver disponível, mas o servidor continua rodando.
     """
+    # Verifica flag do startup primeiro
+    if not app.state.openai_available:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "openai_configured": False,
+                "openai_connected": False,
+                "error": "OpenAI não disponível (verifique logs do startup)",
+                "startup_errors": [e for e in app.state.startup_errors if "openai" in e.lower() or "api_key" in e.lower()],
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+    
     try:
         from src.llm_openai_client import get_openai_client, call_llm
         
         # Valida configuração
         client_config = get_openai_client()
+        if not client_config:
+            app.state.openai_available = False
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "unhealthy",
+                    "openai_configured": False,
+                    "openai_connected": False,
+                    "error": "OpenAI client retornou None",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
         
         # Faz uma chamada mínima de teste (apenas validação, sem gerar resposta completa)
         try:
@@ -366,17 +446,31 @@ async def health_check_openai():
                 temperature=0
             )
             
-            return JSONResponse(
-                content={
-                    "status": "healthy",
-                    "openai_configured": True,
-                    "openai_connected": True,
-                    "test_response_length": len(test_response),
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-            )
+            if test_response:
+                return JSONResponse(
+                    content={
+                        "status": "healthy",
+                        "openai_configured": True,
+                        "openai_connected": True,
+                        "test_response_length": len(test_response),
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+            else:
+                app.state.openai_available = False
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "status": "unhealthy",
+                        "openai_configured": True,
+                        "openai_connected": False,
+                        "error": "Chamada de teste retornou None",
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
         except Exception as e:
             logger.error(f"Erro ao testar chamada OpenAI: {str(e)}")
+            app.state.openai_available = False
             return JSONResponse(
                 status_code=503,
                 content={
@@ -389,6 +483,7 @@ async def health_check_openai():
             )
     except Exception as e:
         logger.error(f"Erro ao verificar saúde da OpenAI: {str(e)}")
+        app.state.openai_available = False
         return JSONResponse(
             status_code=503,
             content={
@@ -986,12 +1081,15 @@ async def feedback_interacao(
 if __name__ == "__main__":
     import uvicorn
     
-    # Usa porta do ambiente (Cloud Run) ou porta configurada
-    port = int(os.getenv("PORT", getattr(config, 'api_port', 8000)))
+    # IMPORTANTE: Cloud Run define PORT=8080 via env var
+    # Fallback para 8080 (padrão Cloud Run) em vez de 8000 (dev local)
+    port = int(os.getenv("PORT", 8080))
+    
+    logger.info(f"🚀 Iniciando servidor FastAPI na porta {port} (PORT env: {os.getenv('PORT', 'não definido')})")
     
     uvicorn.run(
         "src.api.main:app",
-        host="0.0.0.0",
+        host="0.0.0.0",  # IMPORTANTE: 0.0.0.0 para Cloud Run
         port=port,
         reload=getattr(config, 'debug', False),
         log_level=getattr(config, 'log_level', 'info').lower()

@@ -82,8 +82,9 @@ EXPOSE 8080
 
 # Comando para executar a aplicação
 # Cloud Run espera que a aplicação escute na porta definida por PORT
-# Usa src.api.main:app pois o app FastAPI está em src/api/main.py
-CMD exec uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT:-8080}
+# IMPORTANTE: Usa python -m para garantir que o módulo seja carregado corretamente
+# O if __name__ == "__main__" em src/api/main.py iniciará o uvicorn na porta PORT
+CMD ["python", "-m", "src.api.main"]
 
 
 
