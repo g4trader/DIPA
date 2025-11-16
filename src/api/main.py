@@ -1003,8 +1003,23 @@ async def ask_question(
         return response
     
     except Exception as e:
-        logger.error(f"Erro ao processar pergunta: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Erro ao processar pergunta: {str(e)}")
+        # IMPORTANTE: Captura TODAS as exceções para garantir que sempre retornamos uma resposta com CORS
+        # JSONResponse garante que o middleware CORS adicione os headers mesmo em erros
+        # Isso evita que o worker morra e o Google Frontend retorne 503 sem headers CORS
+        logger.error(f"❌ Erro ao processar pergunta: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        # Retorna erro estruturado COM headers CORS (via JSONResponse)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Erro interno do servidor",
+                "message": "Ocorreu um erro ao processar sua pergunta. Por favor, tente novamente.",
+                "detail": str(e) if config.environment == "development" else "Erro interno do servidor",
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
 
 
 @app.get("/preview/vendedor/{vendedor}/{mes_ano}", response_model=PreviewVendedorResponse)
