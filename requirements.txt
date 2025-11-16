@@ -3,6 +3,7 @@
 # FastAPI e servidor (para API do agente)
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+gunicorn==21.2.0  # Servidor WSGI para produção (Cloud Run)
 pydantic==2.5.0
 
 # Data processing

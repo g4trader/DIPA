@@ -82,9 +82,10 @@ EXPOSE 8080
 
 # Comando para executar a aplicação
 # Cloud Run espera que a aplicação escute na porta definida por PORT
-# IMPORTANTE: Usa python -m para garantir que o módulo seja carregado corretamente
-# O if __name__ == "__main__" em src/api/main.py iniciará o uvicorn na porta PORT
-CMD ["python", "-m", "src.api.main"]
+# IMPORTANTE: Usa gunicorn com main:app para compatibilidade com Cloud Run buildpack
+# main:app refere-se ao arquivo main.py na raiz que expõe app de src.api.main
+# Alternativa: CMD ["python", "-m", "src.api.main"] (se preferir uvicorn direto)
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "--workers", "1", "--timeout", "300", "--log-level", "info", "main:app"]
 
 
 
