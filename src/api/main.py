@@ -1121,13 +1121,19 @@ if __name__ == "__main__":
     # Fallback para 8080 (padrão Cloud Run) em vez de 8000 (dev local)
     port = int(os.getenv("PORT", 8080))
     
+    # IMPORTANTE: reload SEMPRE False em produção (Cloud Run)
+    # reload=True só em desenvolvimento local com DEBUG=True
+    is_production = os.getenv("ENVIRONMENT", "development") == "production"
+    reload_mode = False if is_production else getattr(config, "debug", False)
+    
     logger.info(f"🚀 Iniciando servidor FastAPI na porta {port} (PORT env: {os.getenv('PORT', 'não definido')})")
+    logger.info(f"   Ambiente: {os.getenv('ENVIRONMENT', 'development')}, Reload: {reload_mode}")
     
     uvicorn.run(
         "src.api.main:app",
         host="0.0.0.0",  # IMPORTANTE: 0.0.0.0 para Cloud Run (não localhost/127.0.0.1)
         port=port,
-        reload=getattr(config, "debug", False),  # reload=False em produção
+        reload=reload_mode,  # reload=False em produção (Cloud Run)
         log_level=getattr(config, "log_level", "info").lower(),
     )
 
