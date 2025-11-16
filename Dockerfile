@@ -84,7 +84,10 @@ EXPOSE 8080
 # Cloud Run espera que a aplicação escute na porta definida por PORT
 # IMPORTANTE: FastAPI é ASGI, não WSGI, então precisa usar uvicorn.workers.UvicornWorker
 # main:app refere-se ao arquivo main.py na raiz que expõe app de src.api.main
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--timeout", "300", "--log-level", "info", "main:app"]
+# IMPORTANTE: --timeout=30 é o timeout de worker startup (não request timeout)
+# Requests têm timeout de 300s, mas startup precisa ser rápido (<30s)
+# Aumentado para 60s para dar tempo do startup assíncrono completar
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--timeout", "300", "--graceful-timeout", "60", "--log-level", "info", "main:app"]
 
 
 
