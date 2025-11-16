@@ -204,3 +204,4 @@ def registrar_interacao(
         session.rollback()
         return None
 
+

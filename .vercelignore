@@ -41,3 +41,4 @@ docker-compose.yml
 *.swo
 
 # Manter apenas arquivos do frontend Next.js
+

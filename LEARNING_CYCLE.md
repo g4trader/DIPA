@@ -217,3 +217,4 @@ scripts/
 - O sistema não altera o **contrato das rotas da API** existentes
 - Todas as mudanças são **internas** ao agente
 
+

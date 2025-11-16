@@ -104,3 +104,4 @@ echo "     -H 'Content-Type: application/json' \\"
 echo "     -d '{\"pergunta\":\"qual a meta de vendas do mês de outubro 2025\",\"usuario_id\":\"test\",\"papel\":\"diretor\"}'"
 echo ""
 
+

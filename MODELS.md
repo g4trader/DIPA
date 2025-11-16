@@ -291,3 +291,4 @@ clientes = session.query(Cliente).filter(Cliente.ativo == True).all()
 
 
 
+

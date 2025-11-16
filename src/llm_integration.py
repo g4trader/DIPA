@@ -1236,6 +1236,7 @@ REGRAS FUNDAMENTAIS - ZERO INVENÇÃO DE DADOS:
 3. Se um dado não estiver presente no contexto, NÃO cite
 4. Use formatação brasileira: R$ 1.000,00 e 85,5%
 5. Seja preciso: use números exatos do contexto
+6. CRÍTICO: Se o contexto fornecer meta_total, realizado_total e atingimento_medio, use EXATAMENTE esses valores. NÃO recalcule, NÃO arredonde além do necessário, NÃO invente novos números.
 
 ESTRUTURA PARA RESUMO EXECUTIVO:
 - 3-5 frases em linguagem de Diretor
@@ -1268,7 +1269,7 @@ Se a camada de código marcar tem_dados = true, sempre traga alguma análise."""
         
         prompt = f"""Com base nos dados abaixo, escreva um resumo executivo de 3-5 frases explicando por que não batemos a meta no mês {contexto.get('mes_ano', 'N/A')}.
 
-Dados:
+Dados (USE EXATAMENTE ESTES VALORES - NÃO RECALCULE):
 - Meta total: R$ {contexto.get('meta_total', 0):,.2f}
 - Realizado total: R$ {contexto.get('realizado_total', 0):,.2f}
 - Gap total: R$ {contexto.get('gap_total', 0):,.2f}
@@ -1278,6 +1279,8 @@ Dados:
 {insights_texto}
 Principais responsáveis:
 {json.dumps(contexto.get('piores_vendedores', [])[:5], ensure_ascii=False, indent=2)}
+
+IMPORTANTE: Use EXATAMENTE os valores de Meta total, Realizado total e Atingimento médio fornecidos acima. NÃO recalcule, NÃO arredonde além do necessário, NÃO invente novos números.
 
 Escreva o resumo executivo em linguagem de Diretor, citando os principais vendedores e o impacto deles no gap total.{" Se houver insights preditivos acima, mencione-os explicitamente no resumo." if insights_texto else ""}"""
     else:

@@ -257,3 +257,4 @@ def obter_termos_por_nome(nome_produto: str) -> Optional[List[str]]:
 
 
 
+

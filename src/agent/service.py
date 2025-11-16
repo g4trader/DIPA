@@ -1530,12 +1530,12 @@ class AgentService:
         t_start = time.perf_counter()
         logger.info(f"[_handle_meta_query_diretor_analytics] Processando consulta de meta com analytics para {mes_ano}")
         
-        # 1. Busca dados de analytics_vendedor_mes
-        vendedores_analytics = session.query(AnalyticsVendedorMes).filter(
-            AnalyticsVendedorMes.mes_ano == mes_ano
-        ).all()
+        # 1. Usa função única de agregação (FONTE ÚNICA DE VERDADE)
+        from src.agent.queries_analytics import get_metas_realizado_por_mes, get_piores_vendedores_por_gap
         
-        if not vendedores_analytics:
+        kpis_mes = get_metas_realizado_por_mes(session, mes_ano, excluir_totais=True)
+        
+        if kpis_mes["total_vendedores"] == 0:
             # Sem dados para o período
             return {
                 "intent": "consulta_meta",
@@ -1546,20 +1546,15 @@ class AgentService:
                 "structured": None
             }
         
-        # 2. Calcula resumo agregado
-        meta_total = sum(float(v.meta_total) for v in vendedores_analytics)
-        realizado_total = sum(float(v.realizado_total) for v in vendedores_analytics)
-        gap_total = realizado_total - meta_total
-        atingimento_medio = (realizado_total / meta_total * 100) if meta_total > 0 else 0.0
+        # Extrai valores dos KPIs
+        meta_total = kpis_mes["meta_total"]
+        realizado_total = kpis_mes["realizado_total"]
+        gap_total = kpis_mes["gap_total"]
+        atingimento_medio = kpis_mes["atingimento_medio"]
+        vendedores_analytics = kpis_mes["linhas_detalhadas"]
         
-        # 3. Busca piores vendedores (por gap negativo e meta_risk_flag)
-        piores_vendedores = session.query(AnalyticsVendedorMes).filter(
-            AnalyticsVendedorMes.mes_ano == mes_ano,
-            AnalyticsVendedorMes.meta_risk_flag == True
-        ).order_by(
-            AnalyticsVendedorMes.gap_valor.asc().nulls_last(),
-            AnalyticsVendedorMes.meta_risk_score.desc().nulls_last()
-        ).limit(10).all()
+        # 2. Busca piores vendedores usando função única
+        piores_vendedores = get_piores_vendedores_por_gap(session, mes_ano, limite=10, excluir_totais=True)
         
         # 4. Busca alertas críticos
         alertas = session.query(AnalyticsAlerta).filter(
@@ -1623,12 +1618,18 @@ class AgentService:
         )
         
         # 7. Gera resumo executivo usando LLM
+        # IMPORTANTE: Passa valores EXATOS calculados pela função única
         contexto_llm = {
             "mes_ano": mes_ano,
-            "meta_total": meta_total,
-            "realizado_total": realizado_total,
-            "gap_total": gap_total,
-            "atingimento_medio": atingimento_medio,
+            "meta_total": meta_total,  # Valor calculado por get_metas_realizado_por_mes
+            "realizado_total": realizado_total,  # Valor calculado por get_metas_realizado_por_mes
+            "gap_total": gap_total,  # Valor calculado por get_metas_realizado_por_mes
+            "atingimento_medio": atingimento_medio,  # Valor calculado por get_metas_realizado_por_mes
+            "_audit_kpis": {
+                "fonte": "get_metas_realizado_por_mes",
+                "excluir_totais": True,
+                "total_vendedores": len(vendedores_analytics)
+            },
             "piores_vendedores": [
                 {
                     "vendedor_nome": v.vendedor_nome,

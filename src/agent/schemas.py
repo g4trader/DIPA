@@ -286,3 +286,4 @@ class InsightBundle(BaseModel):
 
 
 
+
