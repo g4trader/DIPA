@@ -231,6 +231,8 @@ export interface CopilotStructuredResponse {
   insightsRecomendacoes?: string[];
   /** @deprecated Use contexto_debug */
   jsonTecnico?: any;
+  /** @deprecated Use KPIs extraídos das seções */
+  kpis?: KpiItem[];
 }
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { TrendingUp, TrendingDown, Minus, Target, Users, AlertCircle, Lightbulb, Package, ChevronDown, Brain, Zap, DollarSign, Percent } from "lucide-react";
 import { CopilotStructuredResponse } from "@/types/agent";
 import { clsx } from "clsx";
@@ -19,8 +19,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
   const resumoExecutivo = data.resumo_executivo || data.resumoExecutivo;
   
   // Extrai KPIs das seções e insights preditivos
-  const extractKPIs = () => {
-    const kpis: Array<{ label: string; value: string | number; icon: React.ReactNode; color: string; trend?: "up" | "down" | "neutral" }> = [];
+  const kpis = useMemo(() => {
+    const kpisList: Array<{ label: string; value: string | number; icon: React.ReactNode; color: string; trend?: "up" | "down" | "neutral" }> = [];
     
     // Busca dados de vendedores para calcular KPIs
     const vendedoresSecao = data.secoes?.find(s => s.tipo === "lista_vendedores");
@@ -31,7 +31,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
       const atingimentoMedio = metaTotal > 0 ? (realizadoTotal / metaTotal) * 100 : 0;
       const vendedoresEmRisco = vendedores.filter(v => v.meta_risk_flag || (v.atingimento_pct && v.atingimento_pct < 95)).length;
       
-      kpis.push({
+      kpisList.push({
         label: "Faturamento do Mês",
         value: realizadoTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
         icon: <DollarSign className="w-4 h-4" />,
@@ -39,7 +39,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
         trend: "neutral"
       });
       
-      kpis.push({
+      kpisList.push({
         label: "Atingimento da Meta",
         value: `${atingimentoMedio.toFixed(1)}%`,
         icon: <Percent className="w-4 h-4" />,
@@ -47,7 +47,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
         trend: atingimentoMedio >= 100 ? "up" : atingimentoMedio >= 95 ? "neutral" : "down"
       });
       
-      kpis.push({
+      kpisList.push({
         label: "Vendedores em Risco",
         value: vendedoresEmRisco,
         icon: <AlertCircle className="w-4 h-4" />,
@@ -59,7 +59,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
     // Adiciona KPIs de insights preditivos
     if (data.insights_preditivos) {
       if (data.insights_preditivos.churn?.total_clientes_risco_alto) {
-        kpis.push({
+        kpisList.push({
           label: "Clientes em Alto Risco de Churn",
           value: data.insights_preditivos.churn.total_clientes_risco_alto,
           icon: <AlertCircle className="w-4 h-4" />,
@@ -70,17 +70,15 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
       
       if (data.insights_preditivos.meta_risk?.vendedores_risco_alto) {
         // Atualiza ou adiciona vendedores em risco com dados preditivos
-        const existingIdx = kpis.findIndex(k => k.label === "Vendedores em Risco");
+        const existingIdx = kpisList.findIndex(k => k.label === "Vendedores em Risco");
         if (existingIdx >= 0) {
-          kpis[existingIdx].value = data.insights_preditivos.meta_risk.vendedores_risco_alto;
+          kpisList[existingIdx].value = data.insights_preditivos.meta_risk.vendedores_risco_alto;
         }
       }
     }
     
-    return kpis;
-  };
-  
-  const kpis = extractKPIs();
+    return kpisList;
+  }, [data.secoes, data.insights_preditivos]);
   
   const toggleSection = (index: number) => {
     setExpandedSections(prev => ({ ...prev, [index]: !prev[index] }));
@@ -1023,6 +1021,9 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
             ))}
           </ul>
         </div>
+      )}
+
+        </>
       )}
 
       {/* Card Técnico (colapsável) */}

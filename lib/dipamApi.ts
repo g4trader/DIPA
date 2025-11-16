@@ -5,6 +5,8 @@
  * do Dipam AI, incluindo endpoints para perguntas ao agente e preview de dados.
  */
 
+import { CopilotStructuredResponse } from "@/types/agent";
+
 /**
  * URL base da API do Dipam AI
  * 
@@ -100,34 +102,7 @@ export type CopilotAnswerPayload = {
   topVendedores?: TopVendedor[];
   respostaMarkdown?: string;
   /** Resposta estruturada com seções, tabelas e insights preditivos (FASE 3 + FASE 5) */
-  structured?: {
-    resumo_executivo?: string;
-    secoes?: Array<{
-      titulo: string;
-      tipo: string;
-      dados: any[];
-    }>;
-    detalhe_tabela?: {
-      titulo?: string;
-      colunas: string[];
-      linhas: any[][];
-    };
-    contexto_debug?: any;
-    insights_preditivos?: {
-      churn?: {
-        total_clientes_risco_alto: number;
-        top_clientes: any[];
-      };
-      meta_risk?: {
-        vendedores_risco_alto: number;
-        detalhes: any[];
-      };
-      oportunidades?: {
-        total_clientes_potencial: number;
-        top_clientes: any[];
-      };
-    };
-  };
+  structured?: CopilotStructuredResponse;
 };
 
 export type AskResponse = {
