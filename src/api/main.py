@@ -111,7 +111,7 @@ async def startup_event():
                 app.state.startup_errors.append(error_msg)
                 logger.warning("⚠️  Servidor continuará funcionando, mas consultas ao banco podem falhar")
                 # NÃO faz raise - apenas registra o erro
-            return  # Não tenta inicializar DB se arquivo não existe
+                return  # Não tenta inicializar DB se arquivo não existe
         
         # Inicializa conexão com banco de dados
         init_db()
