@@ -50,7 +50,7 @@ steps:
       - '--max-instances'
       - '10'
       - '--min-instances'
-      - '0'
+      - '1'  # Evita cold starts e problemas de CORS durante inicialização
       - '--set-env-vars'
       - 'PORT=8080,DB_TYPE=postgresql'
       - '--set-secrets'
