@@ -947,7 +947,6 @@ async def ask_question(
             logger.warning("⚠️  AgentService ainda não está disponível (modelos ML carregando em background)")
             # IMPORTANTE: Usa HTTPException ao invés de JSONResponse para garantir que passa pelo CORSMiddleware
             # HTTPException sempre passa pelo pipeline do FastAPI, incluindo middlewares de CORS
-            from fastapi import HTTPException
             raise HTTPException(
                 status_code=503,
                 detail={
