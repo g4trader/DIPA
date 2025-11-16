@@ -252,8 +252,9 @@ async def startup_event():
                     logger.warning(f"⚠️  {error_msg}")
                     app.state.startup_errors.append(error_msg)
                     # Mesmo assim, marca como disponível se o serviço existe (pode funcionar parcialmente)
+                    # O endpoint /ask fará lazy loading se necessário
                     app.state.agent_service_available = True
-                    logger.warning("⚠️  AgentService marcado como disponível mesmo não estando totalmente pronto")
+                    logger.warning("⚠️  AgentService marcado como disponível (lazy loading será tentado no /ask se necessário)")
             else:
                 logger.warning("⚠️  AgentService retornou None")
                 app.state.startup_errors.append("AgentService: retornou None")
