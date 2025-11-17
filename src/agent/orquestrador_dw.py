@@ -23,10 +23,19 @@ from sqlalchemy.orm import Session
 
 from src.agent.intent_spec import IntentSpec
 
-# Importa diretamente do módulo analytics_metas sem passar por __init__.py
+# Importa diretamente do arquivo analytics_metas.py sem passar por __init__.py
 # Isso evita importar etl.py que requer pandas
-import importlib
-analytics_metas = importlib.import_module("src.dw.analytics_metas")
+import importlib.util
+import os
+
+# Calcula caminho absoluto do arquivo analytics_metas.py
+base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+analytics_path = os.path.join(base_dir, "src", "dw", "analytics_metas.py")
+
+# Carrega módulo diretamente do arquivo
+spec = importlib.util.spec_from_file_location("analytics_metas_direct", analytics_path)
+analytics_metas = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(analytics_metas)
 
 listar_metas_por_mes = analytics_metas.listar_metas_por_mes
 listar_vendas_por_mes = analytics_metas.listar_vendas_por_mes
