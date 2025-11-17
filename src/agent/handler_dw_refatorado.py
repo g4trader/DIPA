@@ -257,24 +257,4 @@ def processar_pergunta_com_dw(
     )
     
     return resposta_executiva
-        
-    except Exception as e:
-        logger.error(f"[processar_pergunta_com_dw] Erro ao gerar resposta executiva: {e}")
-        # Fallback: retorna dados brutos sem formatação executiva
-        return {
-            "resumo_executivo": (
-                f"Os dados foram consultados no data warehouse DIPAM, mas houve um erro ao gerar a resposta executiva. "
-                f"Dados disponíveis: {len(str(dados_dw))} caracteres."
-            ),
-            "periodo_analisado": {
-                "inicio": intent_spec.periodo_inicio + "-01" if intent_spec.periodo_inicio else None,
-                "fim": intent_spec.periodo_fim + "-01" if intent_spec.periodo_fim else None
-            },
-            "tabela_principal": [],
-            "insights": ["Consulte os dados brutos retornados pela camada DW."],
-            "intent_spec": intent_spec,
-            "dados_dw": dados_dw,
-            "tem_dados": True,
-            "erro": str(e)
-        }
 
