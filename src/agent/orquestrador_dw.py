@@ -25,6 +25,8 @@ from src.agent.intent_spec import IntentSpec
 from src.agent.rules import aplicar_regras, detectar_override_explicito
 from src.agent.analise_causas import detectar_atingimento_abaixo_meta, gerar_analise_causas
 from src.agent.memoria_comportamental import aplicar_instrucoes_comportamentais
+from src.agent.behavior_memory import aplicar_regras_ao_intent
+from src.agent.causas_detector import detectar_causas_para_mes
 
 # Importa diretamente do arquivo analytics_metas.py sem passar por __init__.py
 # Isso evita importar etl.py que requer pandas
@@ -420,7 +422,13 @@ def executar_intent_spec(
     # PASSO 1: Aplica período padrão se necessário
     intent_spec = _aplicar_periodo_padrao(intent_spec)
     
-    # PASSO 1.5: Aplica instruções comportamentais e regras de feedback (antes de validar)
+    # PASSO 1.5: Aplica behavior memory (regras comportamentais do JSON)
+    intent_dict = aplicar_regras_ao_intent(intent_spec)
+    # Atualiza intent_spec com filtros ajustados
+    if isinstance(intent_dict, dict) and "filtros" in intent_dict:
+        intent_spec.filtros.update(intent_dict["filtros"])
+    
+    # PASSO 1.6: Aplica instruções comportamentais e regras de feedback (antes de validar)
     filtros_sql = intent_spec.filtros.copy()
     
     # Aplica instruções comportamentais (que incluem regras de feedback)
@@ -632,7 +640,8 @@ def executar_intent_spec(
         },
         "dados": dados_normalizados,
         "regras_aplicadas": regras_aplicadas,
-        "analise_causas": analise_causas  # Análise de causas quando meta não batida
+        "analise_causas": analise_causas,  # Análise de causas quando meta não batida (legado)
+        "causas_detector": causas_detector  # Causas detectadas pelo novo módulo
     }
     
     logger.info(

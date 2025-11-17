@@ -26,6 +26,8 @@ from src.agent.memoria_comportamental import (
     aplicar_instrucoes_comportamentais,
     gerar_contexto_instrucoes_para_llm
 )
+from src.agent.post_processor import processar_resposta
+from src.agent.behavior_memory import aplicar_regras_ao_intent
 from src.llm_integration_intent import (
     gerar_intent_spec_via_llm,
     gerar_resposta_executiva_com_dados_dw
@@ -124,15 +126,21 @@ def processar_pergunta_com_dw(
             contexto_usuario=contexto_usuario
         )
         
-        # Extrai dados, regras aplicadas e análise de causas
+        # Extrai dados, regras aplicadas, análise de causas e causas_detector
         dados_dw = {
             "status": resultado_orquestrador.get("status"),
             "dados": resultado_orquestrador.get("dados", []),
             "tem_dados": resultado_orquestrador.get("status") == "ok" and len(resultado_orquestrador.get("dados", [])) > 0,
-            "analise_causas": resultado_orquestrador.get("analise_causas", {})
+            "analise_causas": resultado_orquestrador.get("analise_causas", {}),
+            "causas_detector": resultado_orquestrador.get("causas_detector", {}),
+            "meta_total": resultado_orquestrador.get("dados", [{}])[0].get("meta_total", 0) if resultado_orquestrador.get("dados") else 0,
+            "realizado_total": resultado_orquestrador.get("dados", [{}])[0].get("realizado_total", 0) if resultado_orquestrador.get("dados") else 0,
+            "gap_total": resultado_orquestrador.get("dados", [{}])[0].get("gap_total", 0) if resultado_orquestrador.get("dados") else 0,
+            "atingimento_medio": resultado_orquestrador.get("dados", [{}])[0].get("atingimento_medio", 0) if resultado_orquestrador.get("dados") else 0
         }
         regras_aplicadas = resultado_orquestrador.get("regras_aplicadas", {})
         analise_causas = resultado_orquestrador.get("analise_causas", {})
+        causas_detector = resultado_orquestrador.get("causas_detector", {})
         tem_dados = dados_dw.get("tem_dados", False)
         
         logger.info(
@@ -179,15 +187,31 @@ def processar_pergunta_com_dw(
             "erro": str(e)
         }
     
-        # PASSO 3: LLM gera resposta executiva com dados brutos
+        # PASSO 3: Pós-processador estrutura resposta
         try:
+            # Aplica behavior memory para obter regras aplicadas
+            behavior_rules_aplicadas = []
+            intent_dict_ajustado = aplicar_regras_ao_intent(intent_spec)
+            if isinstance(intent_dict_ajustado, dict) and intent_dict_ajustado.get("filtros") != intent_spec.filtros:
+                behavior_rules_aplicadas.append("Regras comportamentais aplicadas via behavior_memory.json")
+            
+            # Processa resposta usando post_processor
+            resposta_estruturada = processar_resposta(
+                intent_spec=intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else intent_spec,
+                dados_dw=dados_dw,
+                causas_detector=causas_detector,
+                behavior_rules_aplicadas=behavior_rules_aplicadas
+            )
+            
+            # PASSO 4: LLM gera resposta executiva com dados estruturados
             resposta_executiva = gerar_resposta_executiva_com_dados_dw(
                 pergunta=pergunta,
                 intent_spec=intent_spec,
                 dados_dw=dados_dw,
                 papel=papel,
                 regras_aplicadas=regras_aplicadas,
-                analise_causas=analise_causas
+                analise_causas=analise_causas,
+                resposta_estruturada=resposta_estruturada  # Passa resposta estruturada para LLM
             )
         
         # Adiciona metadados e detalhes técnicos
@@ -195,11 +219,16 @@ def processar_pergunta_com_dw(
         resposta_executiva["dados_dw"] = dados_dw
         resposta_executiva["tem_dados"] = True
         
+        # Adiciona resposta estruturada do pós-processador
+        if 'resposta_estruturada' in locals():
+            resposta_executiva["resposta_estruturada"] = resposta_estruturada
+        
         # Adiciona detalhes técnicos para o template
         resposta_executiva["detalhes_tecnicos"] = {
             "intent_spec": intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else str(intent_spec),
             "filtros_aplicados": intent_spec.filtros if hasattr(intent_spec, 'filtros') else {},
             "regras_aplicadas": regras_aplicadas,
+            "behavior_rules_aplicadas": behavior_rules_aplicadas,
             "query_executada": f"DW Query para tipo={intent_spec.tipo}, dimensao={intent_spec.dimensao_principal}"
         }
         

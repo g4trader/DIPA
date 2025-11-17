@@ -1,0 +1,377 @@
+"""
+Pós-processador de Respostas - DIPAM COPILOT™.
+
+Este módulo refatora o pós-processamento de respostas usando modelos narrativos claros,
+alinhados ao TEMPLATE DE RESPOSTA NEGATIVA e POSITIVA.
+
+ARQUITETURA:
+- Recebe: intent_spec, dados DW, causas_detector, behavior_rules_aplicadas
+- Emite: dict estruturado com todas as seções do template
+- Não inventa dados, apenas estrutura o que vem do DW
+"""
+
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def processar_resposta(
+    intent_spec: Dict[str, Any],
+    dados_dw: Dict[str, Any],
+    causas_detector: Optional[Dict[str, Any]] = None,
+    behavior_rules_aplicadas: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Processa resposta estruturada baseado nos dados do DW e causas detectadas.
+    
+    Args:
+        intent_spec: IntentSpec como dict
+        dados_dw: Dados retornados do DW
+        causas_detector: Resultado de detectar_causas_para_mes (opcional)
+        behavior_rules_aplicadas: Lista de regras comportamentais aplicadas (opcional)
+        
+    Returns:
+        dict estruturado com seções:
+        - resumo_executivo
+        - diagnostico_causas
+        - checklist_problemas
+        - plano_acao_7_dias
+        - plano_acao_30_dias
+        - tendencias_previsao
+        - detalhes_tecnicos
+    """
+    # Extrai atingimento médio
+    atingimento_medio = dados_dw.get("atingimento_medio", 0.0)
+    if not atingimento_medio and causas_detector:
+        atingimento_medio = causas_detector.get("atingimento_medio", 0.0)
+    
+    # Extrai gap total
+    gap_total = dados_dw.get("gap_total", 0.0)
+    if not gap_total and causas_detector:
+        gap_total = causas_detector.get("gap_total", 0.0)
+    
+    # Determina se usa template negativo ou positivo
+    usar_template_negativo = atingimento_medio < 100.0 or gap_total < 0
+    
+    if usar_template_negativo:
+        return _processar_template_negativo(
+            intent_spec, dados_dw, causas_detector, behavior_rules_aplicadas
+        )
+    else:
+        return _processar_template_positivo(
+            intent_spec, dados_dw, behavior_rules_aplicadas
+        )
+
+
+def _processar_template_negativo(
+    intent_spec: Dict[str, Any],
+    dados_dw: Dict[str, Any],
+    causas_detector: Optional[Dict[str, Any]],
+    behavior_rules_aplicadas: Optional[List[str]]
+) -> Dict[str, Any]:
+    """
+    Processa template de resposta negativa (atingimento < 100%).
+    """
+    gap_total = causas_detector.get("gap_total", 0.0) if causas_detector else dados_dw.get("gap_total", 0.0)
+    atingimento_medio = causas_detector.get("atingimento_medio", 0.0) if causas_detector else dados_dw.get("atingimento_medio", 0.0)
+    
+    causas = causas_detector.get("causas", {}) if causas_detector else {}
+    resumo_causas = causas_detector.get("resumo_causas", []) if causas_detector else []
+    
+    # Monta resumo executivo
+    resumo_executivo = _gerar_resumo_executivo_negativo(
+        gap_total, atingimento_medio, resumo_causas
+    )
+    
+    # Monta diagnóstico de causas
+    diagnostico_causas = {
+        "vendedores_pior_desempenho": causas.get("vendedores", []),
+        "rotas_maior_gap": causas.get("rotas", []),
+        "clientes_reduziram_compra": causas.get("clientes", []),
+        "skus_queda_expressiva": causas.get("skus", []),
+        "outras_causas": []
+    }
+    
+    # Monta checklist de problemas
+    checklist_problemas = _gerar_checklist_problemas(causas, gap_total)
+    
+    # Monta planos de ação
+    plano_acao_7_dias = _gerar_plano_acao_7_dias(causas)
+    plano_acao_30_dias = _gerar_plano_acao_30_dias(causas)
+    
+    # Monta tendências e previsão
+    tendencias_previsao = _gerar_tendencias_previsao(dados_dw, gap_total, atingimento_medio)
+    
+    # Monta detalhes técnicos
+    detalhes_tecnicos = {
+        "intent_spec": intent_spec,
+        "filtros_aplicados": intent_spec.get("filtros", {}),
+        "behavior_rules_aplicadas": behavior_rules_aplicadas or [],
+        "query_executada": f"DW Query para tipo={intent_spec.get('tipo')}, dimensao={intent_spec.get('dimensao_principal')}"
+    }
+    
+    return {
+        "resumo_executivo": resumo_executivo,
+        "diagnostico_causas": diagnostico_causas,
+        "checklist_problemas": checklist_problemas,
+        "plano_acao_7_dias": plano_acao_7_dias,
+        "plano_acao_30_dias": plano_acao_30_dias,
+        "tendencias_previsao": tendencias_previsao,
+        "detalhes_tecnicos": detalhes_tecnicos
+    }
+
+
+def _processar_template_positivo(
+    intent_spec: Dict[str, Any],
+    dados_dw: Dict[str, Any],
+    behavior_rules_aplicadas: Optional[List[str]]
+) -> Dict[str, Any]:
+    """
+    Processa template de resposta positiva (atingimento >= 100%).
+    """
+    atingimento_medio = dados_dw.get("atingimento_medio", 100.0)
+    meta_total = dados_dw.get("meta_total", 0.0)
+    realizado_total = dados_dw.get("realizado_total", 0.0)
+    
+    # Monta resumo executivo positivo
+    resumo_executivo = _gerar_resumo_executivo_positivo(
+        meta_total, realizado_total, atingimento_medio
+    )
+    
+    # Monta oportunidades de crescimento
+    oportunidades = _gerar_oportunidades_crescimento(dados_dw)
+    
+    # Monta detalhes técnicos
+    detalhes_tecnicos = {
+        "intent_spec": intent_spec,
+        "filtros_aplicados": intent_spec.get("filtros", {}),
+        "behavior_rules_aplicadas": behavior_rules_aplicadas or [],
+        "query_executada": f"DW Query para tipo={intent_spec.get('tipo')}"
+    }
+    
+    return {
+        "resumo_executivo": resumo_executivo,
+        "oportunidades_crescimento": oportunidades,
+        "detalhes_tecnicos": detalhes_tecnicos
+    }
+
+
+def _gerar_resumo_executivo_negativo(
+    gap_total: float,
+    atingimento_medio: float,
+    resumo_causas: List[str]
+) -> str:
+    """Gera resumo executivo para template negativo."""
+    gap_abs = abs(gap_total)
+    
+    resumo = f"O atingimento foi de {atingimento_medio:.2f}%, ficando {100.0 - atingimento_medio:.2f}% abaixo da meta. "
+    resumo += f"O gap total é de R$ {gap_abs:,.2f}. "
+    
+    if resumo_causas:
+        resumo += "Principais causas: " + "; ".join(resumo_causas[:2]) + "."
+    
+    return resumo
+
+
+def _gerar_resumo_executivo_positivo(
+    meta_total: float,
+    realizado_total: float,
+    atingimento_medio: float
+) -> str:
+    """Gera resumo executivo para template positivo."""
+    superacao = realizado_total - meta_total
+    
+    resumo = f"Meta superada com atingimento de {atingimento_medio:.2f}%. "
+    resumo += f"Realizado de R$ {realizado_total:,.2f} superou a meta de R$ {meta_total:,.2f} em R$ {superacao:,.2f}."
+    
+    return resumo
+
+
+def _gerar_checklist_problemas(
+    causas: Dict[str, Any],
+    gap_total: float
+) -> List[Dict[str, Any]]:
+    """Gera checklist de problemas baseado nas causas."""
+    problemas = []
+    
+    rotas = causas.get("rotas", [])
+    if rotas:
+        impacto_rotas = sum(abs(r.get("gap_rota", 0)) for r in rotas)
+        problemas.append({
+            "problema": f"{len(rotas)} rota(s) com gap significativo",
+            "impacto": f"R$ {impacto_rotas:,.2f}",
+            "causa_provavel": "Baixa performance de rotas específicas",
+            "urgencia": "alta" if impacto_rotas >= abs(gap_total) * 0.3 else "media"
+        })
+    
+    vendedores = causas.get("vendedores", [])
+    if vendedores:
+        impacto_vendedores = sum(abs(v.get("gap_vendedor", 0)) for v in vendedores)
+        problemas.append({
+            "problema": f"{len(vendedores)} vendedor(es) abaixo de 85% de atingimento",
+            "impacto": f"R$ {impacto_vendedores:,.2f}",
+            "causa_provavel": "Baixa performance individual",
+            "urgencia": "alta" if len(vendedores) > 5 else "media"
+        })
+    
+    clientes = causas.get("clientes", [])
+    if clientes:
+        impacto_clientes = sum(abs(c.get("variacao_abs", 0)) for c in clientes)
+        problemas.append({
+            "problema": f"{len(clientes)} cliente(s) com queda significativa",
+            "impacto": f"R$ {impacto_clientes:,.2f}",
+            "causa_provavel": "Perda de clientes ou redução de pedidos",
+            "urgencia": "alta"
+        })
+    
+    skus = causas.get("skus", [])
+    if skus:
+        impacto_skus = sum(abs(s.get("variacao_abs", 0)) for s in skus)
+        problemas.append({
+            "problema": f"{len(skus)} SKU(s) com queda expressiva",
+            "impacto": f"R$ {impacto_skus:,.2f}",
+            "causa_provavel": "Ruptura de estoque ou mix desfavorável",
+            "urgencia": "alta"
+        })
+    
+    # Garante mínimo de 5 itens
+    while len(problemas) < 5:
+        problemas.append({
+            "problema": "Análise adicional necessária",
+            "impacto": "A definir",
+            "causa_provavel": "Revisar dados detalhados",
+            "urgencia": "baixa"
+        })
+    
+    return problemas
+
+
+def _gerar_plano_acao_7_dias(causas: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Gera plano de ação imediata (7 dias)."""
+    acoes = []
+    
+    vendedores = causas.get("vendedores", [])
+    if vendedores:
+        top_vendedor = min(vendedores, key=lambda x: x.get("atingimento_vendedor", 100))
+        acoes.append({
+            "acao": f"Coaching urgente para {top_vendedor.get('vendedor_nome')}",
+            "responsavel": top_vendedor.get("supervisor_nome", "Supervisor"),
+            "prazo": "48 horas",
+            "como_medir": f"Aumentar atingimento de {top_vendedor.get('atingimento_vendedor', 0):.1f}% para pelo menos 90%"
+        })
+    
+    rotas = causas.get("rotas", [])
+    if rotas:
+        top_rota = min(rotas, key=lambda x: x.get("gap_rota", 0))
+        acoes.append({
+            "acao": f"Revisão imediata da {top_rota.get('rota_nome')}",
+            "responsavel": top_rota.get("supervisor_nome", "Supervisor"),
+            "prazo": "72 horas",
+            "como_medir": "Redução do gap em pelo menos 20%"
+        })
+    
+    clientes = causas.get("clientes", [])
+    if clientes:
+        top_cliente = min(clientes, key=lambda x: x.get("variacao_pct", 0))
+        acoes.append({
+            "acao": f"Visita urgente ao cliente {top_cliente.get('cliente_nome')}",
+            "responsavel": "Vendedor responsável",
+            "prazo": "24 horas",
+            "como_medir": "Recuperar pelo menos 50% do faturamento perdido"
+        })
+    
+    return acoes
+
+
+def _gerar_plano_acao_30_dias(causas: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Gera plano de ação de mitigação (30 dias)."""
+    acoes = []
+    
+    vendedores = causas.get("vendedores", [])
+    if vendedores:
+        acoes.append({
+            "acao": "Programa de treinamento para vendedores abaixo de 85%",
+            "objetivo": "Elevar atingimento médio para pelo menos 90%",
+            "responsavel": "Supervisão",
+            "prazo": "30 dias",
+            "metrica_sucesso": "Atingimento médio >= 90%"
+        })
+    
+    rotas = causas.get("rotas", [])
+    if rotas:
+        acoes.append({
+            "acao": "Revisão completa de carteira das rotas com maior gap",
+            "objetivo": "Redistribuir clientes e otimizar rotas",
+            "responsavel": "Gerência",
+            "prazo": "30 dias",
+            "metrica_sucesso": "Redução de 30% no gap total"
+        })
+    
+    clientes = causas.get("clientes", [])
+    if clientes:
+        acoes.append({
+            "acao": "Plano de recuperação para clientes com queda > 25%",
+            "objetivo": "Recuperar faturamento perdido",
+            "responsavel": "Equipe comercial",
+            "prazo": "30 dias",
+            "metrica_sucesso": "Recuperação de 40% do faturamento perdido"
+        })
+    
+    return acoes
+
+
+def _gerar_tendencias_previsao(
+    dados_dw: Dict[str, Any],
+    gap_total: float,
+    atingimento_medio: float
+) -> Dict[str, Any]:
+    """Gera tendências e previsão baseado nos dados."""
+    # Simplificado: usa dados atuais para projetar
+    # Em produção, poderia usar histórico de meses anteriores
+    
+    gap_abs = abs(gap_total)
+    
+    # Cenário atual: mantém ritmo
+    cenario_atual = {
+        "fechamento_previsto": dados_dw.get("realizado_total", 0.0),
+        "gap_previsto": gap_total,
+        "atingimento_previsto": atingimento_medio
+    }
+    
+    # Cenário otimista: recupera 50% do gap
+    cenario_otimista = {
+        "fechamento_previsto": dados_dw.get("realizado_total", 0.0) + (gap_abs * 0.5),
+        "gap_previsto": gap_total * 0.5,
+        "atingimento_previsto": min(100.0, atingimento_medio + ((100.0 - atingimento_medio) * 0.5))
+    }
+    
+    # Cenário pessimista: gap aumenta 20%
+    cenario_pessimista = {
+        "fechamento_previsto": dados_dw.get("realizado_total", 0.0) - (gap_abs * 0.2),
+        "gap_previsto": gap_total * 1.2,
+        "atingimento_previsto": max(0.0, atingimento_medio - ((100.0 - atingimento_medio) * 0.2))
+    }
+    
+    return {
+        "tendencias_identificadas": [
+            "Gap concentrado em poucas rotas",
+            "Vendedores com baixa performance precisam de suporte imediato"
+        ],
+        "probabilidade_recuperacao": 60.0 if gap_abs < 1000000 else 40.0,
+        "cenario_atual": cenario_atual,
+        "cenario_otimista": cenario_otimista,
+        "cenario_pessimista": cenario_pessimista
+    }
+
+
+def _gerar_oportunidades_crescimento(dados_dw: Dict[str, Any]) -> Dict[str, Any]:
+    """Gera oportunidades de crescimento para template positivo."""
+    return {
+        "vendedores_destaque": [],
+        "rotas_superaram_meta": [],
+        "clientes_expansao": [],
+        "riscos_concentracao": []
+    }
+

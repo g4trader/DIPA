@@ -172,7 +172,8 @@ def gerar_resposta_executiva_com_dados_dw(
     dados_dw: Dict[str, Any],
     papel: Optional[str] = None,
     regras_aplicadas: Optional[Dict[str, Any]] = None,
-    analise_causas: Optional[Dict[str, Any]] = None
+    analise_causas: Optional[Dict[str, Any]] = None,
+    resposta_estruturada: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Gera resposta executiva estruturada usando dados brutos do DW.
@@ -290,6 +291,18 @@ IMPORTANTE: Use esta análise de causas para preencher os campos obrigatórios d
 - explicacao_tecnica: explique tecnicamente os dados e tendências
 """
     
+    # Adiciona resposta estruturada do pós-processador se disponível
+    resposta_estruturada_str = ""
+    if resposta_estruturada:
+        resposta_estruturada_str = f"""
+
+RESPOSTA ESTRUTURADA DO PÓS-PROCESSADOR (use como base para sua resposta):
+{json.dumps(resposta_estruturada, ensure_ascii=False, indent=2, default=str)}
+
+IMPORTANTE: Esta resposta já foi estruturada pelo pós-processador. Use como base e reescreva em linguagem natural,
+mantendo TODOS os dados e números exatos. NÃO invente novos números ou dados.
+"""
+    
     prompt = f"""Você recebeu dados brutos do data warehouse DIPAM (camada DW) em formato JSON.
 Use APENAS esses dados para gerar uma resposta executiva estruturada.
 
@@ -301,6 +314,7 @@ Especificação de intenção executada:
 Dados brutos retornados pela camada DW:
 {dados_str}
 {analise_causas_str}
+{resposta_estruturada_str}
 
 REGRAS ANTI-ALUCINAÇÃO (CRÍTICO):
 1. Se "tem_dados": false ou a lista de dados estiver vazia:
