@@ -187,57 +187,76 @@ def processar_pergunta_com_dw(
             "erro": str(e)
         }
     
-        # PASSO 3: Pós-processador estrutura resposta
-        try:
-            # Aplica behavior memory para obter regras aplicadas
-            behavior_rules_aplicadas = []
-            intent_dict_ajustado = aplicar_regras_ao_intent(intent_spec)
-            if isinstance(intent_dict_ajustado, dict) and intent_dict_ajustado.get("filtros") != intent_spec.filtros:
-                behavior_rules_aplicadas.append("Regras comportamentais aplicadas via behavior_memory.json")
-            
-            # Processa resposta usando post_processor
-            resposta_estruturada = processar_resposta(
-                intent_spec=intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else intent_spec,
-                dados_dw=dados_dw,
-                causas_detector=causas_detector,
-                behavior_rules_aplicadas=behavior_rules_aplicadas
-            )
-            
-            # PASSO 4: LLM gera resposta executiva com dados estruturados
-            resposta_executiva = gerar_resposta_executiva_com_dados_dw(
-                pergunta=pergunta,
-                intent_spec=intent_spec,
-                dados_dw=dados_dw,
-                papel=papel,
-                regras_aplicadas=regras_aplicadas,
-                analise_causas=analise_causas,
-                resposta_estruturada=resposta_estruturada  # Passa resposta estruturada para LLM
-            )
+    # PASSO 3: Pós-processador estrutura resposta
+    try:
+        # Aplica behavior memory para obter regras aplicadas
+        behavior_rules_aplicadas = []
+        intent_dict_ajustado = aplicar_regras_ao_intent(intent_spec)
+        if isinstance(intent_dict_ajustado, dict) and intent_dict_ajustado.get("filtros") != intent_spec.filtros:
+            behavior_rules_aplicadas.append("Regras comportamentais aplicadas via behavior_memory.json")
         
-        # Adiciona metadados e detalhes técnicos
-        resposta_executiva["intent_spec"] = intent_spec
-        resposta_executiva["dados_dw"] = dados_dw
-        resposta_executiva["tem_dados"] = True
-        
-        # Adiciona resposta estruturada do pós-processador
-        if 'resposta_estruturada' in locals():
-            resposta_executiva["resposta_estruturada"] = resposta_estruturada
-        
-        # Adiciona detalhes técnicos para o template
-        resposta_executiva["detalhes_tecnicos"] = {
-            "intent_spec": intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else str(intent_spec),
-            "filtros_aplicados": intent_spec.filtros if hasattr(intent_spec, 'filtros') else {},
-            "regras_aplicadas": regras_aplicadas,
-            "behavior_rules_aplicadas": behavior_rules_aplicadas,
-            "query_executada": f"DW Query para tipo={intent_spec.tipo}, dimensao={intent_spec.dimensao_principal}"
-        }
-        
-        logger.info(
-            f"[processar_pergunta_com_dw] Resposta executiva gerada: "
-            f"resumo={len(resposta_executiva.get('resumo_executivo', ''))} chars"
+        # Processa resposta usando post_processor
+        resposta_estruturada = processar_resposta(
+            intent_spec=intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else intent_spec,
+            dados_dw=dados_dw,
+            causas_detector=causas_detector,
+            behavior_rules_aplicadas=behavior_rules_aplicadas
         )
         
-        return resposta_executiva
+        # PASSO 4: LLM gera resposta executiva com dados estruturados
+        resposta_executiva = gerar_resposta_executiva_com_dados_dw(
+            pergunta=pergunta,
+            intent_spec=intent_spec,
+            dados_dw=dados_dw,
+            papel=papel,
+            regras_aplicadas=regras_aplicadas,
+            analise_causas=analise_causas,
+            resposta_estruturada=resposta_estruturada  # Passa resposta estruturada para LLM
+        )
+    
+    except Exception as e:
+        logger.error(f"[processar_pergunta_com_dw] Erro ao processar resposta: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        # Fallback: retorna resposta básica sem pós-processamento
+        resposta_executiva = {
+            "resumo_executivo": f"Resposta gerada, mas houve erro no pós-processamento: {str(e)}",
+            "periodo_analisado": {
+                "inicio": intent_spec.periodo_inicio,
+                "fim": intent_spec.periodo_fim
+            },
+            "tabela_principal": dados_dw.get("dados", []),
+            "insights": ["Erro no processamento avançado da resposta."],
+            "intent_spec": intent_spec,
+            "dados_dw": dados_dw,
+            "tem_dados": dados_dw.get("tem_dados", False),
+            "erro": str(e)
+        }
+    
+    # Adiciona metadados e detalhes técnicos
+    resposta_executiva["intent_spec"] = intent_spec
+    resposta_executiva["dados_dw"] = dados_dw
+    resposta_executiva["tem_dados"] = True
+    
+    # Adiciona resposta estruturada do pós-processador
+    if 'resposta_estruturada' in locals():
+        resposta_executiva["resposta_estruturada"] = resposta_estruturada
+    
+    # Adiciona detalhes técnicos para o template
+    resposta_executiva["detalhes_tecnicos"] = {
+        "intent_spec": intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else str(intent_spec),
+        "filtros_aplicados": intent_spec.filtros if hasattr(intent_spec, 'filtros') else {},
+        "regras_aplicadas": regras_aplicadas,
+        "behavior_rules_aplicadas": behavior_rules_aplicadas if 'behavior_rules_aplicadas' in locals() else [],
+        "query_executada": f"DW Query para tipo={intent_spec.tipo}, dimensao={intent_spec.dimensao_principal}"
+    }
+    
+    logger.info(
+        f"[processar_pergunta_com_dw] Resposta executiva gerada: "
+        f"resumo={len(resposta_executiva.get('resumo_executivo', ''))} chars"
+    )
+    
+    return resposta_executiva
         
     except Exception as e:
         logger.error(f"[processar_pergunta_com_dw] Erro ao gerar resposta executiva: {e}")
