@@ -98,7 +98,7 @@ def gerar_analise_causas(
         - vendedores_pior_desempenho
         - rotas_maior_gap
         - clientes_reduziram_compra
-        - skus_queda_relevante
+        - skus_queda_expressiva
         - gargalos_rupturas
         - checklist_problemas
     """
@@ -305,7 +305,7 @@ def gerar_analise_causas(
             f"{len(resultado['vendedores_pior_desempenho'])} vendedores, "
             f"{len(resultado['rotas_maior_gap'])} rotas, "
             f"{len(resultado['clientes_reduziram_compra'])} clientes, "
-            f"{len(resultado['skus_queda_relevante'])} SKUs"
+            f"{len(resultado['skus_queda_expressiva'])} SKUs"
         )
         
     except Exception as e:
