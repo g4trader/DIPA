@@ -941,11 +941,71 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
         </details>
       )}
 
+      {/* KPIs do formato antigo (se disponível e não foram extraídos das seções) */}
+      {data.kpis && data.kpis.length > 0 && kpis.length === 0 && (
+        <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="rounded-xl bg-emerald-500/10 p-2 border border-emerald-500/20">
+              <TrendingUp className="w-5 h-5 text-emerald-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-100">KPIs do Mês</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {data.kpis.map((kpi: any, idx: number) => (
+              <div
+                key={idx}
+                className="rounded-xl border border-slate-800 bg-slate-900/80 p-5 hover:bg-slate-900 transition-colors"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+                    {kpi.icon && <span className="mr-2">{kpi.icon}</span>}
+                    {kpi.label}
+                  </p>
+                  {kpi.variation && (
+                    <span
+                      className={clsx(
+                        "text-xs font-semibold px-2 py-1 rounded-full",
+                        (typeof kpi.variation === "string" && (kpi.variation.startsWith("+") || parseFloat(kpi.variation) > 0))
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          : (typeof kpi.variation === "string" && (kpi.variation.startsWith("-") || parseFloat(kpi.variation) < 0))
+                          ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                          : "bg-slate-700/50 text-slate-400 border border-slate-700"
+                      )}
+                    >
+                      {kpi.variation}
+                    </span>
+                  )}
+                </div>
+                <p
+                  className={clsx(
+                    "text-2xl font-bold",
+                    kpi.color === "positive"
+                      ? "text-emerald-400"
+                      : kpi.color === "negative"
+                      ? "text-red-400"
+                      : "text-slate-100"
+                  )}
+                >
+                  {typeof kpi.value === "number"
+                    ? kpi.value.toLocaleString("pt-BR", {
+                        style: kpi.value > 1000 ? "currency" : "decimal",
+                        currency: "BRL",
+                        minimumFractionDigits: kpi.value > 1000 ? 0 : 1,
+                        maximumFractionDigits: kpi.value > 1000 ? 0 : 1,
+                      })
+                    : kpi.value}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Compatibilidade: Renderiza formato antigo se não houver secoes */}
       {(!data.secoes || data.secoes.length === 0) && (
         <>
-          {/* Card 2: KPIs do Mês (formato antigo) */}
-          {data.kpis && data.kpis.length > 0 && (
+          {/* Card 2: KPIs do Mês (formato antigo) - já renderizado acima se houver */}
+          {data.kpis && data.kpis.length > 0 && kpis.length > 0 && (
         <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl">
           <div className="flex items-center gap-3 mb-4">
             <div className="rounded-xl bg-emerald-500/10 p-2 border border-emerald-500/20">
