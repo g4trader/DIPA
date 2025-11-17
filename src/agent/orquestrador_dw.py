@@ -579,6 +579,45 @@ def executar_intent_spec(
         status = "ok"
         mensagem = f"Dados consultados com sucesso. {len(dados_normalizados)} registro(s) encontrado(s)."
     
+    # PASSO 6.5: Detecta atingimento abaixo de meta e gera análise de causas
+    analise_causas = {}
+    if status == "ok" and dados_normalizados:
+        # Prepara dados_dw para detecção
+        dados_dw_para_deteccao = {
+            "dados": dados_normalizados,
+            "status": status
+        }
+        
+        # Tenta extrair meta_total e realizado_total agregados
+        if isinstance(dados_normalizados, list) and len(dados_normalizados) > 0:
+            meta_total = sum(float(item.get("meta_total", 0) or 0) for item in dados_normalizados if isinstance(item, dict))
+            realizado_total = sum(float(item.get("realizado_total", 0) or 0) for item in dados_normalizados if isinstance(item, dict))
+            if meta_total > 0:
+                dados_dw_para_deteccao["meta_total"] = meta_total
+                dados_dw_para_deteccao["realizado_total"] = realizado_total
+        
+        # Detecta se atingimento < 100%
+        if detectar_atingimento_abaixo_meta(dados_dw_para_deteccao):
+            # Extrai mes_ano do período
+            mes_ano = _normalizar_periodo_para_mes_ano(intent_spec.periodo_inicio) if intent_spec.periodo_inicio else None
+            if not mes_ano and intent_spec.periodo_fim:
+                mes_ano = _normalizar_periodo_para_mes_ano(intent_spec.periodo_fim)
+            
+            if mes_ano:
+                logger.info(f"[orquestrador_dw] Meta não batida detectada para {mes_ano}. Gerando análise de causas...")
+                try:
+                    analise_causas = gerar_analise_causas(
+                        session=session,
+                        dados_dw=dados_dw_para_deteccao,
+                        mes_ano=mes_ano,
+                        limite_vendedores=10,
+                        limite_clientes=20,
+                        limite_skus=20
+                    )
+                    logger.info(f"[orquestrador_dw] Análise de causas gerada: {len(analise_causas.get('vendedores_pior_desempenho', []))} vendedores, {len(analise_causas.get('clientes_reduziram_compra', []))} clientes")
+                except Exception as e:
+                    logger.error(f"[orquestrador_dw] Erro ao gerar análise de causas: {e}")
+    
     # PASSO 7: Envelopa resposta
     resposta = {
         "status": status,
@@ -589,13 +628,15 @@ def executar_intent_spec(
             "fim": intent_spec.periodo_fim
         },
         "dados": dados_normalizados,
-        "regras_aplicadas": regras_aplicadas
+        "regras_aplicadas": regras_aplicadas,
+        "analise_causas": analise_causas  # Análise de causas quando meta não batida
     }
     
     logger.info(
         f"[orquestrador_dw] Resposta gerada: "
         f"status={status}, "
-        f"dados={len(dados_normalizados)} registros"
+        f"dados={len(dados_normalizados)} registros, "
+        f"analise_causas={'sim' if analise_causas else 'nao'}"
     )
     
     return resposta
