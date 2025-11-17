@@ -89,34 +89,34 @@ def processar_pergunta_com_dw(
             "erro": str(e)
         }
     
-        # PASSO 1.5: Detecta instruções comportamentais na pergunta
-        instrucoes_detectadas = detectar_instrucoes_comportamentais(pergunta)
-        
-        # PASSO 1.6: Detecta override explícito na pergunta
-        override_regras = detectar_override_explicito(pergunta)
-        contexto_usuario = {
-            "role": papel or "diretor",
-            "override_regras": override_regras
-        }
-        
-        # PASSO 1.7: Salva instruções comportamentais detectadas na memória permanente
-        if instrucoes_detectadas and not override_regras:
-            for instrucao in instrucoes_detectadas:
-                try:
-                    salvar_instrucao_comportamental(
-                        session=session,
-                        instrucao=instrucao,
-                        intent_spec=intent_spec,
-                        owner_role=papel or "diretor"
-                    )
-                    logger.info(
-                        f"[processar_pergunta_com_dw] Instrução comportamental salva: "
-                        f"{instrucao['tipo']} - {instrucao['entidade']}"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"[processar_pergunta_com_dw] Erro ao salvar instrução comportamental: {e}"
-                    )
+    # PASSO 1.5: Detecta instruções comportamentais na pergunta
+    instrucoes_detectadas = detectar_instrucoes_comportamentais(pergunta)
+    
+    # PASSO 1.6: Detecta override explícito na pergunta
+    override_regras = detectar_override_explicito(pergunta)
+    contexto_usuario = {
+        "role": papel or "diretor",
+        "override_regras": override_regras
+    }
+    
+    # PASSO 1.7: Salva instruções comportamentais detectadas na memória permanente
+    if instrucoes_detectadas and not override_regras:
+        for instrucao in instrucoes_detectadas:
+            try:
+                salvar_instrucao_comportamental(
+                    session=session,
+                    instrucao=instrucao,
+                    intent_spec=intent_spec,
+                    owner_role=papel or "diretor"
+                )
+                logger.info(
+                    f"[processar_pergunta_com_dw] Instrução comportamental salva: "
+                    f"{instrucao['tipo']} - {instrucao['entidade']}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"[processar_pergunta_com_dw] Erro ao salvar instrução comportamental: {e}"
+                )
     
     # PASSO 2: Executa consulta DW via orquestrador (que aplica regras automaticamente)
     try:
