@@ -251,7 +251,40 @@ def _criar_structured_response(
     
     # Se não há KPIs mas há dados do DW, tenta extrair de dados_dw
     if not kpis and dados_dw.get("dados"):
-        kpis = _extrair_kpis_de_dados_dw(dados_dw.get("dados"), intent, periodo_analisado)
+        kpis_dw = _extrair_kpis_de_dados_dw(dados_dw.get("dados"), intent, periodo_analisado)
+        if kpis_dw:
+            kpis = kpis_dw
+    
+    # Se ainda não há KPIs mas há seções, tenta extrair das seções
+    if not kpis and secoes:
+        for secao in secoes:
+            if secao.get("tipo") == "tabela_metas" and secao.get("dados"):
+                # Agrega dados da seção
+                meta_total = sum(float(item.get("meta_total", 0) or 0) for item in secao["dados"])
+                realizado_total = sum(float(item.get("realizado_total", 0) or 0) for item in secao["dados"])
+                if meta_total > 0:
+                    atingimento = (realizado_total / meta_total) * 100
+                    mes_ano_label = _format_periodo_label(periodo_analisado)
+                    
+                    kpis = [
+                        {
+                            "label": "Meta Total",
+                            "value": f"R$ {meta_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                            "color": "neutral"
+                        },
+                        {
+                            "label": "Realizado Total",
+                            "value": f"R$ {realizado_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                            "color": "positive" if realizado_total >= meta_total else "neutral"
+                        },
+                        {
+                            "label": "Atingimento Médio",
+                            "value": f"{atingimento:.1f}%",
+                            "color": "positive" if atingimento >= 100 else "negative" if atingimento < 90 else "neutral",
+                            "variation": f"{atingimento - 100:.1f}%" if atingimento < 100 else f"+{atingimento - 100:.1f}%"
+                        }
+                    ]
+                    break
     
     # Converte insights para formato esperado
     insights_recomendacoes = insights if isinstance(insights, list) else []
