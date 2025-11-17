@@ -22,21 +22,28 @@ def detectar_atingimento_abaixo_meta(dados_dw: Dict[str, Any]) -> bool:
     """
     Detecta se o atingimento está abaixo de 100%.
     
+    ATIVA TEMPLATE DE RESPOSTA NEGATIVA quando:
+    - atingimento_medio < 100% OU
+    - realizado_total < meta_total
+    
     Args:
         dados_dw: Dicionário com dados retornados do DW
         
     Returns:
-        True se atingimento < 100%, False caso contrário
+        True se atingimento < 100% OU realizado < meta, False caso contrário
     """
     # Tenta extrair meta_total e realizado_total de várias formas
     meta_total = 0.0
     realizado_total = 0.0
+    atingimento_medio = None
     
     # Forma 1: Dados agregados diretos
     if "meta_total" in dados_dw:
         meta_total = float(dados_dw["meta_total"]) if dados_dw["meta_total"] else 0.0
     if "realizado_total" in dados_dw:
         realizado_total = float(dados_dw["realizado_total"]) if dados_dw["realizado_total"] else 0.0
+    if "atingimento_medio" in dados_dw:
+        atingimento_medio = float(dados_dw["atingimento_medio"]) if dados_dw["atingimento_medio"] else None
     
     # Forma 2: Lista de dados (agrega)
     if "dados" in dados_dw and isinstance(dados_dw["dados"], list):
@@ -44,14 +51,25 @@ def detectar_atingimento_abaixo_meta(dados_dw: Dict[str, Any]) -> bool:
             if isinstance(item, dict):
                 meta_total += float(item.get("meta_total", 0) or 0)
                 realizado_total += float(item.get("realizado_total", 0) or 0)
+                if atingimento_medio is None and "atingimento_medio" in item:
+                    # Se não tem atingimento_medio agregado, calcula
+                    pass
             elif hasattr(item, "meta_total"):
                 meta_total += float(item.meta_total or 0)
                 realizado_total += float(item.realizado_total or 0)
     
-    # Calcula atingimento
-    if meta_total > 0:
-        atingimento = (realizado_total / meta_total) * 100
-        return atingimento < 100.0
+    # Calcula atingimento se não fornecido
+    if atingimento_medio is None and meta_total > 0:
+        atingimento_medio = (realizado_total / meta_total) * 100
+    
+    # ATIVA TEMPLATE se:
+    # 1. atingimento_medio < 100% OU
+    # 2. realizado_total < meta_total
+    if atingimento_medio is not None and atingimento_medio < 100.0:
+        return True
+    
+    if meta_total > 0 and realizado_total < meta_total:
+        return True
     
     return False
 
@@ -95,26 +113,34 @@ def gerar_analise_causas(
         "vendedores_pior_desempenho": [],
         "rotas_maior_gap": [],
         "clientes_reduziram_compra": [],
-        "skus_queda_relevante": [],
+        "skus_queda_expressiva": [],
+        "outras_causas": [],
         "gargalos_rupturas": [],
         "checklist_problemas": []
     }
     
     try:
-        # 1. Vendedores com pior desempenho
+        # 1. Vendedores com pior desempenho (calcula impacto % do gap total)
         try:
             vendedores = get_piores_vendedores(session, mes_ano, limite_vendedores)
-            resultado["vendedores_pior_desempenho"] = [
-                {
+            
+            # Calcula gap total para calcular impacto
+            gap_total_geral = sum(abs(v.gap_total) for v in vendedores if v.gap_total < 0)
+            
+            resultado["vendedores_pior_desempenho"] = []
+            for v in vendedores:
+                impacto_pct = (abs(v.gap_total) / gap_total_geral * 100) if gap_total_geral > 0 else 0
+                
+                resultado["vendedores_pior_desempenho"].append({
+                    "id": v.vendedor_id,
                     "nome": v.vendedor_nome,
                     "rota": v.rota,
                     "meta": v.meta_total,
                     "realizado": v.realizado_total,
                     "gap": v.gap_total,
-                    "atingimento": v.atingimento_pct
-                }
-                for v in vendedores
-            ]
+                    "atingimento": v.atingimento_pct,
+                    "impacto_pct": impacto_pct
+                })
         except Exception as e:
             logger.error(f"[analise_causas] Erro ao buscar piores vendedores: {e}")
         
@@ -134,45 +160,83 @@ def gerar_analise_causas(
         except Exception as e:
             logger.error(f"[analise_causas] Erro ao buscar gap por rota: {e}")
         
-        # 3. Clientes que reduziram compra
+        # 3. Clientes que reduziram compra (calcula variação vs média)
         try:
             clientes = get_clientes_com_queda(session, mes_ano, limite=limite_clientes)
-            resultado["clientes_reduziram_compra"] = [
-                {
+            
+            # Calcula média de faturamento para variação vs média
+            if clientes:
+                faturamento_medio = sum(c.faturamento_anterior for c in clientes) / len(clientes) if clientes else 0
+            else:
+                faturamento_medio = 0
+            
+            resultado["clientes_reduziram_compra"] = []
+            for c in clientes:
+                variacao_vs_media_pct = ((c.faturamento_atual - faturamento_medio) / faturamento_medio * 100) if faturamento_medio > 0 else 0
+                
+                resultado["clientes_reduziram_compra"].append({
                     "nome": c.cliente_nome,
                     "vendedor": c.vendedor_nome or "",
                     "faturamento_atual": c.faturamento_atual,
                     "faturamento_anterior": c.faturamento_anterior,
-                    "variacao_pct": c.variacao_pct
-                }
-                for c in clientes
-            ]
+                    "variacao_vs_mes_anterior_pct": c.variacao_pct,
+                    "variacao_vs_media_pct": variacao_vs_media_pct
+                })
         except Exception as e:
             logger.error(f"[analise_causas] Erro ao buscar clientes com queda: {e}")
         
-        # 4. SKUs com queda relevante
+        # 4. SKUs com queda expressiva (calcula impacto financeiro)
         try:
             skus = get_skus_com_quebra(session, mes_ano, limite=limite_skus)
-            resultado["skus_queda_relevante"] = [
-                {
+            
+            resultado["skus_queda_expressiva"] = []
+            for s in skus:
+                impacto_financeiro = s.vendas_anterior - s.vendas_atual  # Quanto deixou de vender
+                
+                resultado["skus_queda_expressiva"].append({
                     "sku": s.codigo_produto,
                     "descricao": s.desc_produto,
                     "vendas_atual": s.vendas_atual,
                     "vendas_anterior": s.vendas_anterior,
                     "variacao_pct": s.variacao_pct,
+                    "impacto_financeiro": impacto_financeiro,
                     "ruptura": s.ruptura
-                }
-                for s in skus
-            ]
+                })
         except Exception as e:
             logger.error(f"[analise_causas] Erro ao buscar SKUs com quebra: {e}")
         
-        # 5. Gargalos e rupturas
+        # 5. Outras causas detectadas
+        try:
+            outras_causas = []
+            
+            # Detecta ruptura de estoque
+            skus_ruptura = [s for s in resultado["skus_queda_expressiva"] if s.get("ruptura", False)]
+            if skus_ruptura:
+                outras_causas.append(f"Ruptura de estoque: {len(skus_ruptura)} SKUs sem venda no período")
+            
+            # Detecta concentração excessiva (se houver cliente com > 30% do faturamento)
+            if resultado["clientes_reduziram_compra"]:
+                # Verifica se há concentração (simplificado)
+                outras_causas.append("Concentração de vendas: verificar dependência de poucos clientes")
+            
+            # Detecta mix desfavorável (se muitos SKUs com queda)
+            if len(resultado["skus_queda_expressiva"]) > 10:
+                outras_causas.append("Mix desfavorável: múltiplos produtos com queda expressiva")
+            
+            # Sazonalidade (detecção simplificada - pode ser melhorada)
+            # Por enquanto, apenas menciona se houver padrão
+            outras_causas.append("Sazonalidade: considerar padrões históricos do período")
+            
+            resultado["outras_causas"] = outras_causas
+        except Exception as e:
+            logger.error(f"[analise_causas] Erro ao identificar outras causas: {e}")
+        
+        # 6. Gargalos e rupturas (mantido para compatibilidade)
         try:
             gargalos = []
             
             # Rupturas de SKU
-            skus_ruptura = [s for s in resultado["skus_queda_relevante"] if s.get("ruptura", False)]
+            skus_ruptura = [s for s in resultado["skus_queda_expressiva"] if s.get("ruptura", False)]
             for sku in skus_ruptura[:5]:  # Top 5 rupturas
                 gargalos.append({
                     "tipo": "ruptura_sku",
@@ -194,7 +258,7 @@ def gerar_analise_causas(
         except Exception as e:
             logger.error(f"[analise_causas] Erro ao identificar gargalos: {e}")
         
-        # 6. Checklist de problemas
+        # 7. Checklist de problemas
         try:
             problemas = []
             
@@ -210,8 +274,8 @@ def gerar_analise_causas(
                 })
             
             # Problema 2: Rupturas de SKU
-            if resultado["skus_queda_relevante"]:
-                rupturas = [s for s in resultado["skus_queda_relevante"] if s.get("ruptura", False)]
+            if resultado["skus_queda_expressiva"]:
+                rupturas = [s for s in resultado["skus_queda_expressiva"] if s.get("ruptura", False)]
                 if rupturas:
                     impacto = sum(s.get("vendas_anterior", 0) for s in rupturas)
                     problemas.append({

@@ -514,8 +514,13 @@ REGRAS FUNDAMENTAIS - ZERO INVENÇÃO DE DADOS:
 6. Seja preciso: use os números exatos dos dados, sem arredondar além do necessário.
 
 FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
+
+ATIVAÇÃO DO TEMPLATE DE RESPOSTA NEGATIVA:
+- ATIVE SEMPRE QUE: atingimento_medio < 100% OU realizado_total < meta_total
+- Quando ativado, TODOS os campos abaixo são OBRIGATÓRIOS
+
 {{
-  "resumo_executivo": "texto objetivo com DIAGNÓSTICO, CAUSAS e PLANO DE AÇÃO (quando atingimento < 100%)",
+  "resumo_executivo": "📊 RESUMO EXECUTIVO: 3 linhas explicando o que aconteceu, números chave (meta, realizado, gap, %), gap e impacto financeiro",
   "periodo_analisado": {{
     "inicio": "YYYY-MM-DD",
     "fim": "YYYY-MM-DD"
@@ -534,21 +539,26 @@ FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
     "Insight acionável 2 (ação imediata ou 30 dias)", 
     "Insight acionável 3 (com números reais e plano concreto)"
   ],
-  "vendedores_pior_desempenho": [
-    {{"nome": "...", "rota": "...", "meta": 0, "realizado": 0, "gap": 0, "atingimento": 0}}
-  ],
-  "rotas_maior_gap": [
-    {{"rota": "...", "meta": 0, "realizado": 0, "gap": 0, "atingimento": 0}}
-  ],
-  "clientes_reduziram_compra": [
-    {{"nome": "...", "vendedor": "...", "faturamento_atual": 0, "faturamento_anterior": 0, "variacao_pct": 0}}
-  ],
-  "skus_queda_relevante": [
-    {{"sku": "...", "descricao": "...", "vendas_atual": 0, "vendas_anterior": 0, "variacao_pct": 0, "ruptura": false}}
-  ],
-  "gargalos_rupturas": [
-    {{"tipo": "ruptura_sku|baixa_cobertura|cliente_sem_compra", "descricao": "...", "impacto": 0}}
-  ],
+  "diagnostico_causas": {{
+    "vendedores_pior_desempenho": [
+      {{"id": 0, "nome": "...", "rota": "...", "meta": 0, "realizado": 0, "gap": 0, "impacto_pct": 0}}
+    ],
+    "rotas_maior_gap": [
+      {{"rota": "...", "supervisor": "...", "gap": 0, "peso_gap_total_pct": 0}}
+    ],
+    "clientes_reduziram_compra": [
+      {{"nome": "...", "vendedor": "...", "variacao_vs_mes_anterior_pct": 0, "variacao_vs_media_pct": 0}}
+    ],
+    "skus_queda_expressiva": [
+      {{"sku": "...", "descricao": "...", "variacao_pct": 0, "impacto_financeiro": 0}}
+    ],
+    "outras_causas": [
+      "Sazonalidade: ...",
+      "Ruptura de estoque: ...",
+      "Mix desfavorável: ...",
+      "Concentração excessiva: ..."
+    ]
+  }},
   "checklist_problemas": [
     {{"problema": "...", "impacto": "...", "causa_provavel": "...", "urgencia": "alta|media|baixa"}}
   ],
@@ -558,16 +568,50 @@ FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
   "acoes_mitigacao_30dias": [
     {{"acao": "...", "objetivo": "...", "responsavel": "...", "prazo": "...", "metrica_sucesso": "..."}}
   ],
-  "previsoes": {{
+  "tendencias_previsao": {{
+    "tendencias_identificadas": ["...", "..."],
+    "probabilidade_recuperacao": 0,
     "cenario_atual": {{"fechamento_previsto": 0, "gap_previsto": 0, "atingimento_previsto": 0}},
     "cenario_otimista": {{"fechamento_previsto": 0, "gap_previsto": 0, "atingimento_previsto": 0}},
     "cenario_pessimista": {{"fechamento_previsto": 0, "gap_previsto": 0, "atingimento_previsto": 0}}
   }},
-  "explicacao_tecnica": "Análise técnica detalhada dos dados, comparações, tendências e correlações"
+  "detalhes_tecnicos": {{
+    "intent_spec": {{...}},
+    "filtros_aplicados": {{...}},
+    "query_executada": "..."
+  }}
 }}
 
-NOTA: Os campos vendedores_pior_desempenho, rotas_maior_gap, clientes_reduziram_compra, skus_queda_relevante, gargalos_rupturas, checklist_problemas, acoes_imediatas_7dias, acoes_mitigacao_30dias, previsoes e explicacao_tecnica são OBRIGATÓRIOS quando atingimento < 100%.
-Quando atingimento >= 100%, esses campos podem ser omitidos ou preenchidos com arrays vazios.
+ESTRUTURA DO DIAGNÓSTICO DE CAUSAS (seção diagnostico_causas):
+- vendedores_pior_desempenho: Lista ordenada com ID, nome, meta, realizado, gap, impacto (% do gap total)
+- rotas_maior_gap: Rota, supervisor, gap, peso no gap total (%)
+- clientes_reduziram_compra: Cliente, variação vs mês anterior (%), variação vs média (%)
+- skus_queda_expressiva: SKU, descrição, variação (%), impacto financeiro (R$)
+- outras_causas: Lista de strings com sazonalidade, ruptura, mix desfavorável, concentração excessiva
+
+CHECKLIST DE PROBLEMAS:
+- Mínimo 5 itens
+- Cada item com: problema, impacto (R$ ou %), causa provável, urgência
+
+AÇÕES IMEDIATAS (7 DIAS):
+- Lista clara, direta e prática
+- Cada ação com: o que fazer, quem (vendedor/rota/cliente), quando, como medir
+
+AÇÕES DE MITIGAÇÃO (30 DIAS):
+- Rotina semanal, ajustes de rota, mix, acompanhamento, metas realistas
+- Cada ação com: objetivo, responsável, prazo, métrica de sucesso
+
+TENDÊNCIAS E PREVISÃO:
+- Tendências identificadas pelo modelo
+- Probabilidade de recuperação (0-100%)
+- 3 cenários: atual, otimista, pessimista
+
+DETALHES TÉCNICOS:
+- IntentSpec completo
+- Filtros aplicados
+- Query executada (resumo)
+
+NOTA: Quando atingimento >= 100%, os campos diagnostico_causas, checklist_problemas, acoes_imediatas_7dias, acoes_mitigacao_30dias, tendencias_previsao podem ser omitidos ou preenchidos com valores vazios.
 
 ESTRUTURA OBRIGATÓRIA DO RESUMO EXECUTIVO (quando atingimento < 100%):
 1. DIAGNÓSTICO: Números reais (meta, realizado, gap, %)
@@ -595,22 +639,72 @@ REGRAS DE OURO DO RESUMO EXECUTIVO:
 - Destaque variações relevantes, mas seja proporcional: um gap de 3% não é "significativo", um gap de 30% sim
 - Seja objetivo: apresente os números e o contexto, sem dramatizar
 
-TEMPLATE DE RESPOSTA NEGATIVA (quando atingimento < 100%):
-1. DIAGNÓSTICO: "O atingimento foi de X%, ficando Y% abaixo da meta. O gap total é de R$ Z."
-2. CAUSAS IDENTIFICADAS (com granularidade):
-   - "Principais causas: [vendedor/rota/cliente/SKU específico] com gap de R$ X"
-   - "ROTA XX teve queda de Y% vs mês anterior"
-   - "Cliente ABC reduziu compras em Z%"
-   - "SKU DEF teve ruptura de vendas"
-3. PLANO DE AÇÃO:
-   - AÇÕES IMEDIATAS (próximas 48h):
-     * "Coaching urgente para [vendedor específico] da ROTA XX"
-     * "Visita imediata ao cliente ABC"
-     * "Reposição de estoque do SKU DEF"
-   - AÇÕES 30 DIAS:
-     * "Revisão de carteira da ROTA XX"
-     * "Plano de recuperação para cliente ABC"
-     * "Análise de mix de produtos da região Y"
+TEMPLATE DE RESPOSTA NEGATIVA (ATIVAR SEMPRE QUE atingimento_medio < 100% OU realizado_total < meta_total):
+
+=========================
+📊 RESUMO EXECUTIVO
+=========================
+- Explicar em 3 linhas o que aconteceu
+- Números chave (meta, realizado, gap, % atingimento)
+- Gap e impacto financeiro
+
+=========================
+🧭 DIAGNÓSTICO DE CAUSAS
+=========================
+
+2.1 Vendedores com pior desempenho
+- Lista ordenada com: ID, nome, meta, realizado, gap, impacto (% do gap total)
+
+2.2 Rotas que mais puxaram o mês para baixo
+- Rota, supervisor, gap, peso no gap total (%)
+
+2.3 Clientes que reduziram compras
+- Cliente, variação vs mês anterior (%), variação vs média (%)
+
+2.4 Produtos / SKUs com queda expressiva
+- SKU, descrição, variação (%), impacto financeiro (R$)
+
+2.5 Outras causas detectadas pelo modelo
+- Sazonalidade (se aplicável)
+- Ruptura de estoque
+- Mix desfavorável
+- Concentração excessiva em um cliente
+
+=========================
+🔎 CHECKLIST DE PROBLEMAS
+=========================
+- Bullets visuais (mínimo 5 itens)
+- Cada item com: problema, impacto (R$ ou %), causa provável, urgência
+
+=========================
+⚡ AÇÕES IMEDIATAS (7 DIAS)
+=========================
+- Lista clara, direta e prática
+- Cada ação com: o que fazer, quem (vendedor/rota/cliente), quando, como medir
+
+=========================
+📆 AÇÕES DE MITIGAÇÃO (30 DIAS)
+=========================
+- Rotina semanal
+- Ajustes de rota
+- Mix de produtos
+- Acompanhamento
+- Metas realistas
+- Cada ação com: objetivo, responsável, prazo, métrica de sucesso
+
+=========================
+📈 TENDÊNCIAS E PREVISÃO
+=========================
+- Tendências identificadas pelo modelo
+- Probabilidade de recuperação
+- Cenários: atual, otimista, pessimista
+
+=========================
+⚙️ DETALHES TÉCNICOS (JSON)
+=========================
+- IntentSpec
+- Filtros aplicados
+- Query executada
 
 REGRAS DE OURO DOS INSIGHTS:
 Os insights devem SEMPRE ser:
