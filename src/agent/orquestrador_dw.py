@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from src.agent.intent_spec import IntentSpec
 from src.agent.rules import aplicar_regras, detectar_override_explicito
+from src.agent.analise_causas import detectar_atingimento_abaixo_meta, gerar_analise_causas
 
 # Importa diretamente do arquivo analytics_metas.py sem passar por __init__.py
 # Isso evita importar etl.py que requer pandas
@@ -51,6 +52,33 @@ from src.agent.queries_analytics import (
     get_metas_realizado_por_mes,
     get_piores_vendedores_por_gap
 )
+
+# Importa novas funções estendidas
+import importlib.util
+import os
+
+base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+analytics_extended_path = os.path.join(base_dir, "src", "dw", "analytics_metas_extended.py")
+
+if os.path.exists(analytics_extended_path):
+    spec_extended = importlib.util.spec_from_file_location("analytics_metas_extended", analytics_extended_path)
+    analytics_extended = importlib.util.module_from_spec(spec_extended)
+    spec_extended.loader.exec_module(analytics_extended)
+    
+    get_metas_por_mes = analytics_extended.get_metas_por_mes
+    get_gap_por_rota = analytics_extended.get_gap_por_rota
+    get_piores_vendedores = analytics_extended.get_piores_vendedores
+    get_clientes_com_queda = analytics_extended.get_clientes_com_queda
+    get_skus_com_quebra = analytics_extended.get_skus_com_quebra
+    get_tendencias = analytics_extended.get_tendencias
+else:
+    # Fallback se arquivo não existir
+    get_metas_por_mes = None
+    get_gap_por_rota = None
+    get_piores_vendedores = None
+    get_clientes_com_queda = None
+    get_skus_com_quebra = None
+    get_tendencias = None
 
 logger = logging.getLogger(__name__)
 
