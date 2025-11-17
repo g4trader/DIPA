@@ -122,7 +122,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
         icon: <Percent className="w-4 h-4" />,
         color: atingimentoMedio >= 100 ? "text-emerald-400" : atingimentoMedio >= 95 ? "text-yellow-400" : "text-red-400",
         trend: atingimentoMedio >= 100 ? "up" : atingimentoMedio >= 95 ? "neutral" : "down",
-        variation: atingimentoMedio < 100 ? `${atingimentoMedio - 100:.1f}%` : `+${atingimentoMedio - 100:.1f}%`
+        variation: atingimentoMedio < 100 ? `${(atingimentoMedio - 100).toFixed(1)}%` : `+${(atingimentoMedio - 100).toFixed(1)}%`
       });
     }
     
