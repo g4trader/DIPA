@@ -436,7 +436,7 @@ def executar_intent_spec(
     regras_aplicadas = resultado_instrucoes.get("instrucoes_aplicadas", resultado_instrucoes.get("regras_aplicadas", {}))
     
     logger.info(
-        f"[orquestrador_dw] Regras aplicadas: {len(resultado_regras['regras_usadas'])} regras, "
+        f"[orquestrador_dw] Instruções comportamentais aplicadas, "
         f"filtros ajustados: {intent_spec.filtros}"
     )
     
