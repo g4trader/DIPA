@@ -11,18 +11,34 @@ import { CopilotStructuredResponse } from "@/types/agent";
  * URL base da API do Dipam AI
  * 
  * Lê da variável de ambiente NEXT_PUBLIC_API_BASE_URL (padrão) ou
- * NEXT_PUBLIC_DIPAM_API_URL (compatibilidade) ou usa
- * http://localhost:8080 como fallback apenas em desenvolvimento
+ * NEXT_PUBLIC_DIPAM_API_URL (compatibilidade).
  * 
- * IMPORTANTE: Remove barras no final para evitar URLs duplicadas (ex: ...run.app//ask)
+ * IMPORTANTE: 
+ * - Em produção, a variável DEVE estar configurada no Vercel
+ * - Em desenvolvimento local, usa localhost:8080 como fallback
+ * - Remove barras no final para evitar URLs duplicadas (ex: ...run.app//ask)
  */
 const rawBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_DIPAM_API_URL ||
-  (typeof window !== "undefined" ? "http://localhost:8080" : "http://localhost:8080");
+  // Fallback apenas em desenvolvimento (não em produção)
+  (process.env.NODE_ENV === "development" ? "http://localhost:8080" : "");
 
 // Remove barra extra no final, se houver
-export const DIPAM_API_BASE_URL = rawBaseUrl.replace(/\/+$/, "");
+const cleanedUrl = rawBaseUrl.replace(/\/+$/, "");
+
+// Validação: em produção, a URL DEVE estar configurada
+if (!cleanedUrl && process.env.NODE_ENV === "production") {
+  console.error(
+    "❌ ERRO CRÍTICO: NEXT_PUBLIC_API_BASE_URL não está configurada no Vercel!",
+    "Configure a variável de ambiente: NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app"
+  );
+  throw new Error(
+    "NEXT_PUBLIC_API_BASE_URL não está configurada. Configure no Vercel: NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app"
+  );
+}
+
+export const DIPAM_API_BASE_URL = cleanedUrl;
 
 /**
  * Constrói uma URL completa a partir do caminho
