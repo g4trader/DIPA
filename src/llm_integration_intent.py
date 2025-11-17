@@ -262,6 +262,27 @@ Elas já foram aplicadas na consulta ao data warehouse. Você DEVE:
 - Só contrariar uma regra se o usuário trouxer uma instrução explícita na pergunta atual.
 """
     
+    # Adiciona análise de causas se disponível
+    analise_causas_str = ""
+    if analise_causas and (analise_causas.get("vendedores_pior_desempenho") or analise_causas.get("clientes_reduziram_compra")):
+        analise_causas_str = f"""
+
+ANÁLISE DE CAUSAS (gerada automaticamente pelo backend quando meta não foi batida):
+{json.dumps(analise_causas, ensure_ascii=False, indent=2, default=str)}
+
+IMPORTANTE: Use esta análise de causas para preencher os campos obrigatórios do JSON quando atingimento < 100%:
+- vendedores_pior_desempenho: use analise_causas.vendedores_pior_desempenho
+- rotas_maior_gap: use analise_causas.rotas_maior_gap
+- clientes_reduziram_compra: use analise_causas.clientes_reduziram_compra
+- skus_queda_relevante: use analise_causas.skus_queda_relevante
+- gargalos_rupturas: use analise_causas.gargalos_rupturas
+- checklist_problemas: use analise_causas.checklist_problemas
+- acoes_imediatas_7dias: gere baseado nos problemas identificados
+- acoes_mitigacao_30dias: gere baseado nos problemas identificados
+- previsoes: calcule cenários baseado nos dados
+- explicacao_tecnica: explique tecnicamente os dados e tendências
+"""
+    
     prompt = f"""Você recebeu dados brutos do data warehouse DIPAM (camada DW) em formato JSON.
 Use APENAS esses dados para gerar uma resposta executiva estruturada.
 
@@ -272,6 +293,7 @@ Especificação de intenção executada:
 {contexto_regras}
 Dados brutos retornados pela camada DW:
 {dados_str}
+{analise_causas_str}
 
 REGRAS ANTI-ALUCINAÇÃO (CRÍTICO):
 1. Se "tem_dados": false ou a lista de dados estiver vazia:
