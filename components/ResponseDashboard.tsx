@@ -18,11 +18,26 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
   // Compatibilidade: usa resumo_executivo ou resumoExecutivo
   const resumoExecutivo = data.resumo_executivo || data.resumoExecutivo;
   
-  // Extrai KPIs das seções e insights preditivos
+  // Extrai KPIs das seções, insights preditivos e data.kpis
   const kpis = useMemo(() => {
-    const kpisList: Array<{ label: string; value: string | number; icon: React.ReactNode; color: string; trend?: "up" | "down" | "neutral" }> = [];
+    const kpisList: Array<{ label: string; value: string | number; icon: React.ReactNode; color: string; trend?: "up" | "down" | "neutral"; variation?: string }> = [];
     
-    // Busca dados de vendedores para calcular KPIs
+    // PRIMEIRO: Se há KPIs já extraídos no structured.kpis, usa eles
+    if (data.kpis && Array.isArray(data.kpis) && data.kpis.length > 0) {
+      for (const kpi of data.kpis) {
+        kpisList.push({
+          label: kpi.label || "KPI",
+          value: kpi.value || 0,
+          icon: kpi.icon ? <span>{kpi.icon}</span> : <DollarSign className="w-4 h-4" />,
+          color: kpi.color === "positive" ? "text-emerald-400" : kpi.color === "negative" ? "text-red-400" : "text-slate-100",
+          trend: kpi.color === "positive" ? "up" : kpi.color === "negative" ? "down" : "neutral",
+          variation: kpi.variation
+        });
+      }
+      return kpisList; // Retorna imediatamente se já tem KPIs extraídos
+    }
+    
+    // SEGUNDO: Busca dados de vendedores para calcular KPIs
     const vendedoresSecao = data.secoes?.find(s => s.tipo === "lista_vendedores");
     if (vendedoresSecao?.dados && vendedoresSecao.dados.length > 0) {
       const vendedores = vendedoresSecao.dados as any[];
@@ -77,8 +92,42 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
       }
     }
     
+    // TERCEIRO: Tenta extrair KPIs de tabela_metas se disponível
+    const metasSecao = data.secoes?.find(s => s.tipo === "tabela_metas");
+    if (metasSecao?.dados && metasSecao.dados.length > 0 && kpisList.length === 0) {
+      const dados = metasSecao.dados as any[];
+      const metaTotal = dados.reduce((sum, item) => sum + (item.meta_total || item.meta || 0), 0);
+      const realizadoTotal = dados.reduce((sum, item) => sum + (item.realizado_total || item.realizado || 0), 0);
+      const atingimentoMedio = metaTotal > 0 ? (realizadoTotal / metaTotal) * 100 : 0;
+      
+      kpisList.push({
+        label: "Meta Total",
+        value: metaTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+        icon: <Target className="w-4 h-4" />,
+        color: "text-slate-100",
+        trend: "neutral"
+      });
+      
+      kpisList.push({
+        label: "Realizado Total",
+        value: realizadoTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+        icon: <DollarSign className="w-4 h-4" />,
+        color: realizadoTotal >= metaTotal ? "text-emerald-400" : "text-slate-100",
+        trend: realizadoTotal >= metaTotal ? "up" : "neutral"
+      });
+      
+      kpisList.push({
+        label: "Atingimento Médio",
+        value: `${atingimentoMedio.toFixed(1)}%`,
+        icon: <Percent className="w-4 h-4" />,
+        color: atingimentoMedio >= 100 ? "text-emerald-400" : atingimentoMedio >= 95 ? "text-yellow-400" : "text-red-400",
+        trend: atingimentoMedio >= 100 ? "up" : atingimentoMedio >= 95 ? "neutral" : "down",
+        variation: atingimentoMedio < 100 ? `${atingimentoMedio - 100:.1f}%` : `+${atingimentoMedio - 100:.1f}%`
+      });
+    }
+    
     return kpisList;
-  }, [data.secoes, data.insights_preditivos]);
+  }, [data.secoes, data.insights_preditivos, data.kpis]);
   
   const toggleSection = (index: number) => {
     setExpandedSections(prev => ({ ...prev, [index]: !prev[index] }));
