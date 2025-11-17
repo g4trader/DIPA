@@ -16,6 +16,7 @@ import logging
 import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime
+from calendar import monthrange
 
 from src.llm_openai_client import call_llm as call_openai_llm, OpenAIError
 from src.agent.intent_spec import IntentSpec
@@ -172,11 +173,9 @@ def gerar_resposta_executiva_com_dados_dw(
             if periodo_fim != periodo_inicio:
                 data_fim = datetime.strptime(periodo_fim + "-01", "%Y-%m-%d")
                 # Calcula último dia do mês
-                from calendar import monthrange
                 ultimo_dia = monthrange(data_fim.year, data_fim.month)[1]
                 data_fim = data_fim.replace(day=ultimo_dia)
             else:
-                from calendar import monthrange
                 ultimo_dia = monthrange(data_inicio.year, data_inicio.month)[1]
                 data_fim = data_inicio.replace(day=ultimo_dia)
         else:
