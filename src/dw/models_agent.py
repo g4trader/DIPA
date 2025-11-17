@@ -6,10 +6,7 @@ regras e preferências aprendidas com feedbacks do Diretor e da equipe.
 """
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, func
-from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
-
-Base = declarative_base()
+from src.dw.connection import Base
 
 
 class AgentFeedbackRule(Base):
