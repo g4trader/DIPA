@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from src.agent.intent_spec import IntentSpec
 from src.agent.rules import aplicar_regras, detectar_override_explicito
 from src.agent.analise_causas import detectar_atingimento_abaixo_meta, gerar_analise_causas
+from src.agent.memoria_comportamental import aplicar_instrucoes_comportamentais
 
 # Importa diretamente do arquivo analytics_metas.py sem passar por __init__.py
 # Isso evita importar etl.py que requer pandas
@@ -419,18 +420,20 @@ def executar_intent_spec(
     # PASSO 1: Aplica período padrão se necessário
     intent_spec = _aplicar_periodo_padrao(intent_spec)
     
-    # PASSO 1.5: Aplica regras de feedback (antes de validar)
+    # PASSO 1.5: Aplica instruções comportamentais e regras de feedback (antes de validar)
     filtros_sql = intent_spec.filtros.copy()
-    resultado_regras = aplicar_regras(
+    
+    # Aplica instruções comportamentais (que incluem regras de feedback)
+    resultado_instrucoes = aplicar_instrucoes_comportamentais(
+        session=session,
         intent_spec=intent_spec,
         filtros_sql=filtros_sql,
-        contexto_usuario=contexto_usuario,
-        session=session
+        contexto_usuario=contexto_usuario
     )
     
-    # Atualiza filtros do IntentSpec com regras aplicadas
-    intent_spec.filtros.update(resultado_regras["filtros_ajustados"])
-    regras_aplicadas = resultado_regras["regras_aplicadas"]
+    # Atualiza filtros do IntentSpec com instruções aplicadas
+    intent_spec.filtros.update(resultado_instrucoes["filtros_ajustados"])
+    regras_aplicadas = resultado_instrucoes.get("instrucoes_aplicadas", resultado_instrucoes.get("regras_aplicadas", {}))
     
     logger.info(
         f"[orquestrador_dw] Regras aplicadas: {len(resultado_regras['regras_usadas'])} regras, "

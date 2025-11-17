@@ -247,19 +247,26 @@ def gerar_resposta_executiva_com_dados_dw(
         "fim": data_fim.strftime("%Y-%m-%d") if data_fim else None
     }
     
-    # Prepara contexto de regras aplicadas
+    # Prepara contexto de regras e instruções comportamentais aplicadas
+    from src.agent.memoria_comportamental import gerar_contexto_instrucoes_para_llm
+    
     contexto_regras = ""
     if regras_aplicadas:
-        contexto_regras = f"""
+        # Gera contexto sem expor memória bruta
+        contexto_regras = gerar_contexto_instrucoes_para_llm(
+            regras_aplicadas,
+            expor_detalhes=False
+        )
+        
+        # Se não gerou contexto (vazio), usa formato genérico
+        if not contexto_regras:
+            contexto_regras = f"""
 
-REGRAS E PREFERÊNCIAS APLICADAS NA CONSULTA:
-{json.dumps(regras_aplicadas, ensure_ascii=False, indent=2)}
-
-IMPORTANTE: Essas regras representam feedbacks e decisões anteriores do Diretor e da equipe.
-Elas já foram aplicadas na consulta ao data warehouse. Você DEVE:
-- Tratar esses filtros como VERDADE estabelecida para aquela resposta.
-- Não tentar "corrigir" ou ignorar essas preferências.
-- Só contrariar uma regra se o usuário trouxer uma instrução explícita na pergunta atual.
+INSTRUÇÕES COMPORTAMENTAIS DO DIRETOR (aplicadas automaticamente):
+- Estas instruções foram aprendidas de interações anteriores
+- Elas já foram aplicadas na consulta ao data warehouse
+- Você DEVE respeitar essas preferências na sua resposta
+- Só ignore se o Diretor instruir explicitamente o contrário na pergunta atual
 """
     
     # Adiciona análise de causas se disponível

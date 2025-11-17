@@ -20,6 +20,12 @@ from src.agent.intent_spec import IntentSpec
 from src.agent.query_executor import executar_consulta_dw
 from src.agent.orquestrador_dw import executar_intent_spec
 from src.agent.rules import detectar_override_explicito
+from src.agent.memoria_comportamental import (
+    detectar_instrucoes_comportamentais,
+    salvar_instrucao_comportamental,
+    aplicar_instrucoes_comportamentais,
+    gerar_contexto_instrucoes_para_llm
+)
 from src.llm_integration_intent import (
     gerar_intent_spec_via_llm,
     gerar_resposta_executiva_com_dados_dw
@@ -81,12 +87,34 @@ def processar_pergunta_com_dw(
             "erro": str(e)
         }
     
-    # PASSO 1.5: Detecta override explícito na pergunta
-    override_regras = detectar_override_explicito(pergunta)
-    contexto_usuario = {
-        "role": papel or "diretor",
-        "override_regras": override_regras
-    }
+        # PASSO 1.5: Detecta instruções comportamentais na pergunta
+        instrucoes_detectadas = detectar_instrucoes_comportamentais(pergunta)
+        
+        # PASSO 1.6: Detecta override explícito na pergunta
+        override_regras = detectar_override_explicito(pergunta)
+        contexto_usuario = {
+            "role": papel or "diretor",
+            "override_regras": override_regras
+        }
+        
+        # PASSO 1.7: Salva instruções comportamentais detectadas na memória permanente
+        if instrucoes_detectadas and not override_regras:
+            for instrucao in instrucoes_detectadas:
+                try:
+                    salvar_instrucao_comportamental(
+                        session=session,
+                        instrucao=instrucao,
+                        intent_spec=intent_spec,
+                        owner_role=papel or "diretor"
+                    )
+                    logger.info(
+                        f"[processar_pergunta_com_dw] Instrução comportamental salva: "
+                        f"{instrucao['tipo']} - {instrucao['entidade']}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"[processar_pergunta_com_dw] Erro ao salvar instrução comportamental: {e}"
+                    )
     
     # PASSO 2: Executa consulta DW via orquestrador (que aplica regras automaticamente)
     try:
