@@ -18,6 +18,8 @@ from sqlalchemy.orm import Session
 
 from src.agent.intent_spec import IntentSpec
 from src.agent.query_executor import executar_consulta_dw
+from src.agent.orquestrador_dw import executar_intent_spec
+from src.agent.rules import detectar_override_explicito
 from src.llm_integration_intent import (
     gerar_intent_spec_via_llm,
     gerar_resposta_executiva_com_dados_dw
@@ -79,9 +81,28 @@ def processar_pergunta_com_dw(
             "erro": str(e)
         }
     
-    # PASSO 2: Executa consulta DW
+    # PASSO 1.5: Detecta override explícito na pergunta
+    override_regras = detectar_override_explicito(pergunta)
+    contexto_usuario = {
+        "role": papel or "diretor",
+        "override_regras": override_regras
+    }
+    
+    # PASSO 2: Executa consulta DW via orquestrador (que aplica regras automaticamente)
     try:
-        dados_dw = executar_consulta_dw(session, intent_spec)
+        resultado_orquestrador = executar_intent_spec(
+            session=session,
+            intent_spec=intent_spec,
+            contexto_usuario=contexto_usuario
+        )
+        
+        # Extrai dados e regras aplicadas
+        dados_dw = {
+            "status": resultado_orquestrador.get("status"),
+            "dados": resultado_orquestrador.get("dados", []),
+            "tem_dados": resultado_orquestrador.get("status") == "ok" and len(resultado_orquestrador.get("dados", [])) > 0
+        }
+        regras_aplicadas = resultado_orquestrador.get("regras_aplicadas", {})
         tem_dados = dados_dw.get("tem_dados", False)
         
         logger.info(
@@ -134,7 +155,8 @@ def processar_pergunta_com_dw(
             pergunta=pergunta,
             intent_spec=intent_spec,
             dados_dw=dados_dw,
-            papel=papel
+            papel=papel,
+            regras_aplicadas=regras_aplicadas
         )
         
         # Adiciona metadados

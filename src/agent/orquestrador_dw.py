@@ -22,6 +22,7 @@ from calendar import monthrange
 from sqlalchemy.orm import Session
 
 from src.agent.intent_spec import IntentSpec
+from src.agent.rules import aplicar_regras, detectar_override_explicito
 
 # Importa diretamente do arquivo analytics_metas.py sem passar por __init__.py
 # Isso evita importar etl.py que requer pandas
@@ -346,7 +347,8 @@ def _mapear_para_funcao_dw(
 
 def executar_intent_spec(
     session: Session,
-    intent_spec: IntentSpec
+    intent_spec: IntentSpec,
+    contexto_usuario: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Orquestra a execução de um IntentSpec no DW.
@@ -362,6 +364,7 @@ def executar_intent_spec(
     Args:
         session: Sessão SQLAlchemy
         intent_spec: IntentSpec a ser executado
+        contexto_usuario: Contexto do usuário (ex.: {"role": "diretor", "user_id": "123"})
         
     Returns:
         dict com estrutura:
@@ -370,7 +373,8 @@ def executar_intent_spec(
             "mensagem": "texto curto explicando o status",
             "intent": { ... IntentSpec ... },
             "periodo_analisado": {"inicio": "...", "fim": "..."},
-            "dados": [ ... linhas retornadas pelo DW ... ]
+            "dados": [ ... linhas retornadas pelo DW ... ],
+            "regras_aplicadas": {...}  # Resumo das regras aplicadas
         }
     """
     logger.info(
@@ -380,8 +384,30 @@ def executar_intent_spec(
         f"periodo={intent_spec.periodo_inicio} a {intent_spec.periodo_fim}"
     )
     
+    # Inicializa contexto_usuario se não fornecido
+    if contexto_usuario is None:
+        contexto_usuario = {"role": "diretor"}
+    
     # PASSO 1: Aplica período padrão se necessário
     intent_spec = _aplicar_periodo_padrao(intent_spec)
+    
+    # PASSO 1.5: Aplica regras de feedback (antes de validar)
+    filtros_sql = intent_spec.filtros.copy()
+    resultado_regras = aplicar_regras(
+        intent_spec=intent_spec,
+        filtros_sql=filtros_sql,
+        contexto_usuario=contexto_usuario,
+        session=session
+    )
+    
+    # Atualiza filtros do IntentSpec com regras aplicadas
+    intent_spec.filtros.update(resultado_regras["filtros_ajustados"])
+    regras_aplicadas = resultado_regras["regras_aplicadas"]
+    
+    logger.info(
+        f"[orquestrador_dw] Regras aplicadas: {len(resultado_regras['regras_usadas'])} regras, "
+        f"filtros ajustados: {intent_spec.filtros}"
+    )
     
     # PASSO 2: Valida IntentSpec
     valido, mensagem_erro = _validar_intent_spec(intent_spec)
@@ -534,7 +560,8 @@ def executar_intent_spec(
             "inicio": intent_spec.periodo_inicio,
             "fim": intent_spec.periodo_fim
         },
-        "dados": dados_normalizados
+        "dados": dados_normalizados,
+        "regras_aplicadas": regras_aplicadas
     }
     
     logger.info(

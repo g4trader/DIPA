@@ -170,7 +170,8 @@ def gerar_resposta_executiva_com_dados_dw(
     pergunta: str,
     intent_spec: IntentSpec,
     dados_dw: Dict[str, Any],
-    papel: Optional[str] = None
+    papel: Optional[str] = None,
+    regras_aplicadas: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Gera resposta executiva estruturada usando dados brutos do DW.
@@ -185,6 +186,7 @@ def gerar_resposta_executiva_com_dados_dw(
         intent_spec: IntentSpec que foi executada
         dados_dw: Dados brutos retornados pela camada DW
         papel: Papel do usuário (diretor, supervisor, vendedor)
+        regras_aplicadas: Regras aplicadas na consulta (ex.: {"excluir_carteira": ["pasta_verde"]})
         
     Returns:
         dict com estrutura:
@@ -244,6 +246,21 @@ def gerar_resposta_executiva_com_dados_dw(
         "fim": data_fim.strftime("%Y-%m-%d") if data_fim else None
     }
     
+    # Prepara contexto de regras aplicadas
+    contexto_regras = ""
+    if regras_aplicadas:
+        contexto_regras = f"""
+
+REGRAS E PREFERÊNCIAS APLICADAS NA CONSULTA:
+{json.dumps(regras_aplicadas, ensure_ascii=False, indent=2)}
+
+IMPORTANTE: Essas regras representam feedbacks e decisões anteriores do Diretor e da equipe.
+Elas já foram aplicadas na consulta ao data warehouse. Você DEVE:
+- Tratar esses filtros como VERDADE estabelecida para aquela resposta.
+- Não tentar "corrigir" ou ignorar essas preferências.
+- Só contrariar uma regra se o usuário trouxer uma instrução explícita na pergunta atual.
+"""
+    
     prompt = f"""Você recebeu dados brutos do data warehouse DIPAM (camada DW) em formato JSON.
 Use APENAS esses dados para gerar uma resposta executiva estruturada.
 
@@ -251,7 +268,7 @@ Pergunta original do usuário: {pergunta}
 
 Especificação de intenção executada:
 {json.dumps(intent_spec.to_dict(), ensure_ascii=False, indent=2)}
-
+{contexto_regras}
 Dados brutos retornados pela camada DW:
 {dados_str}
 
@@ -491,5 +508,26 @@ Se o backend retornar vazio:
 
 QUANDO A PERGUNTA É VAGA OU IMPOSSÍVEL:
 Se faltar período, região, cliente ou métrica necessária:
-→ Peça uma única pergunta de esclarecimento"""
+→ Peça uma única pergunta de esclarecimento
+
+-----------------------------------------------------------------------
+REGRAS E PREFERÊNCIAS DO DIRETOR / USUÁRIOS
+-----------------------------------------------------------------------
+O backend pode lhe enviar, junto com os dados, um campo de contexto com REGRAS e PREFERÊNCIAS já aplicadas na consulta, por exemplo:
+
+- "excluir_carteira": ["pasta_verde"]
+- "foco_em_clientes_criticos": true
+- "considerar_apenas_rotas": ["ROTA 75 VD", "ROTA 72 VD"]
+
+Essas regras representam feedbacks e decisões anteriores do Diretor e da equipe.
+
+SUAS OBRIGAÇÕES:
+- Tratar esses filtros como VERDADE estabelecida para aquela resposta.
+- Não tentar "corrigir" ou ignorar essas preferências.
+- Só contrariar uma regra se o usuário trouxer uma instrução explícita na pergunta atual, como:
+  * "dessa vez inclua também a pasta verde"
+  * "ignore a regra de excluir a pasta verde para esta análise"
+
+Quando fizer isso, deixe claro na análise que você considerou a exceção, por exemplo:
+- "Nesta análise, a carteira 'pasta verde' foi incluída a pedido do Diretor.""""
 

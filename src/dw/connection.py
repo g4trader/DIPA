@@ -84,6 +84,7 @@ def init_db(create_tables_if_not_exists: bool = False):
         # Importa todos os modelos para garantir que estejam registrados
         import src.dw.models  # noqa: F401
         import src.dw.models_analytics  # noqa: F401
+        import src.dw.models_agent  # noqa: F401
         
         # Cria as tabelas
         Base.metadata.create_all(bind=engine)
