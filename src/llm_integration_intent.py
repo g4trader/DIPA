@@ -67,11 +67,16 @@ Estrutura do JSON IntentSpec:
   "metricas": ["meta_total", "realizado_total", "atingimento_medio", "gap_total", "faturamento_total", "churn_score", "quantidade_vendas", ...]
 }}
 
-REGRAS PARA PERÍODOS:
-- Se mencionar "todo o período", "todos os meses", "período completo": use "2024-11-01" a "2025-10-31" (ou o período disponível).
-- Se mencionar "últimos N meses": calcule o período correspondente (ex.: últimos 6 meses = "2025-05-01" a "2025-10-31").
-- Se mencionar mês específico (ex.: "agosto de 2025"): use "2025-08-01" como periodo_inicio e "2025-08-31" como periodo_fim.
-- Se não mencionar período: use null e o backend usará o período padrão.
+REGRAS CRÍTICAS PARA PERÍODOS:
+- Se a pergunta mencionar "mês" (ex.: "agosto de 2025", "mês de agosto", "agosto/2025"): 
+  * Converta para início/fim do mês: periodo_inicio = "2025-08-01", periodo_fim = "2025-08-31"
+- Se mencionar "todo o período", "todos os meses", "período completo": 
+  * Use "2024-11-01" a "2025-10-31" (ou o período disponível no data warehouse)
+- Se mencionar "últimos N meses": 
+  * Calcule o período correspondente (ex.: últimos 6 meses = "2025-05-01" a "2025-10-31")
+- Se NÃO houver período explícito na pergunta: 
+  * NÃO invente período. Deixe periodo_inicio = null e periodo_fim = null
+  * O backend usará o período padrão ou pedirá esclarecimento
 
 REGRAS PARA FILTROS:
 - Se pedir "top N" ou "os N maiores/menores": inclua "top_n": N nos filtros.
@@ -82,14 +87,23 @@ REGRAS PARA TIPO:
 - "meta": perguntas sobre metas e atingimento.
 - "vendas": perguntas sobre faturamento e vendas.
 - "clientes_criticos" ou "churn": perguntas sobre risco de churn.
-- "ranking_vendedores": perguntas sobre ranking/comparação de vendedores.
-- "ranking_produtos": perguntas sobre ranking/comparação de produtos.
+- "ranking_vendedores": perguntas sobre ranking/comparação de vendedores (use dimensao_principal = "vendedor").
+- "ranking_produtos": perguntas sobre ranking/comparação de produtos (use dimensao_principal = "categoria" ou "sku").
 - "analise_meta_detalhada": análise multi-dimensional (vendedor + produto + cliente).
 - "outros": pergunta vaga ou não classificável.
 
 REGRAS PARA DIMENSÕES:
-- "dimensao_principal": dimensão principal da análise (ex.: "mes" para evolução mensal, "vendedor" para análise por vendedor).
+- "dimensao_principal": dimensão principal da análise.
+  * Se pedir ranking de vendedores: use "vendedor"
+  * Se pedir ranking de produtos: use "categoria" ou "sku"
+  * Se pedir evolução mensal: use "mes"
+  * Se pedir análise por supervisor: use "supervisor"
 - "dimensao_secundaria": dimensão adicional se a análise for multi-dimensional (ex.: "produto" em análise por vendedor + produto).
+
+REGRA FUNDAMENTAL:
+- NUNCA tente resolver a pergunta sem primeiro gerar o IntentSpec.
+- Você está APENAS gerando o IntentSpec (JSON), NÃO está respondendo a pergunta.
+- A resposta à pergunta será gerada DEPOIS, quando o backend enviar os dados do data warehouse.
 
 Retorne APENAS o JSON, sem markdown, sem explicações, sem texto adicional."""
 
