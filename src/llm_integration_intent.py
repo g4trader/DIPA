@@ -171,7 +171,8 @@ def gerar_resposta_executiva_com_dados_dw(
     intent_spec: IntentSpec,
     dados_dw: Dict[str, Any],
     papel: Optional[str] = None,
-    regras_aplicadas: Optional[Dict[str, Any]] = None
+    regras_aplicadas: Optional[Dict[str, Any]] = None,
+    analise_causas: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Gera resposta executiva estruturada usando dados brutos do DW.

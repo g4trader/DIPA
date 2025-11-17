@@ -96,13 +96,15 @@ def processar_pergunta_com_dw(
             contexto_usuario=contexto_usuario
         )
         
-        # Extrai dados e regras aplicadas
+        # Extrai dados, regras aplicadas e análise de causas
         dados_dw = {
             "status": resultado_orquestrador.get("status"),
             "dados": resultado_orquestrador.get("dados", []),
-            "tem_dados": resultado_orquestrador.get("status") == "ok" and len(resultado_orquestrador.get("dados", [])) > 0
+            "tem_dados": resultado_orquestrador.get("status") == "ok" and len(resultado_orquestrador.get("dados", [])) > 0,
+            "analise_causas": resultado_orquestrador.get("analise_causas", {})
         }
         regras_aplicadas = resultado_orquestrador.get("regras_aplicadas", {})
+        analise_causas = resultado_orquestrador.get("analise_causas", {})
         tem_dados = dados_dw.get("tem_dados", False)
         
         logger.info(
@@ -149,15 +151,16 @@ def processar_pergunta_com_dw(
             "erro": str(e)
         }
     
-    # PASSO 3: LLM gera resposta executiva com dados brutos
-    try:
-        resposta_executiva = gerar_resposta_executiva_com_dados_dw(
-            pergunta=pergunta,
-            intent_spec=intent_spec,
-            dados_dw=dados_dw,
-            papel=papel,
-            regras_aplicadas=regras_aplicadas
-        )
+        # PASSO 3: LLM gera resposta executiva com dados brutos
+        try:
+            resposta_executiva = gerar_resposta_executiva_com_dados_dw(
+                pergunta=pergunta,
+                intent_spec=intent_spec,
+                dados_dw=dados_dw,
+                papel=papel,
+                regras_aplicadas=regras_aplicadas,
+                analise_causas=analise_causas
+            )
         
         # Adiciona metadados
         resposta_executiva["intent_spec"] = intent_spec
