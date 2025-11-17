@@ -8,13 +8,18 @@
 
 ## ⚠️ NOTA IMPORTANTE
 
+**BANCO DE DADOS ATUAL**:
+- **Estado atual**: SQLite (POC) ou PostgreSQL (produção planejada)
+- **BigQuery**: NÃO está implementado. Mencionado apenas no roadmap futuro.
+- **Dados**: Armazenados em `data/dipam_dw.db` (SQLite) ou PostgreSQL
+
 Este documento contém:
 - **Estruturas reais** extraídas do código e banco de dados
 - **Exemplos representativos** baseados na estrutura do sistema
 - **Campos que devem ser preenchidos** com dados reais da DIPAM
 
 **Para obter dados 100% reais**, é necessário:
-1. Conectar ao banco de dados de produção
+1. Conectar ao banco de dados de produção (SQLite ou PostgreSQL)
 2. Executar queries SQL para extrair departamentos, marcas, SKUs, rotas, etc.
 3. Validar com a equipe de negócios da DIPAM
 
