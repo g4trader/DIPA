@@ -152,27 +152,115 @@ def _criar_structured_response(
     dados_dw = resposta.get("dados_dw", {})
     regras_aplicadas = dados_dw.get("regras_aplicadas") if isinstance(dados_dw, dict) else None
     
-    # Extrai KPIs da tabela se disponível
+    # Extrai KPIs e seções da tabela_principal
     kpis = []
+    secoes = []
+    
     if tabela_principal:
-        # Tenta extrair KPIs agregados da primeira tabela
-        primeira_tabela = tabela_principal[0] if isinstance(tabela_principal, list) else tabela_principal
-        if isinstance(primeira_tabela, dict):
-            colunas = primeira_tabela.get("colunas", [])
-            linhas = primeira_tabela.get("linhas", [])
+        # Normaliza: tabela_principal pode ser lista ou dict único
+        tabelas = tabela_principal if isinstance(tabela_principal, list) else [tabela_principal]
+        
+        for tabela in tabelas:
+            if not isinstance(tabela, dict):
+                continue
+                
+            colunas = tabela.get("colunas", [])
+            linhas = tabela.get("linhas", [])
             
-            # Se a tabela tem colunas de KPIs, extrai
-            if "Meta Total" in colunas or "meta_total" in colunas:
-                # Tenta encontrar valores agregados
-                pass
+            if not colunas or not linhas:
+                continue
+            
+            # Para consultas de META: extrai KPIs agregados
+            if intent == "meta" or intent == "analise_meta_detalhada":
+                # Procura colunas de meta/realizado/atingimento
+                meta_idx = _find_column_index(colunas, ["Meta Total", "meta_total", "Meta"])
+                realizado_idx = _find_column_index(colunas, ["Realizado Total", "realizado_total", "Realizado"])
+                atingimento_idx = _find_column_index(colunas, ["Atingimento", "atingimento", "Atingimento (%)"])
+                mes_idx = _find_column_index(colunas, ["Mês", "mes_ano", "Mês/Ano"])
+                
+                # Se for tabela agregada (uma linha ou poucas linhas), extrai KPIs
+                if len(linhas) <= 12:  # Provavelmente meses ou agregado
+                    meta_total = 0.0
+                    realizado_total = 0.0
+                    atingimento_medio = 0.0
+                    meses_com_dados = 0
+                    
+                    for linha in linhas:
+                        if meta_idx is not None and meta_idx < len(linha):
+                            meta_val = _parse_number(linha[meta_idx])
+                            if meta_val:
+                                meta_total += meta_val
+                        if realizado_idx is not None and realizado_idx < len(linha):
+                            real_val = _parse_number(linha[realizado_idx])
+                            if real_val:
+                                realizado_total += real_val
+                        if atingimento_idx is not None and atingimento_idx < len(linha):
+                            atg_val = _parse_number(linha[atingimento_idx])
+                            if atg_val:
+                                atingimento_medio += atg_val
+                                meses_com_dados += 1
+                    
+                    if meses_com_dados > 0:
+                        atingimento_medio = atingimento_medio / meses_com_dados
+                    
+                    # Cria KPIs
+                    if meta_total > 0 or realizado_total > 0:
+                        mes_ano_label = _format_periodo_label(periodo_analisado)
+                        
+                        kpis.append({
+                            "label": "Meta Total",
+                            "value": f"R$ {meta_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                            "color": "positive" if atingimento_medio >= 100 else "neutral"
+                        })
+                        kpis.append({
+                            "label": "Realizado Total",
+                            "value": f"R$ {realizado_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                            "color": "positive" if realizado_total >= meta_total else "neutral"
+                        })
+                        kpis.append({
+                            "label": "Atingimento Médio",
+                            "value": f"{atingimento_medio:.1f}%",
+                            "color": "positive" if atingimento_medio >= 100 else "negative" if atingimento_medio < 90 else "neutral",
+                            "variation": f"{atingimento_medio - 100:.1f}%" if atingimento_medio < 100 else f"+{atingimento_medio - 100:.1f}%"
+                        })
+                        
+                        # Cria seção de tabela detalhada
+                        secoes.append({
+                            "tipo": "tabela_metas",
+                            "titulo": f"Metas e Realizado por Mês - {mes_ano_label}" if mes_ano_label else "Metas e Realizado",
+                            "dados": _convert_table_to_dict_list(colunas, linhas)
+                        })
+                
+                # Se for tabela de vendedores (muitas linhas), cria seção de ranking
+                elif len(linhas) > 12:
+                    vendedor_idx = _find_column_index(colunas, ["Vendedor", "vendedor_nome", "Vendedor"])
+                    if vendedor_idx is not None:
+                        secoes.append({
+                            "tipo": "lista_vendedores",
+                            "titulo": "Ranking de Vendedores",
+                            "dados": _convert_table_to_dict_list(colunas, linhas, intent="meta")
+                        })
+            
+            # Para outras intents, cria seção genérica
+            else:
+                secoes.append({
+                    "tipo": "tabela_detalhada",
+                    "titulo": f"Dados Analíticos - {intent_label}",
+                    "dados": _convert_table_to_dict_list(colunas, linhas)
+                })
+    
+    # Se não há KPIs mas há dados do DW, tenta extrair de dados_dw
+    if not kpis and dados_dw.get("dados"):
+        kpis = _extrair_kpis_de_dados_dw(dados_dw.get("dados"), intent, periodo_analisado)
     
     # Converte insights para formato esperado
     insights_recomendacoes = insights if isinstance(insights, list) else []
     
     # Monta structured response
     structured = {
-        "resumoExecutivo": resumo_executivo,
+        "resumo_executivo": resumo_executivo,
         "kpis": kpis if kpis else None,
+        "secoes": secoes if secoes else None,
         "rankingVendedores": [],
         "clientesCriticos": [],
         "insightsRecomendacoes": insights_recomendacoes,
@@ -186,4 +274,134 @@ def _criar_structured_response(
     }
     
     return structured
+
+
+def _find_column_index(colunas: List[str], nomes_possiveis: List[str]) -> Optional[int]:
+    """Encontra índice de coluna por nomes possíveis."""
+    for i, col in enumerate(colunas):
+        col_lower = str(col).lower()
+        for nome in nomes_possiveis:
+            if nome.lower() in col_lower or col_lower in nome.lower():
+                return i
+    return None
+
+
+def _parse_number(valor: Any) -> Optional[float]:
+    """Converte valor para número."""
+    if valor is None:
+        return None
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    if isinstance(valor, str):
+        # Remove R$, espaços, pontos de milhar
+        valor_limpo = valor.replace("R$", "").replace(" ", "").replace(".", "").replace(",", ".")
+        try:
+            return float(valor_limpo)
+        except:
+            return None
+    return None
+
+
+def _format_periodo_label(periodo: Dict[str, Any]) -> str:
+    """Formata período para label legível."""
+    inicio = periodo.get("inicio")
+    fim = periodo.get("fim")
+    
+    if inicio and fim:
+        try:
+            from datetime import datetime
+            dt_inicio = datetime.strptime(inicio, "%Y-%m-%d")
+            dt_fim = datetime.strptime(fim, "%Y-%m-%d")
+            
+            if dt_inicio.year == dt_fim.year and dt_inicio.month == dt_fim.month:
+                # Mesmo mês
+                meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho",
+                        "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+                return f"{meses[dt_inicio.month - 1]} de {dt_inicio.year}"
+            else:
+                return f"{dt_inicio.strftime('%d/%m/%Y')} a {dt_fim.strftime('%d/%m/%Y')}"
+        except:
+            pass
+    
+    return "Período analisado"
+
+
+def _convert_table_to_dict_list(colunas: List[str], linhas: List[List[Any]], intent: str = "") -> List[Dict[str, Any]]:
+    """Converte tabela (colunas + linhas) para lista de dicionários."""
+    resultado = []
+    
+    for linha in linhas:
+        registro = {}
+        for i, col in enumerate(colunas):
+            if i < len(linha):
+                # Normaliza nome da coluna para chave
+                chave = col.lower().replace(" ", "_").replace("/", "_").replace("(%)", "pct")
+                valor = linha[i]
+                
+                # Converte valores numéricos se possível
+                if isinstance(valor, str) and (valor.replace(".", "").replace(",", "").replace("-", "").isdigit() or "R$" in valor):
+                    valor_num = _parse_number(valor)
+                    if valor_num is not None:
+                        valor = valor_num
+                
+                registro[chave] = valor
+        resultado.append(registro)
+    
+    # Para intent "meta" e vendedores, mapeia campos específicos
+    if intent == "meta" and resultado:
+        for reg in resultado:
+            # Mapeia campos comuns
+            if "vendedor" in reg or "vendedor_nome" in reg:
+                reg["vendedor_nome"] = reg.get("vendedor") or reg.get("vendedor_nome")
+            if "meta_total" in reg or "meta" in reg:
+                reg["meta_total"] = reg.get("meta_total") or reg.get("meta") or 0
+            if "realizado_total" in reg or "realizado" in reg:
+                reg["realizado_total"] = reg.get("realizado_total") or reg.get("realizado") or 0
+            if "atingimento" in reg or "atingimento_pct" in reg:
+                atg = reg.get("atingimento_pct") or reg.get("atingimento") or 0
+                reg["atingimento_pct"] = _parse_number(atg) or 0
+            if "gap" in reg or "gap_total" in reg:
+                gap = reg.get("gap_total") or reg.get("gap") or 0
+                reg["gap_valor"] = _parse_number(gap) or 0
+    
+    return resultado
+
+
+def _extrair_kpis_de_dados_dw(dados: List[Any], intent: str, periodo: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extrai KPIs diretamente dos dados do DW."""
+    kpis = []
+    
+    if intent == "meta" and dados:
+        # Tenta agregar dados
+        meta_total = 0.0
+        realizado_total = 0.0
+        
+        for item in dados:
+            if isinstance(item, dict):
+                meta_total += float(item.get("meta_total", 0) or 0)
+                realizado_total += float(item.get("realizado_total", 0) or 0)
+        
+        if meta_total > 0:
+            atingimento = (realizado_total / meta_total) * 100
+            
+            mes_ano_label = _format_periodo_label(periodo)
+            
+            kpis.append({
+                "label": "Meta Total",
+                "value": f"R$ {meta_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                "color": "neutral"
+            })
+            kpis.append({
+                "label": "Realizado Total",
+                "value": f"R$ {realizado_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                "color": "positive" if realizado_total >= meta_total else "neutral"
+            })
+            kpis.append({
+                "label": "Atingimento Médio",
+                "value": f"{atingimento:.1f}%",
+                "color": "positive" if atingimento >= 100 else "negative" if atingimento < 90 else "neutral",
+                "variation": f"{atingimento - 100:.1f}%" if atingimento < 100 else f"+{atingimento - 100:.1f}%"
+            })
+    
+    return kpis
 

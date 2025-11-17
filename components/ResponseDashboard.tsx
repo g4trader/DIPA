@@ -452,6 +452,119 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
               );
             }
             
+            // Seção: Tabela de Metas (por mês ou agregada)
+            if (secao.tipo === "tabela_metas" && secao.dados && secao.dados.length > 0) {
+              const isExpanded = expandedSections[secaoIdx] ?? true;
+              
+              return (
+                <div
+                  key={secaoIdx}
+                  className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl bg-blue-500/10 p-2 border border-blue-500/20">
+                        <Target className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-slate-100">{secao.titulo}</h3>
+                    </div>
+                    <button
+                      onClick={() => toggleSection(secaoIdx)}
+                      className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+                    >
+                      {isExpanded ? "Recolher" : "Expandir"}
+                      <ChevronDown className={clsx("w-3 h-3 transition-transform", isExpanded && "rotate-180")} />
+                    </button>
+                  </div>
+                  
+                  {isExpanded && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-700">
+                            {secao.dados[0]?.mes_ano && (
+                              <th className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide">Mês</th>
+                            )}
+                            {secao.dados[0]?.mes && (
+                              <th className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide">Mês</th>
+                            )}
+                            <th className="text-right py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide">Meta Total</th>
+                            <th className="text-right py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide">Realizado Total</th>
+                            <th className="text-right py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide">Gap</th>
+                            <th className="text-right py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide">Atingimento</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {secao.dados.map((item: any, idx: number) => {
+                            const meta = item.meta_total || item.meta || 0;
+                            const realizado = item.realizado_total || item.realizado || 0;
+                            const gap = realizado - meta;
+                            const atingimento = meta > 0 ? (realizado / meta) * 100 : 0;
+                            const mes_ano = item.mes_ano || item.mes || `Linha ${idx + 1}`;
+                            
+                            return (
+                              <tr
+                                key={idx}
+                                className="border-b border-slate-800/50 hover:bg-slate-900/50 transition-colors"
+                              >
+                                {(secao.dados[0]?.mes_ano || secao.dados[0]?.mes) && (
+                                  <td className="py-3 px-4 text-slate-100 font-medium">{mes_ano}</td>
+                                )}
+                                <td className="py-3 px-4 text-slate-300 text-right">
+                                  {meta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                </td>
+                                <td className="py-3 px-4 text-slate-200 text-right font-medium">
+                                  {realizado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                </td>
+                                <td
+                                  className={clsx(
+                                    "py-3 px-4 text-right font-semibold",
+                                    gap >= 0 ? "text-emerald-400" : "text-red-400"
+                                  )}
+                                >
+                                  {gap >= 0 ? "+" : ""}
+                                  {gap.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-2 justify-end">
+                                    <div className="flex-1 max-w-[100px] h-2 bg-slate-800 rounded-full overflow-hidden">
+                                      <div
+                                        className={clsx(
+                                          "h-full transition-all",
+                                          atingimento >= 100
+                                            ? "bg-emerald-500"
+                                            : atingimento >= 95
+                                            ? "bg-yellow-500"
+                                            : "bg-red-500"
+                                        )}
+                                        style={{ width: `${Math.min(atingimento, 100)}%` }}
+                                      />
+                                    </div>
+                                    <span
+                                      className={clsx(
+                                        "text-right font-semibold min-w-[50px]",
+                                        atingimento >= 100
+                                          ? "text-emerald-400"
+                                          : atingimento >= 95
+                                          ? "text-yellow-400"
+                                          : "text-red-400"
+                                      )}
+                                    >
+                                      {atingimento.toFixed(1)}%
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            
             // Seção: Lista de Produtos
             if (secao.tipo === "lista_produtos" && secao.dados && secao.dados.length > 0) {
               return (
@@ -564,6 +677,72 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
                       </li>
                     ))}
                   </ul>
+                </div>
+              );
+            }
+            
+            // Seção: Tabela Detalhada (genérica)
+            if (secao.tipo === "tabela_detalhada" && secao.dados && secao.dados.length > 0) {
+              const isExpanded = expandedSections[secaoIdx] ?? true;
+              
+              return (
+                <div
+                  key={secaoIdx}
+                  className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl bg-indigo-500/10 p-2 border border-indigo-500/20">
+                        <Package className="w-5 h-5 text-indigo-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-slate-100">{secao.titulo}</h3>
+                    </div>
+                    <button
+                      onClick={() => toggleSection(secaoIdx)}
+                      className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+                    >
+                      {isExpanded ? "Recolher" : "Expandir"}
+                      <ChevronDown className={clsx("w-3 h-3 transition-transform", isExpanded && "rotate-180")} />
+                    </button>
+                  </div>
+                  
+                  {isExpanded && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-700">
+                            {Object.keys(secao.dados[0] || {}).map((key, idx) => (
+                              <th
+                                key={idx}
+                                className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide"
+                              >
+                                {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {secao.dados.map((item: any, idx: number) => (
+                            <tr
+                              key={idx}
+                              className="border-b border-slate-800/50 hover:bg-slate-900/50 transition-colors"
+                            >
+                              {Object.values(item).map((val: any, cellIdx: number) => (
+                                <td key={cellIdx} className="py-3 px-4 text-slate-300">
+                                  {typeof val === "number"
+                                    ? val.toLocaleString("pt-BR", {
+                                        style: val > 1000 ? "currency" : "decimal",
+                                        currency: "BRL",
+                                      })
+                                    : val || "—"}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               );
             }
