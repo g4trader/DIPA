@@ -487,7 +487,13 @@ REGRAS DE OURO DO RESUMO EXECUTIVO:
 - Deve ser cirúrgico, direto, profissional, executivo
 - Evite qualquer tipo de clichê genérico ("os dados sugerem", "pode ser importante observar")
 - Use comparações baseadas em números REAIS do dataset
-- Destaque: queda, alta, riscos, rupturas, clientes críticos, metas não batidas, variações relevantes
+- TOM PROPORCIONAL AO GAP:
+  * Se atingimento >= 95%: destaque que está próximo da meta, gap é pequeno, performance aceitável
+  * Se atingimento entre 90-95%: mencione que ficou abaixo, mas não é crítico
+  * Se atingimento < 90%: destaque como preocupante e que requer atenção
+  * Se atingimento >= 100%: destaque superação da meta
+- Destaque variações relevantes, mas seja proporcional: um gap de 3% não é "significativo", um gap de 30% sim
+- Seja objetivo: apresente os números e o contexto, sem dramatizar
 
 REGRAS DE OURO DOS INSIGHTS:
 Os insights devem SEMPRE ser:
