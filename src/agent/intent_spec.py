@@ -56,6 +56,18 @@ class IntentSpec:
         "nenhuma"
     ] = "nenhuma"
     
+    # Dimensão secundária (opcional, para análises multi-dimensionais)
+    dimensao_secundaria: Optional[Literal[
+        "mes",
+        "vendedor",
+        "supervisor",
+        "rota",
+        "cliente",
+        "marca",
+        "categoria",
+        "sku"
+    ]] = None
+    
     # Filtros opcionais
     filtros: Dict[str, Any] = field(default_factory=dict)
     # Exemplos de filtros:
@@ -93,6 +105,7 @@ class IntentSpec:
             "periodo_inicio": self.periodo_inicio,
             "periodo_fim": self.periodo_fim,
             "dimensao_principal": self.dimensao_principal,
+            "dimensao_secundaria": self.dimensao_secundaria,
             "filtros": self.filtros,
             "metricas": self.metricas,
             "confianca": self.confianca,
@@ -107,6 +120,7 @@ class IntentSpec:
             periodo_inicio=data.get("periodo_inicio"),
             periodo_fim=data.get("periodo_fim"),
             dimensao_principal=data.get("dimensao_principal", "nenhuma"),
+            dimensao_secundaria=data.get("dimensao_secundaria"),
             filtros=data.get("filtros", {}),
             metricas=data.get("metricas", []),
             confianca=data.get("confianca", 0.5),

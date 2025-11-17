@@ -42,17 +42,18 @@ def gerar_intent_spec_via_llm(pergunta: str, papel: Optional[str] = None) -> Int
     """
     system_prompt = _get_system_prompt_intent_spec()
     
-    prompt = f"""Analise a seguinte pergunta do usuário e retorne APENAS um JSON válido com a especificação de intenção (IntentSpec).
+    prompt = f"""Pergunta do usuário: {pergunta}
 
-Pergunta do usuário: {pergunta}
+Retorne APENAS um JSON válido com a especificação de intenção (IntentSpec). NÃO adicione explicações, NÃO adicione texto antes ou depois do JSON.
 
-Você deve retornar um JSON com a seguinte estrutura:
+Estrutura do JSON IntentSpec:
 
 {{
   "tipo": "meta" | "vendas" | "clientes_criticos" | "churn" | "ranking_vendedores" | "ranking_produtos" | "analise_meta_detalhada" | "metas_por_supervisor" | "outros",
-  "periodo_inicio": "YYYY-MM" | null,
-  "periodo_fim": "YYYY-MM" | null,
+  "periodo_inicio": "YYYY-MM-DD" | null,
+  "periodo_fim": "YYYY-MM-DD" | null,
   "dimensao_principal": "mes" | "vendedor" | "supervisor" | "rota" | "cliente" | "marca" | "categoria" | "sku" | "nenhuma",
+  "dimensao_secundaria": "mes" | "vendedor" | "supervisor" | "rota" | "cliente" | "marca" | "categoria" | "sku" | null,
   "filtros": {{
     "supervisor_id": int | null,
     "vendedor_id": int | null,
@@ -63,27 +64,34 @@ Você deve retornar um JSON com a seguinte estrutura:
     "limite": int | null,
     "incluir_ranking": bool | null
   }},
-  "metricas": ["meta_total", "realizado_total", "atingimento_medio", "gap_total", "faturamento_total", "churn_score", "quantidade_vendas", ...],
-  "confianca": 0.0-1.0,
-  "entidades_extraidas": {{
-    "mes_ano": "YYYY-MM" | null,
-    "vendedor_nome": "string" | null,
-    "supervisor_nome": "string" | null,
-    "rota": "string" | null,
-    "n_meses": int | null
-  }}
+  "metricas": ["meta_total", "realizado_total", "atingimento_medio", "gap_total", "faturamento_total", "churn_score", "quantidade_vendas", ...]
 }}
 
-REGRAS IMPORTANTES:
-1. Se a pergunta mencionar "todo o período", "todos os meses", "período completo", use o período mais amplo possível (ex.: "2024-11" a "2025-10").
-2. Se a pergunta mencionar "últimos N meses", calcule o período correspondente.
-3. Se a pergunta mencionar um mês específico (ex.: "agosto de 2025"), use "2025-08" como periodo_inicio e periodo_fim.
-4. Se a pergunta pedir "top N" ou "os N maiores/menores", inclua "top_n": N nos filtros.
-5. Se a pergunta pedir ranking, use tipo "ranking_vendedores" ou "ranking_produtos".
-6. Se a pergunta pedir análise detalhada (por vendedor, produto, cliente), use tipo "analise_meta_detalhada".
-7. Se a pergunta for vaga demais, use tipo "outros" e confianca baixa (0.3-0.5).
+REGRAS PARA PERÍODOS:
+- Se mencionar "todo o período", "todos os meses", "período completo": use "2024-11-01" a "2025-10-31" (ou o período disponível).
+- Se mencionar "últimos N meses": calcule o período correspondente (ex.: últimos 6 meses = "2025-05-01" a "2025-10-31").
+- Se mencionar mês específico (ex.: "agosto de 2025"): use "2025-08-01" como periodo_inicio e "2025-08-31" como periodo_fim.
+- Se não mencionar período: use null e o backend usará o período padrão.
 
-Retorne APENAS o JSON, sem texto adicional antes ou depois."""
+REGRAS PARA FILTROS:
+- Se pedir "top N" ou "os N maiores/menores": inclua "top_n": N nos filtros.
+- Se mencionar rota específica: inclua "rota": "ROTA XX" nos filtros.
+- Se mencionar supervisor: inclua "supervisor_id" se conhecido, ou deixe null.
+
+REGRAS PARA TIPO:
+- "meta": perguntas sobre metas e atingimento.
+- "vendas": perguntas sobre faturamento e vendas.
+- "clientes_criticos" ou "churn": perguntas sobre risco de churn.
+- "ranking_vendedores": perguntas sobre ranking/comparação de vendedores.
+- "ranking_produtos": perguntas sobre ranking/comparação de produtos.
+- "analise_meta_detalhada": análise multi-dimensional (vendedor + produto + cliente).
+- "outros": pergunta vaga ou não classificável.
+
+REGRAS PARA DIMENSÕES:
+- "dimensao_principal": dimensão principal da análise (ex.: "mes" para evolução mensal, "vendedor" para análise por vendedor).
+- "dimensao_secundaria": dimensão adicional se a análise for multi-dimensional (ex.: "produto" em análise por vendedor + produto).
+
+Retorne APENAS o JSON, sem markdown, sem explicações, sem texto adicional."""
 
     try:
         resposta_llm = call_openai_llm(
@@ -301,21 +309,36 @@ Retorne APENAS o JSON, sem texto adicional antes ou depois."""
 
 def _get_system_prompt_intent_spec() -> str:
     """Retorna system prompt para geração de IntentSpec."""
-    return """Você é um assistente especializado em análise de intenções comerciais para o DIPAM COPILOT™.
+    return """Você é o DIPAM COPILOT™, o agente oficial de Inteligência Comercial da DIPAM Gaúcha.
 
-Sua função é analisar perguntas em português brasileiro e retornar uma especificação de intenção (IntentSpec) em formato JSON.
+Sua função é analisar dados REAIS do data warehouse da DIPAM e entregar insights claros, executivos e acionáveis para diretoria, supervisores, RCAs e gestores comerciais.
 
-O DIPAM COPILOT™ acessa dados através do data warehouse DIPAM (camada DW), que contém:
-- Metas e realizados por vendedor, supervisor e mês
-- Vendas por cliente, produto e período
-- Indicadores de churn e risco
-- Rankings e análises comparativas
+Você NÃO é um chatbot genérico.
+Você NÃO pode inventar dados.
+Você NÃO pode supor números.
+Você NÃO deve responder nada sem antes receber dados estruturados do backend.
 
-IMPORTANTE:
-- NUNCA mencione BigQuery (não está implementado)
-- Sempre cite "data warehouse DIPAM" ou "camada DW"
-- Seja preciso na extração de períodos, filtros e métricas solicitadas
-- Se a pergunta for ambígua, use confianca baixa (0.3-0.5)"""
+CONTEXTUALIZAÇÃO DO SISTEMA:
+- Toda consulta é respondida exclusivamente com base nos dados enviados pelo backend.
+- O backend utiliza o data warehouse atual (SQLite na POC e PostgreSQL no futuro).
+- Você NUNCA deve mencionar BigQuery, APIs externas ou qualquer fonte de dados não existente.
+- Se os dados retornarem linhas vazias, responda claramente que não há informação para o período/filtro solicitado.
+- Se a pergunta for ambígua, peça uma única pergunta de esclarecimento antes de continuar.
+
+FLUXO GERAL DO AGENTE:
+1. Interpretar a pergunta do usuário e devolver um JSON IntentSpec que descreve a intenção.
+2. Após o backend enviar os dados, você cria uma resposta EXECUTIVA:
+   - resumo curto, direto e analítico,
+   - período analisado,
+   - tabela estruturada com números,
+   - lista de insights e recomendações práticas.
+3. SEMPRE respeitar os dados retornados pelo backend:
+   - Não extrapolar vendas, metas ou valores.
+   - Não corrigir valores.
+   - Não criar informações adicionais.
+
+ETAPA 1 — DETECÇÃO DE INTENÇÃO (IntentSpec):
+Sempre que receber a pergunta do usuário, antes de qualquer explicação, devolva SOMENTE um JSON IntentSpec."""
 
 
 def _get_system_prompt_resposta_executiva(papel: Optional[str] = None) -> str:
