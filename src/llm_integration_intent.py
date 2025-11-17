@@ -204,19 +204,34 @@ def gerar_resposta_executiva_com_dados_dw(
     periodo_inicio = intent_spec.periodo_inicio or "N/A"
     periodo_fim = intent_spec.periodo_fim or periodo_inicio
     
-    # Converte para formato de data (assume primeiro dia do mês)
+    # Converte para formato de data
+    # Se já vier como YYYY-MM-DD, usa diretamente; se vier como YYYY-MM, converte
     try:
         if periodo_inicio != "N/A":
-            data_inicio = datetime.strptime(periodo_inicio + "-01", "%Y-%m-%d")
-            # Último dia do mês
-            if periodo_fim != periodo_inicio:
-                data_fim = datetime.strptime(periodo_fim + "-01", "%Y-%m-%d")
-                # Calcula último dia do mês
-                ultimo_dia = monthrange(data_fim.year, data_fim.month)[1]
-                data_fim = data_fim.replace(day=ultimo_dia)
+            if len(periodo_inicio) == 10:  # YYYY-MM-DD
+                data_inicio = datetime.strptime(periodo_inicio, "%Y-%m-%d")
+            elif len(periodo_inicio) == 7:  # YYYY-MM
+                data_inicio = datetime.strptime(periodo_inicio + "-01", "%Y-%m-%d")
             else:
-                ultimo_dia = monthrange(data_inicio.year, data_inicio.month)[1]
-                data_fim = data_inicio.replace(day=ultimo_dia)
+                data_inicio = None
+            
+            if periodo_fim != periodo_inicio and periodo_fim != "N/A":
+                if len(periodo_fim) == 10:  # YYYY-MM-DD
+                    data_fim = datetime.strptime(periodo_fim, "%Y-%m-%d")
+                elif len(periodo_fim) == 7:  # YYYY-MM
+                    data_fim = datetime.strptime(periodo_fim + "-01", "%Y-%m-%d")
+                    # Calcula último dia do mês
+                    ultimo_dia = monthrange(data_fim.year, data_fim.month)[1]
+                    data_fim = data_fim.replace(day=ultimo_dia)
+                else:
+                    data_fim = None
+            else:
+                if data_inicio:
+                    # Se período único, calcula último dia do mês
+                    ultimo_dia = monthrange(data_inicio.year, data_inicio.month)[1]
+                    data_fim = data_inicio.replace(day=ultimo_dia)
+                else:
+                    data_fim = None
         else:
             data_inicio = None
             data_fim = None
