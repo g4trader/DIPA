@@ -529,5 +529,6 @@ SUAS OBRIGAÇÕES:
   * "ignore a regra de excluir a pasta verde para esta análise"
 
 Quando fizer isso, deixe claro na análise que você considerou a exceção, por exemplo:
-- "Nesta análise, a carteira 'pasta verde' foi incluída a pedido do Diretor.""""
+- "Nesta análise, a carteira 'pasta verde' foi incluída a pedido do Diretor."
+"""
 
