@@ -277,6 +277,10 @@ FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
   ]
 }}
 
+NOTA: tabela_principal é um array de objetos, onde cada objeto representa uma tabela com:
+- "colunas": array de strings com nomes das colunas
+- "linhas": array de arrays, onde cada array interno é uma linha da tabela
+
 REGRAS DE OURO DO RESUMO EXECUTIVO:
 - Entre 2 e 5 frases
 - Cirúrgico, direto, profissional, executivo
