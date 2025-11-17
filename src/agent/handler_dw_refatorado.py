@@ -162,10 +162,18 @@ def processar_pergunta_com_dw(
                 analise_causas=analise_causas
             )
         
-        # Adiciona metadados
+        # Adiciona metadados e detalhes técnicos
         resposta_executiva["intent_spec"] = intent_spec
         resposta_executiva["dados_dw"] = dados_dw
         resposta_executiva["tem_dados"] = True
+        
+        # Adiciona detalhes técnicos para o template
+        resposta_executiva["detalhes_tecnicos"] = {
+            "intent_spec": intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else str(intent_spec),
+            "filtros_aplicados": intent_spec.filtros if hasattr(intent_spec, 'filtros') else {},
+            "regras_aplicadas": regras_aplicadas,
+            "query_executada": f"DW Query para tipo={intent_spec.tipo}, dimensao={intent_spec.dimensao_principal}"
+        }
         
         logger.info(
             f"[processar_pergunta_com_dw] Resposta executiva gerada: "
