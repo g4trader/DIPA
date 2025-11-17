@@ -104,12 +104,14 @@ def build_analytics_vendedor_mes(session: Session, mes_ano: Optional[str] = None
     # Detecta tipo de banco para usar função de data correta
     db_type = config.database.db_type
     
-    # Query para agregar metas por vendedor
+    # Query para agregar metas por vendedor (INCLUINDO valor_faturado)
+    # IMPORTANTE: Usar valor_faturado da tabela metas_vendedor, não somar vendas!
     if db_type == "sqlite":
         # SQLite usa strftime
         metas_query = session.query(
             MetaVendedor.vendedor_id,
             func.sum(MetaVendedor.valor_meta).label('meta_total'),
+            func.sum(MetaVendedor.valor_faturado).label('realizado_total'),  # ✅ CORRIGIDO: usar valor_faturado
             func.max(Vendedor.nome).label('vendedor_nome'),
             func.max(Vendedor.supervisor_id).label('supervisor_id')
         ).join(
@@ -124,6 +126,7 @@ def build_analytics_vendedor_mes(session: Session, mes_ano: Optional[str] = None
         metas_query = session.query(
             MetaVendedor.vendedor_id,
             func.sum(MetaVendedor.valor_meta).label('meta_total'),
+            func.sum(MetaVendedor.valor_faturado).label('realizado_total'),  # ✅ CORRIGIDO: usar valor_faturado
             func.max(Vendedor.nome).label('vendedor_nome'),
             func.max(Vendedor.supervisor_id).label('supervisor_id')
         ).join(
@@ -134,11 +137,11 @@ def build_analytics_vendedor_mes(session: Session, mes_ano: Optional[str] = None
             MetaVendedor.vendedor_id
         ).subquery()
     
-    # Query para agregar vendas por vendedor
+    # Query para agregar vendas por vendedor (apenas para métricas auxiliares)
+    # NOTA: Não usamos mais esta query para realizado_total, apenas para qtd_clientes_positivados e qtd_skus
     if db_type == "sqlite":
         vendas_query = session.query(
             Venda.vendedor_id,
-            func.sum(Venda.valor_total_liquido).label('realizado_total'),
             func.count(func.distinct(Venda.cliente_id)).label('qtd_clientes_positivados'),
             func.count(func.distinct(Venda.codigo_produto)).label('qtd_skus')
         ).filter(
@@ -151,7 +154,6 @@ def build_analytics_vendedor_mes(session: Session, mes_ano: Optional[str] = None
         from sqlalchemy import extract
         vendas_query = session.query(
             Venda.vendedor_id,
-            func.sum(Venda.valor_total_liquido).label('realizado_total'),
             func.count(func.distinct(Venda.cliente_id)).label('qtd_clientes_positivados'),
             func.count(func.distinct(Venda.codigo_produto)).label('qtd_skus')
         ).filter(
@@ -242,12 +244,13 @@ def build_analytics_vendedor_mes(session: Session, mes_ano: Optional[str] = None
         ).first()
         
         # Combina dados
+        # ✅ CORRIGIDO: realizado_total agora vem de meta_row (valor_faturado), não de venda_row
         resultado.append({
             'vendedor_id': vendedor_id,
             'vendedor_nome': meta_row.vendedor_nome if meta_row else '',
             'supervisor_id': meta_row.supervisor_id if meta_row else None,
             'meta_total': float(meta_row.meta_total) if meta_row else 0,
-            'realizado_total': float(venda_row.realizado_total) if venda_row else 0,
+            'realizado_total': float(meta_row.realizado_total) if meta_row else 0,  # ✅ CORRIGIDO: usar meta_row
             'qtd_clientes_positivados': venda_row.qtd_clientes_positivados if venda_row else 0,
             'qtd_skus': venda_row.qtd_skus if venda_row else 0,
             'qtd_clientes_churn': churn_row.qtd_clientes_churn if churn_row else 0,
