@@ -111,8 +111,25 @@ Retorne APENAS o JSON, sem markdown, sem explicações, sem texto adicional."""
             resposta_limpa = resposta_limpa[:-3]
         resposta_limpa = resposta_limpa.strip()
         
+        # Tenta extrair JSON se houver texto antes/depois
+        # Procura por { ... } no texto
+        inicio_json = resposta_limpa.find("{")
+        fim_json = resposta_limpa.rfind("}")
+        if inicio_json >= 0 and fim_json > inicio_json:
+            resposta_limpa = resposta_limpa[inicio_json:fim_json+1]
+        
         # Parseia JSON
         intent_dict = json.loads(resposta_limpa)
+        
+        # Normaliza período: se vier como "YYYY-MM-DD", mantém; se vier como "YYYY-MM", converte
+        if intent_dict.get("periodo_inicio") and len(intent_dict["periodo_inicio"]) == 7:
+            # "YYYY-MM" -> "YYYY-MM-01"
+            intent_dict["periodo_inicio"] = intent_dict["periodo_inicio"] + "-01"
+        if intent_dict.get("periodo_fim") and len(intent_dict["periodo_fim"]) == 7:
+            # "YYYY-MM" -> último dia do mês
+            ano, mes = map(int, intent_dict["periodo_fim"].split("-"))
+            ultimo_dia = monthrange(ano, mes)[1]
+            intent_dict["periodo_fim"] = f"{intent_dict['periodo_fim']}-{ultimo_dia:02d}"
         
         # Converte para IntentSpec
         intent_spec = IntentSpec.from_dict(intent_dict)
