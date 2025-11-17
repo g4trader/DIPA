@@ -1162,72 +1162,38 @@ async def ask_question(
         
         logger.info(f"Pergunta recebida: {request.pergunta[:100]}...")
         
-        # Obtém serviço do agente (com lazy loading/retry)
-        agent_service = get_agent_service()
+        # NOVO FLUXO: Usa handler refatorado (IntentSpec + Orquestrador + Regras)
+        from src.agent.handler_dw_refatorado import processar_pergunta_com_dw
+        from src.api.mapper_handler_refatorado import map_handler_refatorado_to_ask_response
         
-        if agent_service is None:
-            logger.error("❌ AgentService retornou None - erro crítico na inicialização")
-            raise HTTPException(
-                status_code=503,
-                detail={
-                    "error": "Serviço temporariamente indisponível",
-                    "message": "Erro ao inicializar o agente de IA. Verifique os logs do backend.",
-                    "detail": "AgentService não pôde ser criado. Verifique configuração de modelos ML e banco de dados.",
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-            )
-        
-        # Tenta garantir que o agent está pronto (lazy loading)
-        if not agent_service.is_ready():
-            logger.warning("⚠️  AgentService não está pronto, tentando garantir readiness...")
-            if not agent_service.ensure_ready():
-                # Ainda não está pronto após tentativa
-                last_error = agent_service.get_last_error()
-                error_detail = "AgentService está carregando em background. Isso geralmente leva 20-30 segundos após o startup."
-                if last_error:
-                    error_detail += f" Último erro: {last_error}"
-                
-                logger.warning(f"⚠️  AgentService ainda não está pronto após ensure_ready() - {error_detail}")
-                raise HTTPException(
-                    status_code=503,
-                    detail={
-                        "error": "Serviço temporariamente indisponível",
-                        "message": "Os modelos de ML ainda estão carregando. Por favor, aguarde alguns segundos e tente novamente.",
-                        "detail": error_detail,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                )
-        
-        # Atualiza flag global se necessário
-        if not app.state.agent_service_available:
-            app.state.agent_service_available = True
-            logger.info("✅ AgentService agora está disponível")
-        
-        # Processa pergunta
-        result = agent_service.process_question(
+        # Processa pergunta usando novo fluxo
+        resposta_handler = processar_pergunta_com_dw(
             pergunta=request.pergunta,
-            usuario_id=request.usuario_id,
-            papel=request.papel,
-            session=session
+            session=session,
+            papel=request.papel
         )
         
-        # Mapeia resultado do agente para formato CopilotAnswerPayload
-        from src.api.copilot_mapper import map_agent_to_copilot_payload
-        
-        # Passa o contexto completo para o mapper (precisa dos dados de vendedores)
-        copilot_payload = map_agent_to_copilot_payload(result, request.pergunta)
-        
-        # Prepara resposta com dados estruturados
-        # Monta AskResponse com o payload estruturado
-        dados_estruturados = _extrair_dados_estruturados(result, request.pergunta)
-        dados_estruturados["payload"] = copilot_payload  # Adiciona payload estruturado
-        
-        # IMPORTANTE: Se o copilot_payload tem structured, usa ele diretamente
-        # Isso garante que o formato novo (CopilotStructuredResponse) seja preservado
-        if copilot_payload.get("structured"):
-            dados_estruturados["structured"] = copilot_payload["structured"]
+        # Converte para formato AskResponse
+        dados_estruturados = map_handler_refatorado_to_ask_response(
+            resposta_handler=resposta_handler,
+            pergunta=request.pergunta
+        )
         
         response = AskResponse(**dados_estruturados)
+        
+        # Prepara resultado para registro de interação (formato compatível)
+        intent_spec = resposta_handler.get("intent_spec")
+        result = {
+            "intent": dados_estruturados.get("intent", "outros"),
+            "confianca": dados_estruturados.get("confidence", 0.7),
+            "resposta": dados_estruturados.get("resumoExecutivo", ""),
+            "contexto": dados_estruturados.get("contexto", {}),
+            "structured": dados_estruturados.get("structured"),
+            "entities": intent_spec.to_dict() if intent_spec and hasattr(intent_spec, 'to_dict') else {}
+        }
+        
+        # Copilot payload para compatibilidade
+        copilot_payload = dados_estruturados.get("payload", {})
         
         # Calcula tempo de processamento
         tempo_processamento_ms = int((time.perf_counter() - start_time) * 1000)
@@ -1237,45 +1203,50 @@ async def ask_question(
             from src.agent.interaction_registry import registrar_interacao_agent
             
             # Extrai entidades do resultado
-            entidades = result.get("entities", {}) or result.get("contexto", {}).get("entities", {})
+            intent_spec = resposta_handler.get("intent_spec")
+            entidades = intent_spec.to_dict() if intent_spec and hasattr(intent_spec, 'to_dict') else {}
             
             # Determina se a resposta foi bem-sucedida (tem dados reais)
-            sucesso_resposta = bool(
-                result.get("structured") or 
-                result.get("contexto", {}).get("piores_meta") or
-                result.get("contexto", {}).get("detalhe_vendedores_mes") or
-                copilot_payload.get("structured")
-            )
+            tem_dados = resposta_handler.get("tem_dados", False)
+            tabela_principal = resposta_handler.get("tabela_principal", [])
+            sucesso_resposta = tem_dados and len(tabela_principal) > 0
             
             # Determina fonte de dados principal
             fonte_dados_principal = None
             contexto_debug = None
             if copilot_payload.get("structured"):
-                contexto_debug = copilot_payload["structured"].get("contexto_debug", {})
-                if isinstance(contexto_debug, dict):
-                    fonte_dados_principal = contexto_debug.get("fonte_dados")
+                json_tecnico = copilot_payload["structured"].get("jsonTecnico", {})
+                if isinstance(json_tecnico, dict):
+                    contexto_debug = json_tecnico
+                    # Fonte de dados baseada no tipo de intent
+                    if intent_spec:
+                        fonte_dados_principal = f"dw_analytics_{intent_spec.tipo}"
             
             # Conta número de registros usados
             num_registros_usados = None
-            contexto = result.get("contexto", {})
-            if contexto:
-                # Tenta contar registros de diferentes fontes
-                if "piores_meta" in contexto and isinstance(contexto["piores_meta"], list):
-                    num_registros_usados = len(contexto["piores_meta"])
-                elif "detalhe_vendedores_mes" in contexto:
-                    vendedores = contexto["detalhe_vendedores_mes"].get("vendedores", [])
-                    if isinstance(vendedores, list):
-                        num_registros_usados = len(vendedores)
-                elif contexto_debug and isinstance(contexto_debug, dict):
-                    num_registros_usados = contexto_debug.get("total_registros")
+            dados_dw = resposta_handler.get("dados_dw", {})
+            if isinstance(dados_dw, dict):
+                dados = dados_dw.get("dados", [])
+                if isinstance(dados, list):
+                    num_registros_usados = len(dados)
+            
+            # Se não encontrou em dados_dw, tenta na tabela_principal
+            if num_registros_usados is None and tabela_principal:
+                for tabela in tabela_principal:
+                    if isinstance(tabela, dict):
+                        linhas = tabela.get("linhas", [])
+                        if isinstance(linhas, list):
+                            num_registros_usados = (num_registros_usados or 0) + len(linhas)
             
             # Prepara resposta completa para registro
             resposta_completa = {
                 "structured": copilot_payload.get("structured"),
-                "resposta": result.get("resposta", ""),
-                "confianca": result.get("confianca", 0.0),
+                "resposta": resposta_handler.get("resumo_executivo", ""),
+                "confianca": intent_spec.confianca if intent_spec else 0.7,
                 "contexto_debug": contexto_debug,
-                "resumoExecutivo": copilot_payload.get("resumoExecutivo"),
+                "resumoExecutivo": resposta_handler.get("resumo_executivo", ""),
+                "intent_spec": intent_spec.to_dict() if intent_spec else None,
+                "regras_aplicadas": dados_dw.get("regras_aplicadas") if isinstance(dados_dw, dict) else None
             }
             
             # Registra interação
@@ -1283,7 +1254,7 @@ async def ask_question(
                 session=session,
                 papel_usuario=request.papel,
                 pergunta=request.pergunta,
-                intent=result.get("intent", "outros"),
+                intent=intent_spec.tipo if intent_spec else "outros",
                 entidades=entidades,
                 resposta=resposta_completa,
                 sucesso_resposta=sucesso_resposta,
