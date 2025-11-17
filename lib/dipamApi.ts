@@ -12,14 +12,14 @@ import { CopilotStructuredResponse } from "@/types/agent";
  * 
  * Lê da variável de ambiente NEXT_PUBLIC_API_BASE_URL (padrão) ou
  * NEXT_PUBLIC_DIPAM_API_URL (compatibilidade) ou usa
- * http://localhost:8000 como fallback apenas em desenvolvimento
+ * http://localhost:8080 como fallback apenas em desenvolvimento
  * 
  * IMPORTANTE: Remove barras no final para evitar URLs duplicadas (ex: ...run.app//ask)
  */
 const rawBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_DIPAM_API_URL ||
-  (typeof window !== "undefined" ? "http://localhost:8000" : "http://localhost:8000");
+  (typeof window !== "undefined" ? "http://localhost:8080" : "http://localhost:8080");
 
 // Remove barra extra no final, se houver
 export const DIPAM_API_BASE_URL = rawBaseUrl.replace(/\/+$/, "");
