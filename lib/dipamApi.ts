@@ -10,31 +10,33 @@ import { CopilotStructuredResponse } from "@/types/agent";
 /**
  * URL base da API do Dipam AI
  * 
- * Lê da variável de ambiente NEXT_PUBLIC_API_BASE_URL (padrão) ou
- * NEXT_PUBLIC_DIPAM_API_URL (compatibilidade).
+ * Lê da variável de ambiente NEXT_PUBLIC_BACKEND_URL (padrão) ou
+ * NEXT_PUBLIC_API_BASE_URL (compatibilidade).
  * 
  * IMPORTANTE: 
  * - Em produção, a variável DEVE estar configurada no Vercel
- * - Em desenvolvimento local, usa localhost:8080 como fallback
+ * - Em desenvolvimento local, usa localhost:8000 como fallback
  * - Remove barras no final para evitar URLs duplicadas (ex: ...run.app//ask)
+ * - URL oficial: https://dipam-ai-backend-642830139828.us-central1.run.app
  */
-const rawBaseUrl =
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_DIPAM_API_URL ||
   // Fallback apenas em desenvolvimento (não em produção)
-  (process.env.NODE_ENV === "development" ? "http://localhost:8080" : "");
+  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://dipam-ai-backend-642830139828.us-central1.run.app");
 
 // Remove barra extra no final, se houver
-const cleanedUrl = rawBaseUrl.replace(/\/+$/, "");
+const cleanedUrl = BACKEND_URL.replace(/\/+$/, "");
 
 // Validação: em produção, a URL DEVE estar configurada
 if (!cleanedUrl && process.env.NODE_ENV === "production") {
   console.error(
-    "❌ ERRO CRÍTICO: NEXT_PUBLIC_API_BASE_URL não está configurada no Vercel!",
-    "Configure a variável de ambiente: NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app"
+    "❌ ERRO CRÍTICO: NEXT_PUBLIC_BACKEND_URL não está configurada no Vercel!",
+    "Configure a variável de ambiente: NEXT_PUBLIC_BACKEND_URL=https://dipam-ai-backend-642830139828.us-central1.run.app"
   );
   throw new Error(
-    "NEXT_PUBLIC_API_BASE_URL não está configurada. Configure no Vercel: NEXT_PUBLIC_API_BASE_URL=https://dipam-ai-backend-6arhlm3mha-uc.a.run.app"
+    "NEXT_PUBLIC_BACKEND_URL não está configurada. Configure no Vercel: NEXT_PUBLIC_BACKEND_URL=https://dipam-ai-backend-642830139828.us-central1.run.app"
   );
 }
 
@@ -225,17 +227,32 @@ export async function askDipamAgent(
     });
 
     if (!response.ok) {
-      let errorMessage = `Erro ao fazer requisição: ${response.status} ${response.statusText}`;
+      let errorMessage = 'Erro ao processar sua pergunta. Tente novamente em instantes.';
       let errorData: any = null;
 
       try {
-        errorData = await response.json();
-        if (errorData?.detail || errorData?.error || errorData?.message) {
-          errorMessage =
-            errorData.detail || errorData.error || errorData.message;
+        const body = await response.json();
+        errorData = body;
+        if (body?.detail || body?.message || body?.error) {
+          // Extrai mensagem de erro legível
+          const detail = body.detail || body.message || body.error;
+          if (typeof detail === 'string') {
+            errorMessage = detail;
+          } else if (typeof detail === 'object') {
+            // Se detail for um objeto, tenta extrair mensagem
+            errorMessage = detail.message || detail.error || JSON.stringify(detail);
+          }
         }
       } catch {
-        // Se não conseguir parsear o JSON de erro, usa a mensagem padrão
+        // Se não conseguir parsear JSON, tenta texto
+        try {
+          const text = await response.text();
+          if (text && text.trim()) {
+            errorMessage = text.substring(0, 200); // Limita tamanho
+          }
+        } catch {
+          // Mantém mensagem padrão se tudo falhar
+        }
       }
 
       throw new DipamApiError(errorMessage, response.status, errorData);
@@ -257,8 +274,10 @@ export async function askDipamAgent(
       );
     }
 
+    // Garante que sempre retorna uma string legível, nunca [object Object]
+    const errorMsg = error instanceof Error ? error.message : String(error);
     throw new DipamApiError(
-      `Erro inesperado ao fazer requisição: ${error instanceof Error ? error.message : String(error)}`,
+      `Erro inesperado ao fazer requisição: ${errorMsg}`,
       undefined,
       error
     );
@@ -330,8 +349,10 @@ export async function previewVendedor(
       );
     }
 
+    // Garante que sempre retorna uma string legível, nunca [object Object]
+    const errorMsg = error instanceof Error ? error.message : String(error);
     throw new DipamApiError(
-      `Erro inesperado ao fazer requisição: ${error instanceof Error ? error.message : String(error)}`,
+      `Erro inesperado ao fazer requisição: ${errorMsg}`,
       undefined,
       error
     );
