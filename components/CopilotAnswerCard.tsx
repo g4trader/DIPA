@@ -33,6 +33,11 @@ export const CopilotAnswerCard: React.FC<Props> = ({ payload }) => {
 
   // NOVO: Se houver resposta estruturada, renderiza dashboard diretamente
   if (payload.structured) {
+    // Garante que respostaMarkdown seja passado para o ResponseDashboard se disponível
+    const structuredWithMarkdown = respostaMarkdown
+      ? { ...payload.structured, respostaMarkdown }
+      : payload.structured;
+
     return (
       <div className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-slate-950/95 shadow-2xl overflow-hidden">
         {/* Header do card */}
@@ -62,7 +67,7 @@ export const CopilotAnswerCard: React.FC<Props> = ({ payload }) => {
           <h2 className="text-lg md:text-xl font-semibold text-slate-50 mb-6">{question}</h2>
 
           {/* Renderiza dashboard estruturado */}
-          <ResponseDashboard data={payload.structured} />
+          <ResponseDashboard data={structuredWithMarkdown} />
         </div>
       </div>
     );

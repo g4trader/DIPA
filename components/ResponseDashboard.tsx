@@ -17,6 +17,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
   
   // Compatibilidade: usa resumo_executivo ou resumoExecutivo
   const resumoExecutivo = data.resumo_executivo || data.resumoExecutivo;
+  // Prioridade: respostaMarkdown completo se disponível
+  const respostaMarkdown = data.respostaMarkdown;
   
   // Extrai KPIs das seções, insights preditivos e data.kpis
   const kpis = useMemo(() => {
@@ -174,8 +176,50 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
         </div>
       )}
       
-      {/* Card 1: Resumo Executivo */}
-      {resumoExecutivo && (
+      {/* Card 1: Resumo Executivo ou Markdown Completo */}
+      {respostaMarkdown ? (
+        <div className="rounded-2xl border border-[#1D2532] bg-[#0B0F17] p-6 shadow-xl">
+          <div className="prose prose-invert max-w-none space-y-8">
+            <div className="text-sm leading-relaxed text-slate-300 whitespace-pre-line">
+              {respostaMarkdown.split("\n").map((line, idx) => {
+                // Renderiza headings
+                if (line.match(/^##+\s+/)) {
+                  const level = line.match(/^(##+)/)?.[1].length || 2;
+                  const text = line.replace(/^##+\s+/, "").trim();
+                  const HeadingTag = `h${Math.min(level, 6)}` as keyof JSX.IntrinsicElements;
+                  return (
+                    <HeadingTag
+                      key={idx}
+                      className={`${level === 2 ? 'text-2xl' : level === 3 ? 'text-xl' : 'text-lg'} font-semibold text-slate-100 mt-8 mb-4 first:mt-0`}
+                    >
+                      {text}
+                    </HeadingTag>
+                  );
+                }
+                // Renderiza listas
+                if (line.match(/^[-*]\s+/)) {
+                  const text = line.replace(/^[-*]\s+/, "").trim();
+                  return (
+                    <div key={idx} className="flex items-start gap-2 mb-2">
+                      <span className="text-blue-400 mt-1">•</span>
+                      <span>{text}</span>
+                    </div>
+                  );
+                }
+                // Renderiza parágrafos
+                if (line.trim()) {
+                  return (
+                    <p key={idx} className="mb-3 last:mb-0">
+                      {line.trim()}
+                    </p>
+                  );
+                }
+                return <br key={idx} />;
+              })}
+            </div>
+          </div>
+        </div>
+      ) : resumoExecutivo ? (
         <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl">
           <div className="flex items-start gap-4">
             <div className="rounded-xl bg-blue-500/10 p-3 border border-blue-500/20">
@@ -193,7 +237,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Seção: Insights Preditivos (FASE 5) */}
       {data.insights_preditivos && (

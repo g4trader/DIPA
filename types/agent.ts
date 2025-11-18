@@ -211,6 +211,8 @@ export interface InsightsPreditivos {
 export interface CopilotStructuredResponse {
   /** Resumo executivo em texto (3-5 frases) */
   resumo_executivo: string;
+  /** Markdown completo da resposta (prioridade sobre resumo_executivo) */
+  respostaMarkdown?: string;
   /** Lista de seções com dados organizados */
   secoes: SecaoResposta[];
   /** Tabela detalhada para botão "Ver detalhamento" */

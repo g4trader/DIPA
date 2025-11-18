@@ -6,6 +6,10 @@ import { defineConfig, devices } from '@playwright/test';
  * URL base pode ser configurada via variável de ambiente FRONTEND_BASE_URL
  * Exemplo: FRONTEND_BASE_URL=https://dipam.smartiasolutions.br npm run test:e2e
  */
+const baseURL =
+  process.env.FRONTEND_BASE_URL ??
+  'https://dipa-south-medias-projects-dipa.vercel.app'; // URL estável da Vercel
+
 export default defineConfig({
   testDir: './e2e',
   
@@ -27,7 +31,9 @@ export default defineConfig({
   /* Opções compartilhadas para todos os projetos abaixo. Ver https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* URL base para usar em navegação como `await page.goto('/')`. */
-    baseURL: process.env.FRONTEND_BASE_URL || 'http://localhost:3000',
+    baseURL,
+    
+    viewport: { width: 1440, height: 900 },
     
     /* Coleta trace quando retry o teste falhado. Ver https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
