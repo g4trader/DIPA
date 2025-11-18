@@ -65,6 +65,12 @@ def post_processar_resposta(resposta_dw, intent_spec, regras_aplicadas, regras_b
         + "\n".join(f"- {p}" for p in resultado_exec["plano"])
     )
     
+    # Adiciona bloco de Alvos Prioritários (TOP 10) se houver dados
+    top_alvos = resultado_exec.get("top_alvos", [])
+    if top_alvos:
+        texto_final += "\n\nAlvos Prioritários (TOP 10)\n"
+        texto_final += "\n".join(f"- {linha}" for linha in top_alvos)
+    
     return {
         "texto": texto_final,
         "detalhes_tecnicos": resposta_dw.get("detalhes_tecnicos", {}) if isinstance(resposta_dw, dict) else {}

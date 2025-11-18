@@ -263,6 +263,16 @@ def main():
             if linha.strip():
                 print(f"  {linha}")
         
+        # Extrai e exibe Alvos Prioritários (TOP 10) se existir
+        if "Alvos Prioritários (TOP 10)" in texto_completo:
+            print(f"\n  🎯 Alvos Prioritários (TOP 10):")
+            print("  " + "-" * 76)
+            bloco = texto_completo.split("Alvos Prioritários (TOP 10)", 1)[1]
+            linhas = bloco.strip().splitlines()
+            for linha in linhas[:12]:  # Limita a 12 linhas (TOP 10 + header + margem)
+                if linha.strip():
+                    print(f"  {linha}")
+        
         # Verifica se tem dados
         tem_dados = resposta.get("kpis") is not None or len(resposta.get("insights", [])) > 0
         status = "ok" if tem_dados else "sem_dados"

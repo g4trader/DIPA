@@ -34,7 +34,8 @@ def formatar_execucao(dados, intent_spec, filtros, regras_behavior):
             "resumo": str,
             "achados": List[str],
             "implicacoes": List[str],
-            "plano": List[str]
+            "plano": List[str],
+            "top_alvos": List[str]  # TOP 10 alvos prioritários (lista vazia se não houver dados)
         }
     """
     # Extrai tipo do intent_spec (pode ser dict ou objeto)
@@ -91,7 +92,8 @@ def _format_clientes_sem_compra(dados, intent_spec, filtros, regras_behavior):
                 "Validar se os filtros de dias sem compra estão adequados.",
                 "Manter monitoramento semanal da carteira fria.",
                 "Criar alertas automáticos para clientes que ultrapassarem 60 dias sem compra."
-            ]
+            ],
+            "top_alvos": []
         }
     
     # Ordena por dias_sem_compra (decrescente) se existir
@@ -151,11 +153,41 @@ def _format_clientes_sem_compra(dados, intent_spec, filtros, regras_behavior):
         "Monitorar semanalmente a evolução desses clientes até normalizar o ciclo de compras."
     ]
     
+    # Gera TOP 10 alvos prioritários
+    top_alvos = []
+    for row in top_10:
+        partes = []
+        
+        if "nome" in row:
+            partes.append(row["nome"])
+        elif "nome_cliente" in row:
+            partes.append(row["nome_cliente"])
+        elif "cliente_id" in row:
+            partes.append(f"Cliente {row['cliente_id']}")
+        
+        if "dias_sem_compra" in row:
+            dias = row.get("dias_sem_compra", 0) or 0
+            partes.append(f"{dias} dias sem compra")
+        
+        if "rota_id" in row:
+            partes.append(f"Rota: {row['rota_id']}")
+        elif "rota" in row:
+            partes.append(f"Rota: {row['rota']}")
+        
+        if "supervisor" in row:
+            partes.append(f"Sup.: {row['supervisor']}")
+        elif "supervisor_id" in row:
+            partes.append(f"Sup.: {row['supervisor_id']}")
+        
+        if partes:
+            top_alvos.append(" | ".join(partes))
+    
     return {
         "resumo": resumo,
         "achados": achados,
         "implicacoes": implicacoes,
-        "plano": plano
+        "plano": plano,
+        "top_alvos": top_alvos
     }
 
 
@@ -183,7 +215,8 @@ def _format_queda_faturamento(dados, intent_spec, filtros, regras_behavior):
                 "Validar se os anos comparados estão corretos.",
                 "Manter análise comparativa trimestral.",
                 "Criar alertas para quedas acima de 20%."
-            ]
+            ],
+            "top_alvos": []
         }
     
     # Ordena por variação absoluta (decrescente) se existir
@@ -240,11 +273,43 @@ def _format_queda_faturamento(dados, intent_spec, filtros, regras_behavior):
         "Acompanhar evolução mensalmente até reverter a tendência."
     ]
     
+    # Gera TOP 10 alvos prioritários
+    top_alvos = []
+    for row in top_10:
+        partes = []
+        
+        if "nome" in row:
+            partes.append(row["nome"])
+        elif "nome_cliente" in row:
+            partes.append(row["nome_cliente"])
+        elif "cliente_id" in row:
+            partes.append(f"Cliente {row['cliente_id']}")
+        
+        if "variacao_abs" in row:
+            variacao = row.get("variacao_abs", 0) or 0
+            partes.append(f"Queda: R$ {abs(variacao):,.2f}")
+        
+        if "variacao_pct" in row:
+            variacao_pct = row.get("variacao_pct", 0) or 0
+            partes.append(f"Queda: {abs(variacao_pct):.1f}%")
+        
+        if "rota" in row:
+            partes.append(f"Rota: {row['rota']}")
+        elif "rota_id" in row:
+            partes.append(f"Rota: {row['rota_id']}")
+        
+        if "equipe" in row:
+            partes.append(f"Equipe: {row['equipe']}")
+        
+        if partes:
+            top_alvos.append(" | ".join(partes))
+    
     return {
         "resumo": resumo,
         "achados": achados,
         "implicacoes": implicacoes,
-        "plano": plano
+        "plano": plano,
+        "top_alvos": top_alvos
     }
 
 
@@ -271,7 +336,8 @@ def _format_positivacao(dados, intent_spec, filtros, regras_behavior):
                 "Validar filtros de SKU, indústria e período utilizados.",
                 "Revisar atuação das equipes relacionadas ao tema.",
                 "Criar rotina de monitoramento de positivação."
-            ]
+            ],
+            "top_alvos": []
         }
     
     # Detecta se é análise por rota ou por cliente
@@ -357,11 +423,64 @@ def _format_positivacao(dados, intent_spec, filtros, regras_behavior):
             "Acompanhar taxa de conversão mensalmente."
         ]
     
+    # Gera TOP 10 alvos prioritários
+    top_alvos = []
+    if is_por_rota:
+        # Para análise por rotas, foca nas piores rotas
+        for row in piores_rotas[:10]:
+            partes = []
+            
+            if "rota_id" in row:
+                partes.append(f"Rota {row['rota_id']}")
+            
+            if "positivacao_pct" in row:
+                pct = row.get("positivacao_pct", 0) or 0
+                partes.append(f"Positivação: {pct:.1f}%")
+            
+            if "clientes_positivados" in row and "total_clientes_ativos" in row:
+                positivados = row.get("clientes_positivados", 0) or 0
+                total = row.get("total_clientes_ativos", 0) or 0
+                partes.append(f"{positivados}/{total} clientes")
+            
+            if partes:
+                top_alvos.append(" | ".join(partes))
+    else:
+        # Para análise por clientes (não positivados)
+        top_clientes = dados[:10] if len(dados) > 10 else dados
+        for row in top_clientes:
+            partes = []
+            
+            if "nome" in row:
+                partes.append(row["nome"])
+            elif "nome_cliente" in row:
+                partes.append(row["nome_cliente"])
+            elif "cliente_id" in row:
+                partes.append(f"Cliente {row['cliente_id']}")
+            
+            if "rota_id" in row:
+                partes.append(f"Rota: {row['rota_id']}")
+            elif "rota" in row:
+                partes.append(f"Rota: {row['rota']}")
+            
+            if "supervisor" in row:
+                partes.append(f"Sup.: {row['supervisor']}")
+            elif "supervisor_id" in row:
+                partes.append(f"Sup.: {row['supervisor_id']}")
+            
+            if "sku" in row:
+                partes.append(f"SKU: {row['sku']}")
+            elif "descricao" in row:
+                partes.append(f"Produto: {row['descricao']}")
+            
+            if partes:
+                top_alvos.append(" | ".join(partes))
+    
     return {
         "resumo": resumo,
         "achados": achados,
         "implicacoes": implicacoes,
-        "plano": plano
+        "plano": plano,
+        "top_alvos": top_alvos
     }
 
 
@@ -389,7 +508,8 @@ def _format_vendas_baixas(dados, intent_spec, filtros, regras_behavior):
                 "Validar se o limite de média mensal está adequado.",
                 "Manter análise trimestral de rotação de itens.",
                 "Criar alertas para itens com média abaixo de 10 caixas."
-            ]
+            ],
+            "top_alvos": []
         }
     
     # Ordena por média mensal (crescente) se existir
@@ -434,11 +554,39 @@ def _format_vendas_baixas(dados, intent_spec, filtros, regras_behavior):
         "Monitorar evolução trimestralmente e tomar decisão de continuidade."
     ]
     
+    # Gera TOP 10 alvos prioritários
+    top_alvos = []
+    for row in top_10:
+        partes = []
+        
+        if "sku" in row:
+            partes.append(f"SKU: {row['sku']}")
+        elif "produto_id" in row:
+            partes.append(f"Produto {row['produto_id']}")
+        
+        if "descricao" in row:
+            partes.append(row["descricao"])
+        elif "descricao_produto" in row:
+            partes.append(row["descricao_produto"])
+        
+        if "media_mensal" in row:
+            media = row.get("media_mensal", 0) or 0
+            partes.append(f"Média: {media:.2f} caixas/mês")
+        
+        if "industria" in row:
+            partes.append(f"Indústria: {row['industria']}")
+        elif "marca" in row:
+            partes.append(f"Marca: {row['marca']}")
+        
+        if partes:
+            top_alvos.append(" | ".join(partes))
+    
     return {
         "resumo": resumo,
         "achados": achados,
         "implicacoes": implicacoes,
-        "plano": plano
+        "plano": plano,
+        "top_alvos": top_alvos
     }
 
 
@@ -466,7 +614,8 @@ def _format_mix_nissin(dados, intent_spec, filtros, regras_behavior):
                 "Criar plano de incentivo para aumento de adesão ao mix mínimo.",
                 "Alinhar metas de mix com vendedores e supervisores.",
                 "Acompanhar evolução mensalmente."
-            ]
+            ],
+            "top_alvos": []
         }
     
     # Tenta identificar rotas mais afetadas (clientes sem mix)
@@ -511,11 +660,40 @@ def _format_mix_nissin(dados, intent_spec, filtros, regras_behavior):
         "Acompanhar evolução mensalmente e ajustar estratégia conforme necessário."
     ]
     
+    # Gera TOP 10 alvos prioritários
+    top_alvos = []
+    top_clientes = dados[:10] if len(dados) > 10 else dados
+    for row in top_clientes:
+        partes = []
+        
+        if "nome" in row:
+            partes.append(row["nome"])
+        elif "nome_cliente" in row:
+            partes.append(row["nome_cliente"])
+        elif "cliente_id" in row:
+            partes.append(f"Cliente {row['cliente_id']}")
+        
+        if "rota_id" in row:
+            partes.append(f"Rota: {row['rota_id']}")
+        elif "rota" in row:
+            partes.append(f"Rota: {row['rota']}")
+        
+        if "percentual_adesao" in row:
+            pct = row.get("percentual_adesao", 0) or 0
+            partes.append(f"Adesão: {pct:.1f}%")
+        elif "flag_mix_minimo" in row:
+            flag = row.get("flag_mix_minimo", False)
+            partes.append("Mix mínimo: Sim" if flag else "Mix mínimo: Não")
+        
+        if partes:
+            top_alvos.append(" | ".join(partes))
+    
     return {
         "resumo": resumo,
         "achados": achados,
         "implicacoes": implicacoes,
-        "plano": plano
+        "plano": plano,
+        "top_alvos": top_alvos
     }
 
 
@@ -538,7 +716,8 @@ def _format_generico(dados, intent_spec, filtros, regras_behavior):
                 "Validar filtros e parâmetros utilizados.",
                 "Iniciar follow-up com supervisores responsáveis.",
                 "Criar rotina automática de monitoramento."
-            ]
+            ],
+            "top_alvos": []
         }
     
     # Se houver dados → narrativa positiva genérica
@@ -555,6 +734,31 @@ def _format_generico(dados, intent_spec, filtros, regras_behavior):
         intent_tipo = intent_spec.get("tipo", "outros")
     else:
         intent_tipo = "outros"
+    
+    # Gera TOP 10 alvos prioritários (genérico)
+    top_alvos = []
+    if isinstance(dados, list) and len(dados) > 0:
+        top_dados = dados[:10] if len(dados) > 10 else dados
+        for row in top_dados:
+            if not isinstance(row, dict):
+                continue
+            
+            fields = []
+            # Campos mais importantes para exibição
+            campos_importantes = ["cliente_id", "nome_cliente", "nome", "rota", "rota_id", 
+                                 "industria", "sku", "vendedor", "supervisor", "produto_id"]
+            
+            for k in campos_importantes:
+                if k in row and row[k] is not None:
+                    v = row[k]
+                    # Formata valores de forma legível
+                    if isinstance(v, (int, float)) and k not in ["cliente_id", "produto_id"]:
+                        fields.append(f"{k}: {v:.2f}" if isinstance(v, float) else f"{k}: {v}")
+                    else:
+                        fields.append(f"{k}: {v}")
+            
+            if fields:
+                top_alvos.append(" | ".join(fields))
     
     return {
         "resumo": (
@@ -573,5 +777,6 @@ def _format_generico(dados, intent_spec, filtros, regras_behavior):
             "Priorizar análises por rota/equipe conforme impacto.",
             "Acompanhar vendedores responsáveis pelos principais casos.",
             "Revisitar indicadores em 7 dias."
-        ]
+        ],
+        "top_alvos": top_alvos
     }

@@ -19,6 +19,8 @@ def test_formatter_resposta_vazia():
     assert "Nenhum" in output["resumo"] or "nenhum" in output["resumo"].lower()
     assert len(output["achados"]) > 0
     assert len(output["plano"]) > 0
+    assert "top_alvos" in output
+    assert output["top_alvos"] == []  # Deve ser lista vazia quando não há dados
 
 
 def test_formatter_resposta_com_dados():
@@ -31,6 +33,8 @@ def test_formatter_resposta_com_dados():
     assert "Foram" in output["resumo"] or "foram" in output["resumo"].lower() or "identificados" in output["resumo"]
     assert len(output["achados"]) > 0
     assert len(output["plano"]) > 0
+    assert "top_alvos" in output
+    assert isinstance(output["top_alvos"], list)
 
 
 def test_formatter_chaves_existentes():
@@ -39,7 +43,8 @@ def test_formatter_chaves_existentes():
     dados = [{"cliente_id": 1}]
     output = formatar_execucao(dados, spec, {}, [])
     
-    assert set(output.keys()) == {"resumo", "achados", "implicacoes", "plano"}
+    assert set(output.keys()) == {"resumo", "achados", "implicacoes", "plano", "top_alvos"}
+    assert isinstance(output["top_alvos"], list)
 
 
 def test_formatter_clientes_sem_compra_usa_narrativa_especifica():
@@ -54,6 +59,10 @@ def test_formatter_clientes_sem_compra_usa_narrativa_especifica():
     assert "clientes ativos sem compras" in out["resumo"]
     assert len(out["plano"]) >= 3
     assert "Priorizar contato" in out["plano"][0] or "priorizar" in out["plano"][0].lower()
+    # Validações de top_alvos
+    assert "top_alvos" in out
+    assert isinstance(out["top_alvos"], list)
+    assert len(out["top_alvos"]) >= 1  # Com 2 clientes, deve ter pelo menos 1 entrada
 
 
 def test_formatter_mix_nissin_usa_narrativa_especifica():
@@ -69,4 +78,23 @@ def test_formatter_mix_nissin_usa_narrativa_especifica():
     assert "mix mínimo de Nissin" in out["resumo"] or "mix" in out["resumo"].lower()
     assert len(out["implicacoes"]) >= 2
     assert "mix" in out["plano"][0].lower() or "Nissin" in out["plano"][0]
+    # Validações de top_alvos
+    assert "top_alvos" in out
+    assert isinstance(out["top_alvos"], list)
+    assert len(out["top_alvos"]) >= 1  # Com 3 clientes, deve ter pelo menos 1 entrada
+
+
+def test_formatter_generico_top_alvos_nunca_quebra():
+    """Testa que o fallback genérico sempre retorna top_alvos sem quebrar."""
+    spec = IntentSpec(tipo="outros")
+    dados = [
+        {"id": 1, "nome": "Algo", "rota": "R1"},
+        {"id": 2, "nome": "Outro", "rota": "R2"},
+    ]
+    out = formatar_execucao(dados, spec, {}, [])
+    
+    assert "top_alvos" in out
+    assert isinstance(out["top_alvos"], list)
+    # Com dados genéricos, deve gerar pelo menos algumas entradas
+    assert len(out["top_alvos"]) >= 1
 
