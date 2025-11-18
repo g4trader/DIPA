@@ -290,10 +290,21 @@ def _criar_structured_response(
     insights_recomendacoes = insights if isinstance(insights, list) else []
     
     # Extrai texto do post_processor se disponível (contém "Alvos Prioritários (TOP 10)")
-    resposta_estruturada = resposta.get("resposta_estruturada", {})
-    texto_post_processor = None
-    if isinstance(resposta_estruturada, dict) and "texto" in resposta_estruturada:
-        texto_post_processor = resposta_estruturada.get("texto", "")
+    # Prioridade 1: texto_completo_post_processor (preservado pelo handler)
+    texto_post_processor = resposta.get("texto_completo_post_processor")
+    
+    # Prioridade 2: resposta_estruturada.texto (fallback)
+    if not texto_post_processor:
+        resposta_estruturada = resposta.get("resposta_estruturada", {})
+        if isinstance(resposta_estruturada, dict) and "texto" in resposta_estruturada:
+            texto_post_processor = resposta_estruturada.get("texto", "")
+    
+    # Log para debug
+    if texto_post_processor:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[mapper] Texto post_processor extraído: {len(texto_post_processor)} chars")
+        logger.debug(f"[mapper] Primeiras 200 chars: {texto_post_processor[:200]}")
     
     # Monta structured response
     structured = {
@@ -312,6 +323,13 @@ def _criar_structured_response(
             "tabela_principal": tabela_principal
         }
     }
+    
+    # Log final para debug
+    if texto_post_processor:
+        logger.info(f"[mapper] ✅ respostaMarkdown populado: {len(texto_post_processor)} chars")
+        logger.debug(f"[mapper] Primeiras 300 chars do respostaMarkdown: {texto_post_processor[:300]}")
+    else:
+        logger.warning(f"[mapper] ⚠️  respostaMarkdown está vazio ou None")
     
     return structured
 

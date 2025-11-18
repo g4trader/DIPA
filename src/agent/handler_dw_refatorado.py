@@ -210,6 +210,12 @@ def processar_pergunta_com_dw(
             behavior_rules_aplicadas=regras_behavior_aplicadas  # Usa regras do orquestrador
         )
         
+        # LOG: Verifica texto do post_processor
+        texto_post_processor = resposta_estruturada.get("texto", "")
+        logger.info(f"[processar_pergunta_com_dw] Texto do post_processor: {len(texto_post_processor)} chars")
+        if texto_post_processor:
+            logger.debug(f"[processar_pergunta_com_dw] Primeiras 200 chars: {texto_post_processor[:200]}")
+        
         # PASSO 4: LLM gera resposta executiva com dados estruturados
         resposta_executiva = gerar_resposta_executiva_com_dados_dw(
             pergunta=pergunta,
@@ -220,6 +226,12 @@ def processar_pergunta_com_dw(
             analise_causas=analise_causas,
             resposta_estruturada=resposta_estruturada  # Passa resposta estruturada para LLM
         )
+        
+        # CRÍTICO: Preserva o texto completo do post_processor no resposta_executiva
+        # O LLM pode ter gerado um resumo_executivo diferente, mas o texto completo deve vir do post_processor
+        if texto_post_processor:
+            resposta_executiva["texto_completo_post_processor"] = texto_post_processor
+            logger.info(f"[processar_pergunta_com_dw] Texto completo preservado: {len(texto_post_processor)} chars")
     
     except Exception as e:
         logger.error(f"[processar_pergunta_com_dw] Erro ao processar resposta: {e}")
@@ -267,6 +279,14 @@ def processar_pergunta_com_dw(
         f"[processar_pergunta_com_dw] Resposta executiva gerada: "
         f"resumo={len(resposta_executiva.get('resumo_executivo', ''))} chars"
     )
+    
+    # LOG CRÍTICO: Verifica se texto_completo_post_processor está presente
+    texto_completo = resposta_executiva.get("texto_completo_post_processor", "")
+    if texto_completo:
+        logger.info(f"[processar_pergunta_com_dw] ✅ Texto completo disponível: {len(texto_completo)} chars")
+        logger.debug(f"[processar_pergunta_com_dw] ### TEXTO_FINAL ###\n{texto_completo[:500]}")
+    else:
+        logger.warning(f"[processar_pergunta_com_dw] ⚠️  Texto completo NÃO disponível no resposta_executiva")
     
     return resposta_executiva
 

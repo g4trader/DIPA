@@ -157,19 +157,27 @@ def extrair_texto_resposta(resposta: Dict[str, Any]) -> str:
         resposta: Resposta JSON do backend
         
     Returns:
-        Texto completo da resposta
+        Texto completo da resposta (sempre uma string, nunca None)
     """
-    # Tenta respostaMarkdown direto
-    if "respostaMarkdown" in resposta:
-        return resposta.get("resumoExecutivo", "") + "\n\n" + resposta.get("respostaMarkdown", "")
-    
-    # Tenta structured.respostaMarkdown
+    # Tenta structured.respostaMarkdown primeiro (prioridade)
     structured = resposta.get("structured", {})
     if isinstance(structured, dict) and "respostaMarkdown" in structured:
-        return structured["respostaMarkdown"]
+        texto = structured.get("respostaMarkdown")
+        if texto and isinstance(texto, str):
+            return texto
+    
+    # Tenta respostaMarkdown direto
+    if "respostaMarkdown" in resposta:
+        texto = resposta.get("respostaMarkdown")
+        if texto and isinstance(texto, str):
+            resumo = resposta.get("resumoExecutivo", "")
+            if resumo:
+                return resumo + "\n\n" + texto
+            return texto
     
     # Fallback: usa resumoExecutivo
-    return resposta.get("resumoExecutivo", "")
+    resumo = resposta.get("resumoExecutivo", "")
+    return resumo if resumo and isinstance(resumo, str) else ""
 
 
 def main():
