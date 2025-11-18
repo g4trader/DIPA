@@ -27,7 +27,7 @@ from src.agent.memoria_comportamental import (
     gerar_contexto_instrucoes_para_llm
 )
 from src.agent.post_processor import processar_resposta
-from src.agent.behavior_memory import aplicar_regras_ao_intent
+# Behavior Memory é aplicado no orquestrador, não precisa importar aqui
 from src.llm_integration_intent import (
     gerar_intent_spec_via_llm,
     gerar_resposta_executiva_com_dados_dw
@@ -119,6 +119,13 @@ def processar_pergunta_com_dw(
                 )
     
     # PASSO 2: Executa consulta DW via orquestrador (que aplica regras automaticamente)
+    # Inicializa variáveis para garantir que existam mesmo em caso de erro
+    detalhes_tecnicos_orquestrador = {}
+    regras_behavior_aplicadas = []
+    regras_aplicadas = {}
+    analise_causas = {}
+    causas_detector = {}
+    
     try:
         resultado_orquestrador = executar_intent_spec(
             session=session,
@@ -141,6 +148,9 @@ def processar_pergunta_com_dw(
         regras_aplicadas = resultado_orquestrador.get("regras_aplicadas", {})
         analise_causas = resultado_orquestrador.get("analise_causas", {})
         causas_detector = resultado_orquestrador.get("causas_detector", {})
+        # Extrai detalhes_tecnicos do orquestrador (inclui regras_behavior_aplicadas)
+        detalhes_tecnicos_orquestrador = resultado_orquestrador.get("detalhes_tecnicos", {})
+        regras_behavior_aplicadas = detalhes_tecnicos_orquestrador.get("regras_behavior_aplicadas", [])
         tem_dados = dados_dw.get("tem_dados", False)
         
         logger.info(
@@ -189,18 +199,15 @@ def processar_pergunta_com_dw(
     
     # PASSO 3: Pós-processador estrutura resposta
     try:
-        # Aplica behavior memory para obter regras aplicadas
-        behavior_rules_aplicadas = []
-        intent_dict_ajustado = aplicar_regras_ao_intent(intent_spec)
-        if isinstance(intent_dict_ajustado, dict) and intent_dict_ajustado.get("filtros") != intent_spec.filtros:
-            behavior_rules_aplicadas.append("Regras comportamentais aplicadas via behavior_memory.json")
+        # Behavior Memory já foi aplicado no orquestrador, usa regras que vieram de lá
+        # Não precisa chamar aplicar_regras_ao_intent novamente aqui
         
         # Processa resposta usando post_processor
         resposta_estruturada = processar_resposta(
             intent_spec=intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else intent_spec,
             dados_dw=dados_dw,
             causas_detector=causas_detector,
-            behavior_rules_aplicadas=behavior_rules_aplicadas
+            behavior_rules_aplicadas=regras_behavior_aplicadas  # Usa regras do orquestrador
         )
         
         # PASSO 4: LLM gera resposta executiva com dados estruturados
@@ -243,13 +250,18 @@ def processar_pergunta_com_dw(
         resposta_executiva["resposta_estruturada"] = resposta_estruturada
     
     # Adiciona detalhes técnicos para o template
-    resposta_executiva["detalhes_tecnicos"] = {
-        "intent_spec": intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else str(intent_spec),
-        "filtros_aplicados": intent_spec.filtros if hasattr(intent_spec, 'filtros') else {},
-        "regras_aplicadas": regras_aplicadas,
-        "behavior_rules_aplicadas": behavior_rules_aplicadas if 'behavior_rules_aplicadas' in locals() else [],
-        "query_executada": f"DW Query para tipo={intent_spec.tipo}, dimensao={intent_spec.dimensao_principal}"
-    }
+    # Reutiliza detalhes_tecnicos do orquestrador (já inclui regras_behavior_aplicadas)
+    if detalhes_tecnicos_orquestrador:
+        resposta_executiva["detalhes_tecnicos"] = detalhes_tecnicos_orquestrador
+    else:
+        # Fallback se orquestrador não retornou detalhes_tecnicos
+        resposta_executiva["detalhes_tecnicos"] = {
+            "intent_spec": intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else str(intent_spec),
+            "filtros_aplicados": intent_spec.filtros if hasattr(intent_spec, 'filtros') else {},
+            "regras_behavior_aplicadas": regras_behavior_aplicadas,
+            "regras_instrucoes_aplicadas": regras_aplicadas,
+            "query_executada": f"DW Query para tipo={intent_spec.tipo}, dimensao={intent_spec.dimensao_principal}"
+        }
     
     logger.info(
         f"[processar_pergunta_com_dw] Resposta executiva gerada: "
