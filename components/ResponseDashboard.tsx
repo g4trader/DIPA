@@ -228,7 +228,24 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
         </div>
       )}
       
-      {/* 2. Big Numbers Cards */}
+      {/* 2. Resumo Executivo (PRIMEIRO) */}
+      {parsedMarkdown?.resumoExecutivo && (
+        <div className="rounded-2xl border border-[#1D2532] bg-[#0B0F17] p-6 shadow-xl">
+          <div className="flex items-start gap-4">
+            <div className="rounded-xl bg-blue-500/10 p-3 border border-blue-500/20">
+              <Target className="w-6 h-6 text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-slate-100 mb-3">Resumo Executivo</h3>
+              <p className="text-sm leading-relaxed text-slate-300 whitespace-pre-line">
+                {parsedMarkdown.resumoExecutivo}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 3. Big Numbers Cards (KPIs) */}
       {bigNumberKPIs.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {bigNumberKPIs.map((kpi, idx) => (
@@ -244,7 +261,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
         </div>
       )}
       
-      {/* 3. Insights Blocks (3 colunas desktop, 1 coluna mobile) */}
+      {/* 4. Insights Blocks (3 colunas desktop, 1 coluna mobile) */}
       {(parsedMarkdown?.principaisAchados?.length > 0 || 
         parsedMarkdown?.implicacoesComerciais?.length > 0 || 
         parsedMarkdown?.planoAcao?.length > 0) && (
@@ -276,30 +293,34 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
         </div>
       )}
       
-      {/* 4. Tabela TOP 10 */}
-      {tableData.length > 0 && (
-        <DataTable
-          rows={tableData}
-          title="Alvos Prioritários (TOP 10)"
-          highlightFirstColumn={true}
-        />
+      {/* 5. Alvos Prioritários (lista E tabela se disponível) */}
+      {parsedMarkdown?.alvosPrioritarios && parsedMarkdown.alvosPrioritarios.length > 0 && (
+        <>
+          {/* Lista de alvos como InsightsBlock */}
+          <InsightsBlock
+            title="Alvos Prioritários (TOP 10)"
+            items={parsedMarkdown.alvosPrioritarios}
+            icon="🎯"
+            color="purple"
+          />
+          {/* Tabela de alvos se disponível */}
+          {parsedMarkdown.topAlvos && parsedMarkdown.topAlvos.length > 0 && (
+            <DataTable
+              rows={parsedMarkdown.topAlvos}
+              title="Alvos Prioritários - Detalhamento"
+              highlightFirstColumn={true}
+            />
+          )}
+        </>
       )}
       
-      {/* 5. Resumo Executivo (se não foi parseado em seções) */}
-      {parsedMarkdown?.resumoExecutivo && (
-        <div className="rounded-2xl border border-[#1D2532] bg-[#0B0F17] p-6 shadow-xl">
-          <div className="flex items-start gap-4">
-            <div className="rounded-xl bg-blue-500/10 p-3 border border-blue-500/20">
-              <Target className="w-6 h-6 text-blue-400" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-slate-100 mb-3">Resumo Executivo</h3>
-              <p className="text-sm leading-relaxed text-slate-300">
-                {parsedMarkdown.resumoExecutivo}
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* 6. Tabela de dados analíticos (se não for alvos prioritários) */}
+      {tableData.length > 0 && (!parsedMarkdown?.topAlvos || parsedMarkdown.topAlvos.length === 0) && (
+        <DataTable
+          rows={tableData}
+          title="Dados Analíticos"
+          highlightFirstColumn={true}
+        />
       )}
       
       {/* Fallback: Markdown completo se não foi parseado */}
