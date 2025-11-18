@@ -14,6 +14,8 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 import logging
 
+from src.agent.executive_formatter import formatar_execucao
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,8 +23,9 @@ def post_processar_resposta(resposta_dw, intent_spec, regras_aplicadas, regras_b
     """
     Gera a resposta final no formato executivo obrigatório:
     - Resumo Executivo
-    - Diagnóstico
-    - Plano de Ação
+    - Principais Achados
+    - Implicações Comerciais
+    - Plano de Ação Imediato
     """
     
     # Extrai dados da resposta do DW (pode vir como lista direta ou dentro de dict)
@@ -39,56 +42,32 @@ def post_processar_resposta(resposta_dw, intent_spec, regras_aplicadas, regras_b
     if not dados or (isinstance(dados, list) and len(dados) == 0):
         dados = None
     
-    intent = intent_spec.tipo if hasattr(intent_spec, 'tipo') else intent_spec.get("tipo", "outros")
+    # Extrai filtros do intent_spec
     filtros = intent_spec.filtros if hasattr(intent_spec, 'filtros') else intent_spec.get("filtros", {})
-    comportamentos = regras_behavior or []
     
-    # Se não existir dados ou lista vazia → resposta negativa estruturada
-    if not dados:
-        resumo = (
-            "Nenhum registro correspondente foi encontrado com base nos filtros aplicados. "
-            "Isso indica que não houve movimentação, vendas ou positivação dentro do período solicitado."
-        )
-        
-        diagnostico = (
-            "Os dados consultados não apresentaram resultados relacionados à pergunta. "
-            "Isso pode indicar baixa atuação comercial, falta de reposição, ou ausência total de compras nesse intervalo."
-        )
-        
-        plano = (
-            "- Validar se os filtros utilizados estão corretos (SKU, indústria, período).\n"
-            "- Revisar atuação das equipes e rotas relacionadas ao tema.\n"
-            "- Iniciar follow-up automático com os supervisores responsáveis.\n"
-            "- Criar monitoração recorrente para evitar gaps futuros."
-        )
-        
-        return {
-            "texto": f"Resumo Executivo\n{resumo}\n\nDiagnóstico\n{diagnostico}\n\nPlano de Ação\n{plano}",
-            "detalhes_tecnicos": resposta_dw.get("detalhes_tecnicos", {})
-        }
-    
-    # Resposta positiva
-    resumo = (
-        f"Foram encontrados {len(dados)} registros relevantes relacionados ao tema da consulta. "
-        f"A análise considera os filtros aplicados: {filtros}."
+    # Usa executive_formatter para gerar narrativa executiva
+    resultado_exec = formatar_execucao(
+        dados=dados,
+        intent_spec=intent_spec,
+        filtros=filtros,
+        regras_behavior=regras_behavior or []
     )
     
-    diagnostico = (
-        "Os dados indicam comportamentos específicos que merecem atenção imediata. "
-        "As ocorrências podem representar oportunidades de recuperação, aumento de positivação ou correção comercial."
-    )
-    
-    plano = (
-        "- Priorizar clientes/rotas com maior impacto imediato.\n"
-        "- Avaliar atuação dos vendedores responsáveis.\n"
-        "- Criar compromisso de follow-up com supervisores.\n"
-        "- Ativar ações corretivas de curto prazo.\n"
-        "- Programar reavaliação automática em 7 dias."
+    # Construi o texto final da resposta
+    texto_final = (
+        "Resumo Executivo\n"
+        + resultado_exec["resumo"] + "\n\n"
+        + "Principais Achados\n"
+        + "\n".join(f"- {a}" for a in resultado_exec["achados"]) + "\n\n"
+        + "Implicações Comerciais\n"
+        + "\n".join(f"- {i}" for i in resultado_exec["implicacoes"]) + "\n\n"
+        + "Plano de Ação Imediato\n"
+        + "\n".join(f"- {p}" for p in resultado_exec["plano"])
     )
     
     return {
-        "texto": f"Resumo Executivo\n{resumo}\n\nDiagnóstico\n{diagnostico}\n\nPlano de Ação\n{plano}",
-        "detalhes_tecnicos": resposta_dw.get("detalhes_tecnicos", {})
+        "texto": texto_final,
+        "detalhes_tecnicos": resposta_dw.get("detalhes_tecnicos", {}) if isinstance(resposta_dw, dict) else {}
     }
 
 
