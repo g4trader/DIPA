@@ -150,6 +150,41 @@ class Cliente(Base):
         return f"<Cliente(id={self.id}, codigo='{self.codigo}', nome='{self.nome}')>"
 
 
+class DimProduto(Base):
+    """
+    Dimensão de Produto.
+    
+    Representa os produtos do catálogo da DIPAM.
+    Baseado em ENGINEERING_MASTER_PLAN.md e ENGINEERING_QUERIES.md.
+    """
+    __tablename__ = "dim_produto"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    produto_id = Column(Integer, unique=True, nullable=False, index=True)  # ID canônico
+    sku = Column(String(50), unique=True, nullable=False, index=True)  # Código SKU
+    descricao = Column(String(255), nullable=False)
+    industria = Column(String(100), nullable=True, index=True)  # Mars, Nissin, Red Bull, AB Brasil
+    marca = Column(String(100), nullable=True)
+    categoria = Column(String(100), nullable=True)
+    ativo = Column(Boolean, default=True, nullable=False, index=True)
+    
+    # Metadados
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Índices compostos
+    __table_args__ = (
+        Index('idx_produto_industria_sku', 'industria', 'sku'),
+        Index('idx_produto_industria_ativo', 'industria', 'ativo'),
+    )
+    
+    # Relacionamentos
+    vendas = relationship("Venda", back_populates="produto")
+    
+    def __repr__(self):
+        return f"<DimProduto(id={self.id}, sku='{self.sku}', industria='{self.industria}')>"
+
+
 class Venda(Base):
     """
     Modelo de Venda.
@@ -183,10 +218,12 @@ class Venda(Base):
     ramo_atividade = Column(String(255), nullable=True)
     cidade_cliente = Column(String(100), nullable=True)
     
-    # Produto
+    # Produto (FK para dim_produto)
+    produto_id = Column(Integer, ForeignKey("dim_produto.id"), nullable=True, index=True)
+    # Campos legados mantidos para compatibilidade durante migração
     codigo_produto = Column(String(50), nullable=True, index=True)
     desc_produto = Column(String(255), nullable=True)
-    departamento = Column(String(100), nullable=True, index=True)
+    departamento = Column(String(100), nullable=True, index=True)  # DEPRECATED: usar dim_produto.industria
     secao = Column(String(100), nullable=True)
     
     # Valores e quantidades
@@ -214,6 +251,7 @@ class Venda(Base):
     vendedor = relationship("Vendedor", back_populates="vendas")
     supervisor = relationship("Supervisor")
     tempo = relationship("DimTempo")
+    produto = relationship("DimProduto", back_populates="vendas")
     
     def __repr__(self):
         return f"<Venda(id={self.id}, data={self.data_venda}, valor={self.valor_total_liquido})>"

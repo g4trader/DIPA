@@ -13,13 +13,14 @@ ARQUITETURA:
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, case, desc, asc, text, extract, cast, String, select
 import logging
 
 from src.dw.models import (
     Cliente, Vendedor, Supervisor, Venda,
-    MetaVendedor, MetaDepartamento
+    MetaVendedor, MetaDepartamento, DimProduto
 )
 from src.config import config
 
@@ -316,8 +317,8 @@ def get_industrias_com_mais_vendedores_fora_meta(
     
     Conforme Q3 em ENGINEERING_QUERIES.md:
     - Deve usar fato_metas_vendedor_mensal.industria
-    - Como o modelo atual não tem industria em MetaVendedor,
-      usamos MetaDepartamento.departamento como proxy para industria
+    - NOTA: O modelo atual usa MetaDepartamento.departamento como industria
+    - TODO: Migrar para fato_metas_vendedor_mensal quando disponível
     
     Args:
         session: Sessão SQLAlchemy
@@ -332,11 +333,10 @@ def get_industrias_com_mais_vendedores_fora_meta(
         - qtd_vendedores_fora_meta
     """
     # Conforme blueprint: agrupa por industria de fato_metas_vendedor_mensal
-    # Como não existe industria em MetaVendedor, usamos MetaDepartamento.departamento
-    # que representa a indústria/departamento
+    # NOTA: Usando MetaDepartamento.departamento como industria até migração completa
     from src.dw.models import MetaDepartamento
     
-    # Agrega vendedores fora da meta por departamento (proxy para industria)
+    # Agrega vendedores fora da meta por departamento/industria
     # Join com MetaDepartamento para obter industria/departamento
     query = (
         session.query(
@@ -435,16 +435,16 @@ def get_rotas_positivacao_industria(
     # Clientes positivados (com pelo menos 1 venda da indústria)
     # Conforme Q4 em ENGINEERING_QUERIES.md:
     # - Deve usar fato_vendas_detalhado JOIN dim_produto ON p.industria = :industria
-    # - Como não existe dim_produto, usamos Venda.departamento como proxy para industria
     clientes_positivados_subq = (
         session.query(
             func.distinct(Venda.cliente_id).label('cliente_id')
         )
+        .join(DimProduto, Venda.produto_id == DimProduto.id)
         .filter(
             and_(
                 Venda.data_venda >= data_inicio_dt,
                 Venda.data_venda <= data_fim_dt,
-                Venda.departamento == industria  # Proxy: departamento = industria (conforme blueprint)
+                DimProduto.industria == industria
             )
         )
         .subquery()
@@ -532,24 +532,27 @@ def get_itens_baixa_media_mensal(
     else:
         ref_date = datetime.now().date()
     
-    # Calcula data início (N meses atrás)
-    data_inicio = ref_date - timedelta(days=meses_janela * 30)  # Aproximação
+    # Calcula data início (N meses atrás) usando datas reais
+    # Conforme ENGINEERING_QUERIES.md: usar datas reais, não aproximação de dias
+    data_inicio = ref_date - relativedelta(months=meses_janela)
     
     # Agregação por produto e mês
+    # Conforme Q5 em ENGINEERING_QUERIES.md: usar fato_vendas_detalhado JOIN dim_produto
     vendas_periodo_subq = (
         session.query(
-            Venda.codigo_produto.label('produto_id'),
+            DimProduto.produto_id,
             extract('year', Venda.data_venda).label('ano'),
             extract('month', Venda.data_venda).label('mes'),
             func.sum(Venda.qtd_caixas).label('qtd_mes')
         )
+        .join(DimProduto, Venda.produto_id == DimProduto.id)
         .filter(
             and_(
                 Venda.data_venda >= data_inicio,
                 Venda.data_venda <= ref_date
             )
         )
-        .group_by(Venda.codigo_produto, extract('year', Venda.data_venda), extract('month', Venda.data_venda))
+        .group_by(DimProduto.produto_id, extract('year', Venda.data_venda), extract('month', Venda.data_venda))
         .subquery()
     )
     
@@ -567,13 +570,13 @@ def get_itens_baixa_media_mensal(
         .subquery()
     )
     
-    # Query principal
+    # Query principal - usa dim_produto para descricao, sku e industria
     query = (
         session.query(
             agregado_subq.c.produto_id,
-            func.max(Venda.desc_produto).label('descricao'),
-            agregado_subq.c.produto_id.label('sku'),  # Usando codigo_produto como SKU
-            func.max(Venda.departamento).label('industria'),
+            DimProduto.descricao,
+            DimProduto.sku,
+            DimProduto.industria,
             agregado_subq.c.qtd_total,
             agregado_subq.c.meses_com_venda,
             case(
@@ -582,9 +585,12 @@ def get_itens_baixa_media_mensal(
                 else_=0
             ).label('media_mensal')
         )
-        .join(Venda, agregado_subq.c.produto_id == Venda.codigo_produto)
+        .join(DimProduto, agregado_subq.c.produto_id == DimProduto.produto_id)
         .group_by(
             agregado_subq.c.produto_id,
+            DimProduto.descricao,
+            DimProduto.sku,
+            DimProduto.industria,
             agregado_subq.c.qtd_total,
             agregado_subq.c.meses_com_venda
         )
@@ -651,26 +657,24 @@ def get_clientes_sem_recompra_sku(
     else:
         ref_date = datetime.now().date()
     
-    data_inicio = ref_date - timedelta(days=meses_janela * 30)
+    # Calcula data início usando datas reais
+    data_inicio = ref_date - relativedelta(months=meses_janela)
     
     # Vendas do SKU no período
     # Conforme Q6 em ENGINEERING_QUERIES.md:
-    # - Deve usar fato_vendas_detalhado JOIN dim_produto ON p.descricao = :sku
-    # - Como não existe dim_produto, usamos Venda.desc_produto ou Venda.codigo_produto
+    # - Deve usar fato_vendas_detalhado JOIN dim_produto ON p.sku = :sku
     # - Usa comparação exata (não ILIKE) conforme blueprint
     vendas_sku_subq = (
         session.query(
             Venda.cliente_id,
             Venda.data_venda
         )
+        .join(DimProduto, Venda.produto_id == DimProduto.id)
         .filter(
             and_(
                 Venda.data_venda >= data_inicio,
                 Venda.data_venda <= ref_date,
-                or_(
-                    Venda.desc_produto == sku,  # Comparação exata conforme blueprint
-                    Venda.codigo_produto == sku  # Também aceita código como SKU
-                )
+                DimProduto.sku == sku  # Comparação exata conforme blueprint
             )
         )
         .subquery()
@@ -773,18 +777,17 @@ def get_clientes_segmento_sem_sku_no_periodo(
     )
     
     # Clientes que compraram o SKU
+    # Conforme Q7/Q9 em ENGINEERING_QUERIES.md: usar dim_produto
     clientes_com_sku_subq = (
         session.query(
             func.distinct(Venda.cliente_id).label('cliente_id')
         )
+        .join(DimProduto, Venda.produto_id == DimProduto.id)
         .filter(
             and_(
                 Venda.data_venda >= data_inicio_dt,
                 Venda.data_venda <= data_fim_dt,
-                or_(
-                    Venda.desc_produto == sku,  # Comparação exata conforme blueprint
-                    Venda.codigo_produto == sku  # Também aceita código como SKU
-                )
+                DimProduto.sku == sku  # Comparação exata conforme blueprint
             )
         )
         .subquery()
@@ -858,7 +861,6 @@ def get_clientes_uma_unidade_industria_mes(
     """
     # Conforme Q8 em ENGINEERING_QUERIES.md:
     # - Deve usar fato_vendas_detalhado JOIN dim_produto ON p.industria = :industria
-    # - Como não existe dim_produto, usamos Venda.departamento como proxy para industria
     query = (
         session.query(
             Venda.cliente_id,
@@ -868,11 +870,12 @@ def get_clientes_uma_unidade_industria_mes(
             func.sum(Venda.qtd_unidades).label('qtd_total')
         )
         .join(Cliente, Venda.cliente_id == Cliente.id)
+        .join(DimProduto, Venda.produto_id == DimProduto.id)
         .filter(
             and_(
                 extract('year', Venda.data_venda) == ano,
                 extract('month', Venda.data_venda) == mes,
-                Venda.departamento == industria  # Proxy: departamento = industria (conforme blueprint)
+                DimProduto.industria == industria
             )
         )
         .group_by(Venda.cliente_id, Cliente.nome, Cliente.segmento_venda, Cliente.rota_rca)
@@ -945,18 +948,17 @@ def get_clientes_sem_sku_no_periodo(
     )
     
     # Clientes que compraram o SKU
+    # Conforme Q7/Q9 em ENGINEERING_QUERIES.md: usar dim_produto
     clientes_com_sku_subq = (
         session.query(
             func.distinct(Venda.cliente_id).label('cliente_id')
         )
+        .join(DimProduto, Venda.produto_id == DimProduto.id)
         .filter(
             and_(
                 Venda.data_venda >= data_inicio_dt,
                 Venda.data_venda <= data_fim_dt,
-                or_(
-                    Venda.desc_produto == sku,  # Comparação exata conforme blueprint
-                    Venda.codigo_produto == sku  # Também aceita código como SKU
-                )
+                DimProduto.sku == sku  # Comparação exata conforme blueprint
             )
         )
         .subquery()
@@ -1029,22 +1031,22 @@ def get_clientes_mix_minimo_nissin_mes(
     # Conforme Q12 em ENGINEERING_QUERIES.md:
     # - Mix Mínimo: itens 2257 / 2087 / 2086 + 1 item entre (2101 / 2102 / 2103)
     # - Deve usar fato_vendas_detalhado JOIN dim_produto ON p.industria = 'Nissin' AND p.sku IN (...)
-    # - Como não existe dim_produto, usamos Venda.departamento = 'NISSIN' e Venda.codigo_produto como sku
     vendas_nissin_subq = (
         session.query(
             Venda.cliente_id,
-            Venda.codigo_produto.label('sku'),
+            DimProduto.sku,
             func.sum(Venda.qtd_caixas).label('qtd')
         )
+        .join(DimProduto, Venda.produto_id == DimProduto.id)
         .filter(
             and_(
                 extract('year', Venda.data_venda) == ano,
                 extract('month', Venda.data_venda) == mes,
-                Venda.departamento == 'NISSIN',  # Proxy: departamento = industria (conforme blueprint)
-                Venda.codigo_produto.in_(['2257', '2087', '2086', '2101', '2102', '2103'])  # SKUs exatos do blueprint
+                DimProduto.industria == 'Nissin',
+                DimProduto.sku.in_(['2257', '2087', '2086', '2101', '2102', '2103'])  # SKUs exatos do blueprint
             )
         )
-        .group_by(Venda.cliente_id, Venda.codigo_produto)
+        .group_by(Venda.cliente_id, DimProduto.sku)
         .subquery()
     )
     
@@ -1149,17 +1151,19 @@ def get_rotas_desempenho_mix_minimo_nissin_mes(
     )
     
     # Clientes com mix OK (reutiliza lógica de Q12)
+    # Conforme Q13 em ENGINEERING_QUERIES.md: usar dim_produto
     vendas_nissin_subq = (
         session.query(
             Venda.cliente_id,
-            Venda.codigo_produto.label('sku')
+            DimProduto.sku
         )
+        .join(DimProduto, Venda.produto_id == DimProduto.id)
         .filter(
             and_(
                 extract('year', Venda.data_venda) == ano,
                 extract('month', Venda.data_venda) == mes,
-                Venda.departamento == 'NISSIN',
-                Venda.codigo_produto.in_(['2257', '2087', '2086', '2101', '2102', '2103'])
+                DimProduto.industria == 'Nissin',
+                DimProduto.sku.in_(['2257', '2087', '2086', '2101', '2102', '2103'])
             )
         )
         .distinct()
