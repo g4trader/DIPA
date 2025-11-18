@@ -83,6 +83,11 @@ REGRAS PARA FILTROS:
 - Se mencionar rota específica: inclua "rota": "ROTA XX" nos filtros.
 - Se mencionar supervisor: inclua "supervisor_id" se conhecido, ou deixe null.
 
+REGRA NOVA — PRIORIDADE ALTA:
+- Se a pergunta mencionar explicitamente "P12", "período P12", "positivação de SKU", "não tiveram positivação" ou "clientes sem positivação", você DEVE usar o tipo oficial:
+    tipo="positivacao"
+- Para perguntas sobre positivação em P12, use dimensao_principal="cliente" e inclua o SKU nos filtros.
+
 REGRAS PARA TIPO (TODOS OS TIPOS SÃO FIRST-CLASS, NUNCA USE FALLBACK):
 
 TIPOS LEGADOS (para compatibilidade):
@@ -97,14 +102,36 @@ TIPOS DW OFICIAIS (Q1-Q13 do ENGINEERING_QUERIES.md - USE ESTES QUANDO APLICÁVE
 - "clientes_sem_compra": clientes ativos sem compras há N dias (use dimensao_principal = "cliente", filtros: {{"dias": N}}).
 - "queda_faturamento": queda de faturamento ano contra ano (use dimensao_principal = "cliente", filtros: {{"ano_base": YYYY, "ano_comparado": YYYY}}).
 - "meta_departamento": indústrias/departamentos com mais vendedores fora da meta (use dimensao_principal = "nenhuma").
-- "positivacao": rotas com melhor/pior positivação de indústria (use dimensao_principal = "rota", filtros: {{"industria": "Mars"|"Nissin"|etc}}).
+- "positivacao": rotas com melhor/pior positivação de indústria OU clientes que não tiveram positivação de SKU em P12 (use dimensao_principal = "rota" ou "cliente", filtros: {{"industria": "Mars"|"Nissin"|etc, "sku": "..."}}).
 - "mix": análise de mix de produtos (use dimensao_principal = "produto" ou "sku").
 - "recompra": clientes que compraram mas não recompraram (use dimensao_principal = "cliente", filtros: {{"sku": "..."}}).
-- "clientes_sem_item": clientes que não compraram determinado item (use dimensao_principal = "cliente", filtros: {{"sku": "...", "industria": "..."}}).
-- "vendas_baixas": itens com baixa média de vendas (use dimensao_principal = "produto", filtros: {{"limite_media": N}}).
+- "clientes_sem_item": clientes que não compraram determinado item (NÃO use para positivação em P12 - use "positivacao" nesses casos) (use dimensao_principal = "cliente", filtros: {{"sku": "...", "industria": "..."}}).
+- "vendas_baixas": itens com baixa média de vendas mensal (use dimensao_principal = "produto", filtros: {{"limite_media": N}}). NÃO use para perguntas sobre positivação ou P12.
 - "mix_nissin": análise de mix mínimo de Nissin (use dimensao_principal = "cliente" ou "rota", filtros: {{"mes": "YYYY-MM"}}).
 
+EXEMPLOS ADICIONAIS:
+Pergunta: "Quais clientes não tiveram positivação de Snickers Original 45g em P12?"
+tipo: "positivacao"
+dimensao_principal: "cliente"
+filtros: {{"sku": "Snickers Original 45g", "periodo": "P12"}}
+
+Pergunta: "Quais clientes não tiveram positivação de M&Ms Tubo em P12?"
+tipo: "positivacao"
+dimensao_principal: "cliente"
+filtros: {{"sku": "M&Ms Tubo", "periodo": "P12"}}
+
+Pergunta: "Quais clientes não tiveram positivação de M&Ms Choco 40g em P12?"
+tipo: "positivacao"
+dimensao_principal: "cliente"
+filtros: {{"sku": "M&Ms Choco 40g", "periodo": "P12"}}
+
 IMPORTANTE: Use os tipos DW oficiais quando a pergunta corresponder exatamente. Não converta para tipos legados ou use fallback "outros" para perguntas Q1-Q13.
+
+REGRA CRÍTICA FINAL:
+NUNCA classifique consultas envolvendo positivação em P12 como "clientes_sem_item". Sempre use tipo="positivacao" quando a pergunta mencionar:
+- "positivação" + "P12"
+- "não tiveram positivação" + SKU
+- "clientes sem positivação" + período P12
 
 Retorne APENAS o JSON, sem explicações adicionais."""
 
