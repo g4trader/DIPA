@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool
 from typing import Optional
 import logging
+import os
 
 from src.config import config
 
@@ -70,12 +71,19 @@ def init_db(create_tables_if_not_exists: bool = False):
     global engine, SessionLocal
     
     # Garante que o SQLite está disponível (baixa do GCS se necessário)
-    try:
-        from src.dw.bootstrap_dw import ensure_sqlite_dw_available
-        ensure_sqlite_dw_available()
-    except Exception as e:
-        logger.warning(f"[init_db] Aviso ao garantir SQLite disponível: {e}")
-        # Não bloqueia a inicialização, mas loga o aviso
+    # Isso deve acontecer ANTES de criar o engine para evitar erros de arquivo não encontrado
+    if config.database.db_type == "sqlite":
+        try:
+            from src.dw.bootstrap_dw import ensure_sqlite_dw_available
+            ensure_sqlite_dw_available()
+        except Exception as e:
+            logger.error(f"[init_db] Erro crítico ao garantir SQLite disponível: {e}")
+            # Em produção, isso deve bloquear a inicialização
+            # Em desenvolvimento, pode ser apenas um aviso
+            if os.getenv("ENV") == "production":
+                raise RuntimeError(f"Falha ao carregar DW SQLite: {e}") from e
+            else:
+                logger.warning(f"[init_db] Aviso: SQLite não disponível, mas continuando (modo dev)")
     
     engine = get_db_engine()
     
