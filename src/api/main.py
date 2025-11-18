@@ -553,8 +553,19 @@ async def health_dw():
         session = next(get_db_session())
         try:
             # Executa query simples para verificar se o banco está acessível
-            result = session.execute(text("SELECT 1 FROM dim_cliente LIMIT 1"))
-            result.fetchone()
+            # Tenta várias tabelas possíveis (dim_cliente, clientes, dim_tempo)
+            query_executed = False
+            for table_name in ["dim_cliente", "clientes", "dim_tempo", "vendedores"]:
+                try:
+                    result = session.execute(text(f"SELECT 1 FROM {table_name} LIMIT 1"))
+                    result.fetchone()
+                    query_executed = True
+                    break
+                except Exception:
+                    continue
+            
+            if not query_executed:
+                raise RuntimeError("Nenhuma tabela conhecida encontrada no banco")
             
             return JSONResponse(
                 status_code=200,
