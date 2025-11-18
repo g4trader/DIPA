@@ -177,7 +177,17 @@ def aplicar_regras_ao_intent(intent_spec: Dict[str, Any]) -> Dict[str, Any]:
         "clientes_criticos": "analise_clientes_queda",
         "churn": "analise_clientes_queda",
         "vendas": "analise_vendas",
-        "ranking_vendedores": "analise_meta_mensal"
+        "ranking_vendedores": "analise_meta_mensal",
+        # Novos tipos do ENGINEERING_QUERIES.md
+        "clientes_sem_compra": "analise_clientes_queda",
+        "queda_faturamento": "analise_clientes_queda",
+        "meta_departamento": "analise_meta_mensal",
+        "positivacao": "analise_positivacao",
+        "mix": "analise_mix",
+        "recompra": "analise_recompra",
+        "clientes_sem_item": "analise_clientes_queda",
+        "vendas_baixas": "analise_vendas",
+        "mix_nissin": "analise_mix"
     }
     
     tipo_analise = mapeamento_tipo.get(tipo_intent, tipo_intent)

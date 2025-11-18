@@ -56,6 +56,36 @@ from src.agent.queries_analytics import (
     get_piores_vendedores_por_gap
 )
 
+# Importa novas funções do queries.py
+try:
+    from src.dw.queries import (
+        get_clientes_sem_compra_ha_dias,
+        get_clientes_queda_faturamento_ano_contra_ano,
+        get_industrias_com_mais_vendedores_fora_meta,
+        get_rotas_positivacao_industria,
+        get_itens_baixa_media_mensal,
+        get_clientes_sem_recompra_sku,
+        get_clientes_segmento_sem_sku_no_periodo,
+        get_clientes_uma_unidade_industria_mes,
+        get_clientes_sem_sku_no_periodo,
+        get_clientes_mix_minimo_nissin_mes,
+        get_rotas_desempenho_mix_minimo_nissin_mes
+    )
+except ImportError as e:
+    logger.warning(f"[orquestrador_dw] Não foi possível importar queries.py: {e}")
+    # Define funções stub para evitar erros
+    get_clientes_sem_compra_ha_dias = None
+    get_clientes_queda_faturamento_ano_contra_ano = None
+    get_industrias_com_mais_vendedores_fora_meta = None
+    get_rotas_positivacao_industria = None
+    get_itens_baixa_media_mensal = None
+    get_clientes_sem_recompra_sku = None
+    get_clientes_segmento_sem_sku_no_periodo = None
+    get_clientes_uma_unidade_industria_mes = None
+    get_clientes_sem_sku_no_periodo = None
+    get_clientes_mix_minimo_nissin_mes = None
+    get_rotas_desempenho_mix_minimo_nissin_mes = None
+
 # Importa novas funções estendidas
 import importlib.util
 import os
@@ -126,7 +156,11 @@ def _validar_intent_spec(intent_spec: IntentSpec) -> tuple[bool, Optional[str]]:
         "meta", "vendas", "clientes_criticos", "churn",
         "ranking_vendedores", "ranking_produtos",
         "analise_meta_detalhada", "metas_por_supervisor",
-        "vendas_por_mes", "outros"
+        "vendas_por_mes", "outros",
+        # Novos tipos do ENGINEERING_QUERIES.md
+        "clientes_sem_compra", "queda_faturamento", "meta_departamento",
+        "positivacao", "mix", "recompra", "clientes_sem_item",
+        "vendas_baixas", "mix_nissin"
     ]
     if intent_spec.tipo not in tipos_validos:
         return False, f"Tipo '{intent_spec.tipo}' não é suportado. Tipos válidos: {tipos_validos}"
@@ -134,7 +168,7 @@ def _validar_intent_spec(intent_spec: IntentSpec) -> tuple[bool, Optional[str]]:
     # Valida dimensão principal
     dimensoes_validas = [
         "mes", "vendedor", "supervisor", "rota",
-        "cliente", "marca", "categoria", "sku", "nenhuma"
+        "cliente", "marca", "categoria", "sku", "produto", "nenhuma"
     ]
     if intent_spec.dimensao_principal not in dimensoes_validas:
         return False, f"Dimensão principal '{intent_spec.dimensao_principal}' não é suportada"
@@ -329,7 +363,99 @@ def _mapear_para_funcao_dw(
                 "excluir_totais": True
             }
         ),
+        
+        # NOVOS TIPOS DO ENGINEERING_QUERIES.md
+        ("clientes_sem_compra", "cliente"): (
+            get_clientes_sem_compra_ha_dias,
+            {
+                "dias": intent_spec.filtros.get("dias", 60),
+                "data_referencia": intent_spec.periodo_fim or intent_spec.periodo_inicio
+            }
+        ) if get_clientes_sem_compra_ha_dias else None,
+        
+        ("queda_faturamento", "cliente"): (
+            get_clientes_queda_faturamento_ano_contra_ano,
+            {
+                "ano_base": intent_spec.filtros.get("ano_base", 2024),
+                "ano_comparado": intent_spec.filtros.get("ano_comparado", 2025),
+                "top_n": intent_spec.filtros.get("top_n", 50)
+            }
+        ) if get_clientes_queda_faturamento_ano_contra_ano else None,
+        
+        ("meta_departamento", "nenhuma"): (
+            get_industrias_com_mais_vendedores_fora_meta,
+            {
+                "ano": intent_spec.filtros.get("ano") or (int(periodo_inicio_mes.split("-")[0]) if periodo_inicio_mes else None),
+                "mes": intent_spec.filtros.get("mes") or (int(periodo_inicio_mes.split("-")[1]) if periodo_inicio_mes else None),
+                "atingimento_limite": intent_spec.filtros.get("atingimento_limite", 100.0)
+            }
+        ) if get_industrias_com_mais_vendedores_fora_meta else None,
+        
+        ("positivacao", "rota"): (
+            get_rotas_positivacao_industria,
+            {
+                "industria": intent_spec.filtros.get("industria", ""),
+                "data_inicio": intent_spec.periodo_inicio or "",
+                "data_fim": intent_spec.periodo_fim or ""
+            }
+        ) if get_rotas_positivacao_industria else None,
+        
+        ("mix", "produto"): (
+            get_itens_baixa_media_mensal,
+            {
+                "meses_janela": intent_spec.filtros.get("meses_janela", 12),
+                "limite_media": intent_spec.filtros.get("limite_media", 10.0),
+                "data_referencia": intent_spec.periodo_fim or intent_spec.periodo_inicio
+            }
+        ) if get_itens_baixa_media_mensal else None,
+        
+        ("recompra", "cliente"): (
+            get_clientes_sem_recompra_sku,
+            {
+                "sku": intent_spec.filtros.get("sku", ""),
+                "meses_janela": intent_spec.filtros.get("meses_janela", 6),
+                "data_referencia": intent_spec.periodo_fim or intent_spec.periodo_inicio
+            }
+        ) if get_clientes_sem_recompra_sku else None,
+        
+        ("clientes_sem_item", "cliente"): (
+            get_clientes_segmento_sem_sku_no_periodo if intent_spec.filtros.get("segmento") else get_clientes_sem_sku_no_periodo,
+            {
+                "segmento": intent_spec.filtros.get("segmento"),
+                "sku": intent_spec.filtros.get("sku", ""),
+                "data_inicio": intent_spec.periodo_inicio or "",
+                "data_fim": intent_spec.periodo_fim or ""
+            }
+        ) if (get_clientes_segmento_sem_sku_no_periodo or get_clientes_sem_sku_no_periodo) else None,
+        
+        ("vendas_baixas", "cliente"): (
+            get_clientes_uma_unidade_industria_mes,
+            {
+                "industria": intent_spec.filtros.get("industria", ""),
+                "ano": intent_spec.filtros.get("ano") or (int(periodo_inicio_mes.split("-")[0]) if periodo_inicio_mes else None),
+                "mes": intent_spec.filtros.get("mes") or (int(periodo_inicio_mes.split("-")[1]) if periodo_inicio_mes else None)
+            }
+        ) if get_clientes_uma_unidade_industria_mes else None,
+        
+        ("mix_nissin", "cliente"): (
+            get_clientes_mix_minimo_nissin_mes,
+            {
+                "ano": intent_spec.filtros.get("ano") or (int(periodo_inicio_mes.split("-")[0]) if periodo_inicio_mes else None),
+                "mes": intent_spec.filtros.get("mes") or (int(periodo_inicio_mes.split("-")[1]) if periodo_inicio_mes else None)
+            }
+        ) if get_clientes_mix_minimo_nissin_mes else None,
+        
+        ("mix_nissin", "rota"): (
+            get_rotas_desempenho_mix_minimo_nissin_mes,
+            {
+                "ano": intent_spec.filtros.get("ano") or (int(periodo_inicio_mes.split("-")[0]) if periodo_inicio_mes else None),
+                "mes": intent_spec.filtros.get("mes") or (int(periodo_inicio_mes.split("-")[1]) if periodo_inicio_mes else None)
+            }
+        ) if get_rotas_desempenho_mix_minimo_nissin_mes else None,
     }
+    
+    # Remove entradas None (funções não disponíveis)
+    mapeamento = {k: v for k, v in mapeamento.items() if v is not None}
     
     # Busca mapeamento
     chave = (tipo, dimensao)
@@ -540,6 +666,20 @@ def executar_intent_spec(
             )
         else:
             # Fallback: tenta chamar com session + kwargs
+            # Para novas funções de queries.py, adiciona filtros_behavior
+            if 'filtros_behavior' not in kwargs:
+                # Prepara filtros_behavior a partir das regras aplicadas
+                filtros_behavior = {}
+                if regras_aplicadas:
+                    # Converte regras aplicadas para formato esperado pelas queries
+                    if "excluir_pastas" in str(regras_aplicadas) or "excluir_carteiras" in intent_spec.filtros:
+                        filtros_behavior["excluir_pastas"] = intent_spec.filtros.get("excluir_carteiras", [])
+                    if "excluir_rotas" in intent_spec.filtros:
+                        filtros_behavior["excluir_rotas"] = intent_spec.filtros.get("excluir_rotas", [])
+                    if "excluir_segmentos" in intent_spec.filtros:
+                        filtros_behavior["excluir_segmentos"] = intent_spec.filtros.get("excluir_segmentos", [])
+                kwargs["filtros_behavior"] = filtros_behavior if filtros_behavior else None
+            
             resultado = funcao_dw(session, **kwargs)
         
         logger.info(f"[orquestrador_dw] Função DW executada com sucesso, resultado: {type(resultado)}")
