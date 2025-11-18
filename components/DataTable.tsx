@@ -20,7 +20,16 @@ export function DataTable({
     return null;
   }
 
-  const columns = Object.keys(rows[0]);
+  let columns = Object.keys(rows[0]);
+  
+  // Esconde coluna "Rota" se todas as rotas forem vazias ou "—"
+  const temAlgumaRotaValida = rows.some(
+    (row) => row["Rota"] && row["Rota"] !== "—" && row["Rota"] !== ""
+  );
+  
+  if (!temAlgumaRotaValida && columns.includes("Rota")) {
+    columns = columns.filter((col) => col !== "Rota");
+  }
 
   return (
     <div className="bg-[#0F172A] border border-white/5 rounded-xl overflow-hidden shadow-lg">

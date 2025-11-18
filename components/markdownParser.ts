@@ -102,10 +102,31 @@ export function parseMarkdownExecutivo(markdown: string): ParsedMarkdown {
         // Adiciona como string
         result.alvosPrioritarios.push(content);
         
-        // Tenta também parsear como objeto se tiver formato "Chave: Valor | Chave2: Valor2"
-        // Nota: O parser preserva TODOS os campos que vêm do backend (incluindo "Rota" se presente).
-        // Se a coluna "Rota" aparecer vazia na tabela, é porque o backend não está enviando esse campo.
-        if (content.includes("|") || content.includes(":")) {
+        // Parse estruturado: "CLIENTE | X dias sem compra | Rota: Y"
+        if (content.includes("|")) {
+          const parts = content.split("|").map(p => p.trim());
+          const cliente = parts[0] || '';
+          const diasTexto = parts[1] || '';
+          const rotaTexto = parts[2] || '';
+          
+          // Extrai dias do texto (ex: "381 dias sem compra" -> 381)
+          const diasMatch = diasTexto.match(/(\d+)/);
+          const dias = diasMatch ? Number(diasMatch[1]) : null;
+          
+          // Extrai rota (remove "Rota:" se presente)
+          let rota = rotaTexto.replace(/^Rota:\s*/i, '').trim();
+          if (!rota) rota = '—';
+          
+          // Cria objeto estruturado
+          const obj: Record<string, any> = {
+            Cliente: cliente,
+            "Dias sem compra": dias !== null ? dias : '—',
+            Rota: rota,
+          };
+          
+          result.topAlvos.push(obj);
+        } else if (content.includes(":")) {
+          // Fallback: formato "Chave: Valor | Chave2: Valor2"
           const parts = content.split("|").map(p => p.trim());
           const obj: Record<string, any> = {};
           for (const part of parts) {
@@ -131,24 +152,62 @@ export function parseMarkdownExecutivo(markdown: string): ParsedMarkdown {
   // Junta resumo executivo
   result.resumoExecutivo = resumoLines.join(" ").trim();
 
-  // Tenta extrair KPIs do texto completo (números grandes mencionados)
-  const kpiPatterns = [
-    { pattern: /(\d+(?:\.\d+)?)\s*clientes?/gi, label: "Clientes Impactados", icon: "👥" },
-    { pattern: /(\d+(?:\.\d+)?)\s*dias?/gi, label: "Média de Dias", icon: "⏳" },
-    { pattern: /R\$\s*([\d.,]+)/gi, label: "Valor Total", icon: "💰" },
-    { pattern: /(\d+(?:\.\d+)?)\s*%/gi, label: "Percentual", icon: "📊" },
-  ];
+  // Extrai KPIs com regexes específicas (prioridade sobre padrões genéricos)
+  const resumoTexto = result.resumoExecutivo || markdown;
 
-  for (const { pattern, label, icon } of kpiPatterns) {
-    const matches = markdown.match(pattern);
-    if (matches && matches.length > 0) {
-      // Pega o primeiro match e extrai número
-      const match = matches[0];
-      const numStr = match.replace(/[^\d.,]/g, "").replace(",", ".");
-      const numValue = parseFloat(numStr);
-      if (!isNaN(numValue)) {
-        result.kpis.push({ label, value: numValue, icon });
-      }
+  // 1) Clientes impactados - padrão específico
+  const clientesMatch = resumoTexto.match(/foram identificados?\s+([\d\.]+)\s*clientes?/i);
+  if (clientesMatch) {
+    const clientes = Number(clientesMatch[1].replace(/\./g, ''));
+    if (!isNaN(clientes)) {
+      result.kpis.push({
+        label: "Clientes Impactados",
+        value: clientes,
+        icon: "👥",
+      });
+    }
+  }
+
+  // 2) Média de dias - padrão específico (prioridade sobre "mais de X dias")
+  let mediaDiasMatch =
+    resumoTexto.match(/m[eé]dia de dias sem compra é de\s+([\d\.]+)\s*dias/i) ||
+    resumoTexto.match(/m[eé]dia de\s+([\d\.]+)\s*dias/i);
+  
+  if (mediaDiasMatch) {
+    const mediaDias = Number(mediaDiasMatch[1].replace(/\./g, ''));
+    if (!isNaN(mediaDias)) {
+      result.kpis.push({
+        label: "Média de Dias",
+        value: mediaDias,
+        icon: "⏳",
+      });
+    }
+  }
+
+  // 3) Valor Total (R$)
+  const valorMatch = resumoTexto.match(/R\$\s*([\d.,]+)/i);
+  if (valorMatch) {
+    const valorStr = valorMatch[1].replace(/\./g, '').replace(',', '.');
+    const valor = parseFloat(valorStr);
+    if (!isNaN(valor)) {
+      result.kpis.push({
+        label: "Valor Total",
+        value: valor,
+        icon: "💰",
+      });
+    }
+  }
+
+  // 4) Percentual
+  const percentualMatch = resumoTexto.match(/(\d+(?:\.\d+)?)\s*%/i);
+  if (percentualMatch) {
+    const percentual = parseFloat(percentualMatch[1]);
+    if (!isNaN(percentual)) {
+      result.kpis.push({
+        label: "Percentual",
+        value: percentual,
+        icon: "📊",
+      });
     }
   }
 

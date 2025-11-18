@@ -317,9 +317,9 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
           {parsedMarkdown.topAlvos && parsedMarkdown.topAlvos.length > 0 && (
             <div className="mt-6">
               {/* 
-                Nota: A coluna "Rota" está vazia porque o backend ainda não envia essa informação
-                em topAlvos. Quando o DW expuser a dimensão de rota, basta preencher aqui.
-                O parser (markdownParser.ts) preserva todos os campos que vêm do backend.
+                Nota: O parser extrai dados estruturados do formato "CLIENTE | X dias sem compra | Rota: Y".
+                Se a coluna "Rota" estiver vazia, o DataTable a esconde automaticamente para não chamar atenção.
+                Quando o backend enviar rotas reais, elas aparecerão automaticamente na tabela.
               */}
               <DataTable
                 rows={parsedMarkdown.topAlvos}
