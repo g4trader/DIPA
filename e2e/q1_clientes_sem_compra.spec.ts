@@ -20,16 +20,16 @@ test.describe('Q1 - Clientes sem compra há mais de 60 dias', () => {
     // Aguarda a página carregar completamente
     await page.waitForLoadState('networkidle');
     
-    // Localiza o campo de pergunta (ajuste o seletor conforme necessário)
-    const inputPergunta = page.locator('input[type="text"], textarea').first();
-    await expect(inputPergunta).toBeVisible();
+    // Aguarda o textarea aparecer (pode levar um tempo para carregar)
+    const inputPergunta = page.locator('textarea').first();
+    await expect(inputPergunta).toBeVisible({ timeout: 10000 });
     
     // Digita a pergunta Q1
     await inputPergunta.fill(PERGUNTA_Q1);
     
     // Localiza e clica no botão de enviar
-    const botaoEnviar = page.locator('button:has-text("Enviar"), button[type="submit"]').first();
-    await expect(botaoEnviar).toBeVisible();
+    const botaoEnviar = page.locator('button:has-text("Enviar"), button[type="submit"], button:has-text("Enviar pergunta")').first();
+    await expect(botaoEnviar).toBeVisible({ timeout: 5000 });
     await botaoEnviar.click();
     
     // Aguarda a resposta aparecer (pode haver um spinner/loading)
@@ -68,10 +68,12 @@ test.describe('Q1 - Clientes sem compra há mais de 60 dias', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     
-    const inputPergunta = page.locator('input[type="text"], textarea').first();
+    const inputPergunta = page.locator('textarea').first();
+    await expect(inputPergunta).toBeVisible({ timeout: 10000 });
     await inputPergunta.fill(PERGUNTA_Q1);
     
-    const botaoEnviar = page.locator('button:has-text("Enviar"), button[type="submit"]').first();
+    const botaoEnviar = page.locator('button:has-text("Enviar"), button[type="submit"], button:has-text("Enviar pergunta")').first();
+    await expect(botaoEnviar).toBeVisible({ timeout: 5000 });
     await botaoEnviar.click();
     
     // Aguarda a resposta
@@ -95,10 +97,12 @@ test.describe('Q1 - Clientes sem compra há mais de 60 dias', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     
-    const inputPergunta = page.locator('input[type="text"], textarea').first();
+    const inputPergunta = page.locator('textarea').first();
+    await expect(inputPergunta).toBeVisible({ timeout: 10000 });
     await inputPergunta.fill(PERGUNTA_Q1);
     
-    const botaoEnviar = page.locator('button:has-text("Enviar"), button[type="submit"]').first();
+    const botaoEnviar = page.locator('button:has-text("Enviar"), button[type="submit"], button:has-text("Enviar pergunta")').first();
+    await expect(botaoEnviar).toBeVisible({ timeout: 5000 });
     await botaoEnviar.click();
     
     // Aguarda a resposta
