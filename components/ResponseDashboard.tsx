@@ -756,33 +756,31 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
                   </div>
                   
                   {isExpanded && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-700">
-                            {Object.keys(secao.dados[0] || {}).map((key, idx) => (
-                              <th
+                    <div className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-700">
+                              {Object.keys(secao.dados[0] || {}).map((key, idx) => (
+                                <th
+                                  key={idx}
+                                  className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide"
+                                >
+                                  {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {secao.dados.map((item: any, idx: number) => (
+                              <tr
                                 key={idx}
-                                className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide"
+                                className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
                               >
-                                {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {secao.dados.map((item: any, idx: number) => (
-                            <tr
-                              key={idx}
-                              className="border-b border-slate-800/50 hover:bg-slate-900/50 transition-colors"
-                            >
                               {Object.values(item).map((val: any, cellIdx: number) => (
                                 <td key={cellIdx} className="py-3 px-4 text-slate-300">
                                   {typeof val === "number"
-                                    ? val.toLocaleString("pt-BR", {
-                                        style: val > 1000 ? "currency" : "decimal",
-                                        currency: "BRL",
-                                      })
+                                    ? val.toString() // ❌ Não formata automaticamente números como moeda - mantém ID numérico cru
                                     : val || "—"}
                                 </td>
                               ))}
@@ -790,6 +788,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
                           ))}
                         </tbody>
                       </table>
+                    </div>
                     </div>
                   )}
                 </div>
@@ -909,33 +908,31 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
                   {data.detalhe_tabela.titulo}
                 </h4>
               )}
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-700">
-                      {data.detalhe_tabela.colunas.map((col, idx) => (
-                        <th
-                          key={idx}
-                          className="text-left py-2 px-3 text-slate-400 font-semibold uppercase tracking-wide"
+              <div className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-700">
+                        {data.detalhe_tabela.colunas.map((col, idx) => (
+                          <th
+                            key={idx}
+                            className="text-left py-2 px-3 text-slate-400 font-semibold uppercase tracking-wide"
+                          >
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.detalhe_tabela.linhas.map((linha, linhaIdx) => (
+                        <tr
+                          key={linhaIdx}
+                          className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
                         >
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.detalhe_tabela.linhas.map((linha, linhaIdx) => (
-                      <tr
-                        key={linhaIdx}
-                        className="border-b border-slate-800/50 hover:bg-slate-900/50 transition-colors"
-                      >
                         {linha.map((celula: any, celulaIdx: number) => (
                           <td key={celulaIdx} className="py-2 px-3 text-slate-300">
                             {typeof celula === "number"
-                              ? celula.toLocaleString("pt-BR", {
-                                  style: celula > 1000 ? "currency" : "decimal",
-                                  currency: "BRL",
-                                })
+                              ? celula.toString() // ❌ Não formata automaticamente números como moeda - mantém ID numérico cru
                               : celula || "—"}
                           </td>
                         ))}
@@ -943,6 +940,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
                     ))}
                   </tbody>
                 </table>
+              </div>
               </div>
             </div>
           )}

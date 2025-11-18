@@ -254,7 +254,7 @@ export function DipamAnswerCard({
       </div>
 
       {/* Corpo da resposta com Markdown renderizado - Espaçamento premium */}
-      <div className="prose prose-invert prose-slate max-w-none">
+      <div className="prose prose-invert prose-slate max-w-none space-y-8">
         <div className="space-y-1 text-left">
           {renderedContent.length > 0 ? (
             renderedContent
