@@ -86,12 +86,17 @@ def _processar_template_negativo(
     )
     
     # Monta diagnóstico de causas
+    # Conforme ENGINEERING_MASTER_PLAN.md seção 9:
+    # - Rotas Críticas
+    # - Vendedores Críticos
+    # - Clientes com Queda
+    # - SKUs com Queda
     diagnostico_causas = {
-        "vendedores_pior_desempenho": causas.get("vendedores", []),
-        "rotas_maior_gap": causas.get("rotas", []),
-        "clientes_reduziram_compra": causas.get("clientes", []),
-        "skus_queda_expressiva": causas.get("skus", []),
-        "outras_causas": []
+        "rotas_criticas": causas.get("rotas", []),
+        "vendedores_criticos": causas.get("vendedores", []),
+        "clientes_com_queda": causas.get("clientes", []),
+        "skus_com_queda": causas.get("skus", []),
+        "outras_causas": causas.get("outras_causas", [])
     }
     
     # Monta checklist de problemas
@@ -112,13 +117,21 @@ def _processar_template_negativo(
         "query_executada": f"DW Query para tipo={intent_spec.get('tipo')}, dimensao={intent_spec.get('dimensao_principal')}"
     }
     
+    # Conforme ENGINEERING_MASTER_PLAN.md seção 9 - Template Negativo:
+    # - resumo_executivo
+    # - diagnostico_causas (rotas_criticas, vendedores_criticos, clientes_com_queda, skus_com_queda)
+    # - checklist_problemas
+    # - plano_acao_7_dias
+    # - plano_acao_30_dias
+    # - tendencias_riscos (renomeado de tendencias_previsao)
+    # - detalhes_tecnicos
     return {
         "resumo_executivo": resumo_executivo,
         "diagnostico_causas": diagnostico_causas,
         "checklist_problemas": checklist_problemas,
         "plano_acao_7_dias": plano_acao_7_dias,
         "plano_acao_30_dias": plano_acao_30_dias,
-        "tendencias_previsao": tendencias_previsao,
+        "tendencias_riscos": tendencias_previsao,  # Renomeado conforme blueprint
         "detalhes_tecnicos": detalhes_tecnicos
     }
 
@@ -140,8 +153,21 @@ def _processar_template_positivo(
         meta_total, realizado_total, atingimento_medio
     )
     
-    # Monta oportunidades de crescimento
-    oportunidades = _gerar_oportunidades_crescimento(dados_dw)
+    # Conforme ENGINEERING_MASTER_PLAN.md seção 9 - Template Positivo:
+    # - resumo_executivo
+    # - o_que_deu_certo
+    # - quem_puxou_resultado
+    # - oportunidades_crescimento
+    # - riscos_ocultos
+    # - plano_continuidade
+    # - detalhes_tecnicos
+    
+    # Monta seções do template positivo
+    o_que_deu_certo = _gerar_o_que_deu_certo(dados_dw)
+    quem_puxou_resultado = _gerar_quem_puxou_resultado(dados_dw)
+    oportunidades_crescimento = _gerar_oportunidades_crescimento(dados_dw)
+    riscos_ocultos = _gerar_riscos_ocultos(dados_dw)
+    plano_continuidade = _gerar_plano_continuidade(dados_dw)
     
     # Monta detalhes técnicos
     detalhes_tecnicos = {
@@ -153,7 +179,11 @@ def _processar_template_positivo(
     
     return {
         "resumo_executivo": resumo_executivo,
-        "oportunidades_crescimento": oportunidades,
+        "o_que_deu_certo": o_que_deu_certo,
+        "quem_puxou_resultado": quem_puxou_resultado,
+        "oportunidades_crescimento": oportunidades_crescimento,
+        "riscos_ocultos": riscos_ocultos,
+        "plano_continuidade": plano_continuidade,
         "detalhes_tecnicos": detalhes_tecnicos
     }
 
@@ -364,6 +394,126 @@ def _gerar_tendencias_previsao(
         "cenario_otimista": cenario_otimista,
         "cenario_pessimista": cenario_pessimista
     }
+
+
+def _gerar_o_que_deu_certo(dados_dw: Dict[str, Any]) -> List[str]:
+    """Gera lista do que deu certo (template positivo)."""
+    o_que_deu_certo = []
+    
+    atingimento_medio = dados_dw.get("atingimento_medio", 0.0)
+    if atingimento_medio >= 100.0:
+        o_que_deu_certo.append(f"Meta superada com {atingimento_medio:.2f}% de atingimento")
+    
+    realizado_total = dados_dw.get("realizado_total", 0.0)
+    meta_total = dados_dw.get("meta_total", 0.0)
+    if realizado_total > meta_total:
+        superacao = realizado_total - meta_total
+        o_que_deu_certo.append(f"Superação de R$ {superacao:,.2f} sobre a meta")
+    
+    # Adiciona mais itens baseado nos dados disponíveis
+    vendedores_top = dados_dw.get("top_vendedores", [])
+    if vendedores_top:
+        o_que_deu_certo.append(f"{len(vendedores_top)} vendedor(es) com performance acima da média")
+    
+    return o_que_deu_certo if o_que_deu_certo else ["Análise detalhada necessária"]
+
+
+def _gerar_quem_puxou_resultado(dados_dw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Gera lista de quem puxou o resultado para cima (template positivo)."""
+    quem_puxou = []
+    
+    # Top vendedores
+    vendedores_top = dados_dw.get("top_vendedores", [])
+    for v in vendedores_top[:5]:  # Top 5
+        quem_puxou.append({
+            "tipo": "vendedor",
+            "nome": v.get("vendedor_nome", ""),
+            "contribuicao": f"R$ {v.get('realizado_vendedor_mes', 0):,.2f}",
+            "atingimento": f"{v.get('atingimento_vendedor', 0):.1f}%"
+        })
+    
+    # Top rotas
+    rotas_top = dados_dw.get("top_rotas", [])
+    for r in rotas_top[:3]:  # Top 3
+        quem_puxou.append({
+            "tipo": "rota",
+            "nome": r.get("rota_nome", ""),
+            "contribuicao": f"R$ {r.get('realizado_rota_mes', 0):,.2f}",
+            "atingimento": f"{r.get('atingimento_rota', 0):.1f}%"
+        })
+    
+    return quem_puxou if quem_puxou else [{"tipo": "geral", "nome": "Equipe", "contribuicao": "Distribuída", "atingimento": "N/A"}]
+
+
+def _gerar_riscos_ocultos(dados_dw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Gera lista de riscos ocultos (template positivo)."""
+    riscos = []
+    
+    # Concentração excessiva
+    top_clientes = dados_dw.get("top_clientes", [])
+    if top_clientes:
+        faturamento_top3 = sum(c.get("faturamento_total", 0) for c in top_clientes[:3])
+        faturamento_total = dados_dw.get("realizado_total", 1)
+        concentracao_pct = (faturamento_top3 / faturamento_total * 100) if faturamento_total > 0 else 0
+        
+        if concentracao_pct > 40:
+            riscos.append({
+                "risco": "Concentração excessiva em poucos clientes",
+                "severidade": "alta" if concentracao_pct > 60 else "média",
+                "descricao": f"Top 3 clientes representam {concentracao_pct:.1f}% do faturamento"
+            })
+    
+    # Dependência de produtos específicos
+    produtos_top = dados_dw.get("top_produtos", [])
+    if produtos_top:
+        faturamento_top5 = sum(p.get("faturamento_total", 0) for p in produtos_top[:5])
+        faturamento_total = dados_dw.get("realizado_total", 1)
+        concentracao_produtos = (faturamento_top5 / faturamento_total * 100) if faturamento_total > 0 else 0
+        
+        if concentracao_produtos > 50:
+            riscos.append({
+                "risco": "Dependência de mix reduzido",
+                "severidade": "média",
+                "descricao": f"Top 5 produtos representam {concentracao_produtos:.1f}% do faturamento"
+            })
+    
+    return riscos if riscos else [{"risco": "Nenhum risco crítico identificado", "severidade": "baixa", "descricao": "Situação estável"}]
+
+
+def _gerar_plano_continuidade(dados_dw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Gera plano de continuidade (template positivo)."""
+    plano = []
+    
+    # Manter performance
+    plano.append({
+        "acao": "Manter ritmo atual de vendas",
+        "objetivo": "Sustentar atingimento acima de 100%",
+        "responsavel": "Equipe comercial",
+        "prazo": "Contínuo",
+        "metrica_sucesso": "Atingimento >= 100%"
+    })
+    
+    # Expandir oportunidades
+    oportunidades = dados_dw.get("oportunidades_crescimento", [])
+    if oportunidades:
+        plano.append({
+            "acao": "Explorar oportunidades de crescimento identificadas",
+            "objetivo": f"Expandir {len(oportunidades)} oportunidade(s)",
+            "responsavel": "Equipe comercial",
+            "prazo": "30 dias",
+            "metrica_sucesso": "Aumento de 10% no faturamento"
+        })
+    
+    # Diversificar mix
+    plano.append({
+        "acao": "Diversificar mix de produtos",
+        "objetivo": "Reduzir dependência de produtos específicos",
+        "responsavel": "Equipe comercial",
+        "prazo": "60 dias",
+        "metrica_sucesso": "Redução de concentração em top 5 produtos"
+    })
+    
+    return plano
 
 
 def _gerar_oportunidades_crescimento(dados_dw: Dict[str, Any]) -> Dict[str, Any]:

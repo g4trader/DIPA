@@ -36,6 +36,16 @@ class IntentSpec:
         "analise_meta_detalhada",
         "metas_por_supervisor",
         "vendas_por_mes",
+        # Novos tipos do ENGINEERING_QUERIES.md
+        "clientes_sem_compra",
+        "queda_faturamento",
+        "meta_departamento",
+        "positivacao",
+        "mix",
+        "recompra",
+        "clientes_sem_item",
+        "vendas_baixas",
+        "mix_nissin",
         "outros"
     ]
     
@@ -53,6 +63,7 @@ class IntentSpec:
         "marca",
         "categoria",
         "sku",
+        "produto",
         "nenhuma"
     ] = "nenhuma"
     

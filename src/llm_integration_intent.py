@@ -49,10 +49,10 @@ Retorne APENAS um JSON válido com a especificação de intenção (IntentSpec).
 Estrutura do JSON IntentSpec:
 
 {{
-  "tipo": "meta" | "vendas" | "clientes_criticos" | "churn" | "ranking_vendedores" | "ranking_produtos" | "analise_meta_detalhada" | "metas_por_supervisor" | "outros",
+  "tipo": "meta" | "vendas" | "clientes_criticos" | "churn" | "ranking_vendedores" | "ranking_produtos" | "analise_meta_detalhada" | "metas_por_supervisor" | "clientes_sem_compra" | "queda_faturamento" | "meta_departamento" | "positivacao" | "mix" | "recompra" | "clientes_sem_item" | "vendas_baixas" | "mix_nissin" | "outros",
   "periodo_inicio": "YYYY-MM-DD" | null,
   "periodo_fim": "YYYY-MM-DD" | null,
-  "dimensao_principal": "mes" | "vendedor" | "supervisor" | "rota" | "cliente" | "marca" | "categoria" | "sku" | "nenhuma",
+  "dimensao_principal": "mes" | "vendedor" | "supervisor" | "rota" | "cliente" | "marca" | "categoria" | "sku" | "produto" | "nenhuma",
   "dimensao_secundaria": "mes" | "vendedor" | "supervisor" | "rota" | "cliente" | "marca" | "categoria" | "sku" | null,
   "filtros": {{
     "supervisor_id": int | null,
@@ -90,6 +90,15 @@ REGRAS PARA TIPO:
 - "ranking_vendedores": perguntas sobre ranking/comparação de vendedores (use dimensao_principal = "vendedor").
 - "ranking_produtos": perguntas sobre ranking/comparação de produtos (use dimensao_principal = "categoria" ou "sku").
 - "analise_meta_detalhada": análise multi-dimensional (vendedor + produto + cliente).
+- "clientes_sem_compra": clientes ativos sem compras há N dias (use dimensao_principal = "cliente").
+- "queda_faturamento": queda de faturamento ano contra ano (use dimensao_principal = "cliente").
+- "meta_departamento": indústrias/departamentos com mais vendedores fora da meta (use dimensao_principal = "nenhuma").
+- "positivacao": rotas com melhor/pior positivação de indústria (use dimensao_principal = "rota").
+- "mix": itens com baixa média mensal (use dimensao_principal = "produto").
+- "recompra": clientes sem recompra de SKU (use dimensao_principal = "cliente").
+- "clientes_sem_item": clientes sem positivação de SKU no período (use dimensao_principal = "cliente").
+- "vendas_baixas": clientes com apenas 1 unidade de indústria no mês (use dimensao_principal = "cliente").
+- "mix_nissin": mix mínimo de Nissin (use dimensao_principal = "cliente" ou "rota").
 - "outros": pergunta vaga ou não classificável.
 
 REGRAS PARA DIMENSÕES:
