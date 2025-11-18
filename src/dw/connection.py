@@ -69,6 +69,14 @@ def init_db(create_tables_if_not_exists: bool = False):
     """
     global engine, SessionLocal
     
+    # Garante que o SQLite está disponível (baixa do GCS se necessário)
+    try:
+        from src.dw.bootstrap_dw import ensure_sqlite_dw_available
+        ensure_sqlite_dw_available()
+    except Exception as e:
+        logger.warning(f"[init_db] Aviso ao garantir SQLite disponível: {e}")
+        # Não bloqueia a inicialização, mas loga o aviso
+    
     engine = get_db_engine()
     
     SessionLocal = sessionmaker(

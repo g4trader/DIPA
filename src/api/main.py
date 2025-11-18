@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from pathlib import Path
 import logging
 import os
 import re
@@ -200,19 +201,29 @@ async def startup_event():
             raise ValueError("DATABASE_URL ou configuração de banco não encontrada")
         logger.info(f"✅ Configuração de banco de dados validada: {config.database.db_type}")
         
-        # Verifica arquivo SQLite se estiver usando SQLite
+        # Garante que o SQLite está disponível (baixa do GCS se necessário)
+        # Isso deve ser feito ANTES de inicializar a conexão
+        if config.database.db_type == "sqlite":
+            try:
+                from src.dw.bootstrap_dw import ensure_sqlite_dw_available
+                ensure_sqlite_dw_available()
+            except Exception as e:
+                error_msg = f"Erro ao garantir SQLite disponível: {str(e)}"
+                logger.error(f"❌ {error_msg}")
+                app.state.startup_errors.append(error_msg)
+                # Não bloqueia o startup, mas registra o erro
+        
+        # Verifica arquivo SQLite se estiver usando SQLite (após possível download)
         if config.database.db_type == "sqlite":
             sqlite_path = config.database.sqlite_path  # Isso já cria o diretório se necessário
             logger.info(f"Usando SQLite - Caminho: {sqlite_path}")
             
-            # Verifica se o arquivo existe (após garantir que o diretório existe)
+            # Verifica se o arquivo existe (após possível download do GCS)
             if os.path.exists(sqlite_path):
                 file_size = os.path.getsize(sqlite_path)
                 logger.info(f"✅ Arquivo SQLite encontrado - Tamanho: {file_size / (1024*1024):.2f} MB")
             else:
-                # Arquivo não existe, mas o diretório foi criado pelo sqlite_path property
-                # Isso é OK - o SQLite criará o arquivo na primeira conexão
-                logger.info(f"📝 Arquivo SQLite não existe ainda - será criado na primeira conexão: {sqlite_path}")
+                logger.warning(f"⚠️  Arquivo SQLite não encontrado: {sqlite_path}")
                 logger.info(f"   Diretório pai existe? {os.path.exists(os.path.dirname(sqlite_path))}")
         
         # Inicializa conexão com banco de dados
@@ -495,6 +506,80 @@ async def health_check():
                 "status": "unhealthy",
                 "error": str(e),
                 "timestamp": datetime.utcnow().isoformat()
+            }
+        )
+
+
+@app.get("/health/dw")
+async def health_dw():
+    """
+    Endpoint de health check específico do Data Warehouse SQLite.
+    
+    Verifica se o arquivo SQLite existe e se é possível executar uma query simples.
+    Retorna 200 se OK, 500 se houver erro.
+    """
+    db_type = os.getenv("DB_TYPE", config.database.db_type)
+    
+    if db_type != "sqlite":
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "ok",
+                "message": "DB_TYPE != sqlite, DW healthcheck ignorado",
+                "db_type": db_type
+            }
+        )
+    
+    sqlite_path_str = os.getenv("SQLITE_PATH", config.database.sqlite_path)
+    sqlite_path = Path(sqlite_path_str) if sqlite_path_str else None
+    
+    try:
+        # Verifica se o arquivo existe
+        if not sqlite_path or not sqlite_path.exists():
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "message": "DW SQLite não acessível",
+                    "detail": f"Arquivo não encontrado: {sqlite_path}",
+                    "path": str(sqlite_path) if sqlite_path else None
+                }
+            )
+        
+        # Tenta abrir uma conexão e executar uma query simples
+        from src.dw.connection import get_db_session
+        from sqlalchemy import text
+        
+        session = next(get_db_session())
+        try:
+            # Executa query simples para verificar se o banco está acessível
+            result = session.execute(text("SELECT 1 FROM dim_cliente LIMIT 1"))
+            result.fetchone()
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "ok",
+                    "message": "DW SQLite acessível",
+                    "path": str(sqlite_path),
+                    "size_mb": round(sqlite_path.stat().st_size / (1024 * 1024), 2)
+                }
+            )
+        finally:
+            session.close()
+            
+    except Exception as e:
+        logger.error(f"[health/dw] Erro ao verificar DW: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": "DW SQLite não acessível",
+                "detail": str(e),
+                "path": str(sqlite_path) if sqlite_path else None
             }
         )
 

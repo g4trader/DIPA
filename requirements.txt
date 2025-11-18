@@ -45,5 +45,8 @@ httpx==0.25.2  # Para TestClient do FastAPI
 # HTTP client para APIs externas (OpenAI)
 requests==2.31.0
 
+# Google Cloud Storage (para carregar DW SQLite)
+google-cloud-storage==2.14.0
+
 # Visualização (opcional)
 plotly==5.18.0
