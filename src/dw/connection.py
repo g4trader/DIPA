@@ -76,6 +76,12 @@ def init_db(create_tables_if_not_exists: bool = False):
         try:
             from src.dw.bootstrap_dw import ensure_sqlite_dw_available
             ensure_sqlite_dw_available()
+        except ImportError as e:
+            # Se o módulo não existir ou google-cloud-storage não estiver instalado
+            logger.warning(f"[init_db] Bootstrap DW não disponível: {e}")
+            if os.getenv("ENV") == "production":
+                logger.error("[init_db] Em produção, bootstrap DW é obrigatório")
+                raise
         except Exception as e:
             logger.error(f"[init_db] Erro crítico ao garantir SQLite disponível: {e}")
             # Em produção, isso deve bloquear a inicialização

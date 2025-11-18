@@ -9,6 +9,7 @@ import os
 import logging
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -17,90 +18,112 @@ def ensure_sqlite_dw_available() -> None:
     """
     Garante que o arquivo SQLite do DW esteja disponível.
     
-    Se DB_TYPE != "sqlite", não faz nada.
-    Se DB_TYPE == "sqlite" e o arquivo não existe, baixa do GCS.
+    Se o arquivo não existir e DIPAM_DW_GCS_URI estiver configurado,
+    faz download do GCS.
     
     Raises:
-        RuntimeError: Se DIPAM_DW_GCS_URI não estiver configurado e o arquivo não existir
+        RuntimeError: Se DB_TYPE=sqlite mas o arquivo não existe e DIPAM_DW_GCS_URI não está configurado
         Exception: Se houver erro ao baixar do GCS
     """
     db_type = os.getenv("DB_TYPE", "sqlite")
     
+    # Se não for SQLite, não faz nada
     if db_type != "sqlite":
-        logger.debug("[DW-BOOTSTRAP] DB_TYPE != sqlite, pulando bootstrap do DW SQLite")
+        logger.debug(f"[DW-BOOTSTRAP] DB_TYPE={db_type}, pulando bootstrap SQLite")
         return
     
     sqlite_path_str = os.getenv("SQLITE_PATH", "/app/data/dipam_dw.db")
-    if not sqlite_path_str:
-        raise ValueError("SQLITE_PATH não pode ser vazio")
-    
     sqlite_path = Path(sqlite_path_str)
-    gcs_uri = os.getenv("DIPAM_DW_GCS_URI")
     
     # Se o arquivo já existe, não precisa fazer nada
     if sqlite_path.exists():
         logger.info(f"[DW-BOOTSTRAP] Arquivo SQLite já existe: {sqlite_path}")
         return
     
-    # Se não existe e não há GCS URI configurado, erro crítico
+    # Se não existe, precisa baixar do GCS
+    gcs_uri = os.getenv("DIPAM_DW_GCS_URI")
+    
     if not gcs_uri:
         error_msg = (
-            f"DIPAM_DW_GCS_URI não configurado e arquivo SQLite não encontrado em {sqlite_path}. "
-            "Configure DIPAM_DW_GCS_URI ou garanta que o arquivo existe no caminho especificado."
+            f"DIPAM_DW_GCS_URI não configurado e SQLite não encontrado em {sqlite_path}. "
+            "Configure DIPAM_DW_GCS_URI (ex.: gs://dipam-dw-prod/dipam_dw.db) ou "
+            "garanta que o arquivo existe no caminho especificado."
         )
         logger.error(f"[DW-BOOTSTRAP] {error_msg}")
         raise RuntimeError(error_msg)
+    
+    logger.info(f"[DW-BOOTSTRAP] Arquivo SQLite não encontrado em {sqlite_path}")
+    logger.info(f"[DW-BOOTSTRAP] Baixando DW SQLite de {gcs_uri} para {sqlite_path}")
     
     # Cria diretório pai se não existir
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Faz download do GCS
-    logger.info(f"[DW-BOOTSTRAP] Baixando DW SQLite de {gcs_uri} para {sqlite_path}")
+    try:
+        _download_from_gcs(gcs_uri, sqlite_path)
+        logger.info(f"[DW-BOOTSTRAP] ✅ Arquivo SQLite baixado com sucesso: {sqlite_path}")
+        
+        # Verifica se o arquivo foi baixado corretamente
+        if not sqlite_path.exists():
+            raise RuntimeError(f"Arquivo baixado mas não encontrado em {sqlite_path}")
+        
+        file_size = sqlite_path.stat().st_size
+        logger.info(f"[DW-BOOTSTRAP] Tamanho do arquivo: {file_size / (1024*1024):.2f} MB")
+        
+    except Exception as e:
+        logger.error(f"[DW-BOOTSTRAP] ❌ Erro ao baixar SQLite do GCS: {e}")
+        raise RuntimeError(f"Falha ao baixar DW SQLite de {gcs_uri}: {e}") from e
+
+
+def _download_from_gcs(gcs_uri: str, destination: Path) -> None:
+    """
+    Faz download de um arquivo do Google Cloud Storage.
     
+    Args:
+        gcs_uri: URI do GCS (ex.: gs://bucket-name/path/to/file.db)
+        destination: Caminho local onde salvar o arquivo
+        
+    Raises:
+        ValueError: Se a URI não for válida
+        Exception: Se houver erro ao baixar
+    """
     try:
         from google.cloud import storage
-        
-        # Parse do URI gs://bucket/object
-        if not gcs_uri.startswith("gs://"):
-            raise ValueError(f"DIPAM_DW_GCS_URI deve começar com 'gs://', recebido: {gcs_uri}")
-        
-        # Remove gs:// e separa bucket e object
-        path_without_prefix = gcs_uri[5:]  # Remove "gs://"
-        parts = path_without_prefix.split("/", 1)
-        if len(parts) != 2:
-            raise ValueError(f"DIPAM_DW_GCS_URI deve ter formato 'gs://bucket/object', recebido: {gcs_uri}")
-        
-        bucket_name = parts[0]
-        object_name = parts[1]
-        
-        # Cria cliente do GCS
-        storage_client = storage.Client()
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(object_name)
-        
-        # Faz download
-        logger.info(f"[DW-BOOTSTRAP] Fazendo download de gs://{bucket_name}/{object_name}...")
-        blob.download_to_filename(str(sqlite_path))
-        
-        # Verifica se o arquivo foi baixado
-        if not sqlite_path.exists():
-            raise RuntimeError(f"Download concluído, mas arquivo não encontrado em {sqlite_path}")
-        
-        # Obtém tamanho do arquivo
-        file_size_mb = sqlite_path.stat().st_size / (1024 * 1024)
-        logger.info(
-            f"[DW-BOOTSTRAP] ✅ DW SQLite baixado com sucesso: {sqlite_path} "
-            f"({file_size_mb:.2f} MB)"
-        )
-        
     except ImportError:
-        error_msg = (
+        raise ImportError(
             "google-cloud-storage não está instalado. "
             "Instale com: pip install google-cloud-storage"
         )
-        logger.error(f"[DW-BOOTSTRAP] {error_msg}")
-        raise RuntimeError(error_msg)
-    except Exception as e:
-        error_msg = f"Erro ao baixar DW SQLite do GCS: {str(e)}"
-        logger.error(f"[DW-BOOTSTRAP] {error_msg}")
-        raise RuntimeError(error_msg) from e
+    
+    # Parse da URI do GCS
+    parsed = urlparse(gcs_uri)
+    
+    if parsed.scheme != "gs":
+        raise ValueError(f"URI do GCS deve começar com 'gs://', recebido: {gcs_uri}")
+    
+    bucket_name = parsed.netloc
+    blob_name = parsed.path.lstrip("/")
+    
+    if not bucket_name or not blob_name:
+        raise ValueError(f"URI do GCS inválida: {gcs_uri}")
+    
+    logger.info(f"[DW-BOOTSTRAP] Fazendo download de gs://{bucket_name}/{blob_name}")
+    
+    # Cria cliente do GCS
+    # No Cloud Run, usa Application Default Credentials automaticamente
+    # Localmente, pode usar GOOGLE_APPLICATION_CREDENTIALS ou gcloud auth application-default login
+    client = storage.Client()
+    
+    # Obtém bucket e blob
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    
+    # Verifica se o blob existe
+    if not blob.exists():
+        raise FileNotFoundError(f"Arquivo não encontrado no GCS: gs://{bucket_name}/{blob_name}")
+    
+    # Faz download
+    logger.info(f"[DW-BOOTSTRAP] Iniciando download... (isso pode levar alguns minutos para arquivos grandes)")
+    blob.download_to_filename(str(destination))
+    
+    logger.info(f"[DW-BOOTSTRAP] Download concluído: {destination}")
