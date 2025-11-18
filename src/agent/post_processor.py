@@ -17,6 +17,81 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def post_processar_resposta(resposta_dw, intent_spec, regras_aplicadas, regras_behavior):
+    """
+    Gera a resposta final no formato executivo obrigatório:
+    - Resumo Executivo
+    - Diagnóstico
+    - Plano de Ação
+    """
+    
+    # Extrai dados da resposta do DW (pode vir como lista direta ou dentro de dict)
+    dados = None
+    if isinstance(resposta_dw, dict):
+        dados = resposta_dw.get("dados", None)
+        # Se dados é None, tenta pegar diretamente se for uma lista
+        if dados is None and isinstance(resposta_dw.get("dados_normalizados"), list):
+            dados = resposta_dw.get("dados_normalizados")
+    elif isinstance(resposta_dw, list):
+        dados = resposta_dw
+    
+    # Se dados ainda for None ou lista vazia, trata como sem dados
+    if not dados or (isinstance(dados, list) and len(dados) == 0):
+        dados = None
+    
+    intent = intent_spec.tipo if hasattr(intent_spec, 'tipo') else intent_spec.get("tipo", "outros")
+    filtros = intent_spec.filtros if hasattr(intent_spec, 'filtros') else intent_spec.get("filtros", {})
+    comportamentos = regras_behavior or []
+    
+    # Se não existir dados ou lista vazia → resposta negativa estruturada
+    if not dados:
+        resumo = (
+            "Nenhum registro correspondente foi encontrado com base nos filtros aplicados. "
+            "Isso indica que não houve movimentação, vendas ou positivação dentro do período solicitado."
+        )
+        
+        diagnostico = (
+            "Os dados consultados não apresentaram resultados relacionados à pergunta. "
+            "Isso pode indicar baixa atuação comercial, falta de reposição, ou ausência total de compras nesse intervalo."
+        )
+        
+        plano = (
+            "- Validar se os filtros utilizados estão corretos (SKU, indústria, período).\n"
+            "- Revisar atuação das equipes e rotas relacionadas ao tema.\n"
+            "- Iniciar follow-up automático com os supervisores responsáveis.\n"
+            "- Criar monitoração recorrente para evitar gaps futuros."
+        )
+        
+        return {
+            "texto": f"Resumo Executivo\n{resumo}\n\nDiagnóstico\n{diagnostico}\n\nPlano de Ação\n{plano}",
+            "detalhes_tecnicos": resposta_dw.get("detalhes_tecnicos", {})
+        }
+    
+    # Resposta positiva
+    resumo = (
+        f"Foram encontrados {len(dados)} registros relevantes relacionados ao tema da consulta. "
+        f"A análise considera os filtros aplicados: {filtros}."
+    )
+    
+    diagnostico = (
+        "Os dados indicam comportamentos específicos que merecem atenção imediata. "
+        "As ocorrências podem representar oportunidades de recuperação, aumento de positivação ou correção comercial."
+    )
+    
+    plano = (
+        "- Priorizar clientes/rotas com maior impacto imediato.\n"
+        "- Avaliar atuação dos vendedores responsáveis.\n"
+        "- Criar compromisso de follow-up com supervisores.\n"
+        "- Ativar ações corretivas de curto prazo.\n"
+        "- Programar reavaliação automática em 7 dias."
+    )
+    
+    return {
+        "texto": f"Resumo Executivo\n{resumo}\n\nDiagnóstico\n{diagnostico}\n\nPlano de Ação\n{plano}",
+        "detalhes_tecnicos": resposta_dw.get("detalhes_tecnicos", {})
+    }
+
+
 def processar_resposta(
     intent_spec: Dict[str, Any],
     dados_dw: Dict[str, Any],
@@ -25,6 +100,8 @@ def processar_resposta(
 ) -> Dict[str, Any]:
     """
     Processa resposta estruturada baseado nos dados do DW e causas detectadas.
+    
+    DEPRECATED: Esta função mantém compatibilidade, mas agora usa post_processar_resposta.
     
     Args:
         intent_spec: IntentSpec como dict
@@ -42,27 +119,13 @@ def processar_resposta(
         - tendencias_previsao
         - detalhes_tecnicos
     """
-    # Extrai atingimento médio
-    atingimento_medio = dados_dw.get("atingimento_medio", 0.0)
-    if not atingimento_medio and causas_detector:
-        atingimento_medio = causas_detector.get("atingimento_medio", 0.0)
-    
-    # Extrai gap total
-    gap_total = dados_dw.get("gap_total", 0.0)
-    if not gap_total and causas_detector:
-        gap_total = causas_detector.get("gap_total", 0.0)
-    
-    # Determina se usa template negativo ou positivo
-    usar_template_negativo = atingimento_medio < 100.0 or gap_total < 0
-    
-    if usar_template_negativo:
-        return _processar_template_negativo(
-            intent_spec, dados_dw, causas_detector, behavior_rules_aplicadas
-        )
-    else:
-        return _processar_template_positivo(
-            intent_spec, dados_dw, behavior_rules_aplicadas
-        )
+    # Chama a nova função post_processar_resposta
+    return post_processar_resposta(
+        resposta_dw=dados_dw,
+        intent_spec=intent_spec,
+        regras_aplicadas=[],
+        regras_behavior=behavior_rules_aplicadas or []
+    )
 
 
 def _processar_template_negativo(
