@@ -6,6 +6,42 @@ Este documento resume todas as correções implementadas para garantir que o DIP
 
 Foram implementadas correções críticas para garantir que o sistema funcione corretamente em produção (Cloud Run + Vercel), com respostas sempre baseadas em dados reais do banco, sem fallbacks incoerentes.
 
+## 🎯 EXECUTIVE QUALITY V2 (2025-11-18)
+
+**Objetivo**: Tornar todas as respostas do DIPAM COPILOT™ em relatórios executivos ricos e acionáveis, especialmente para cenários negativos.
+
+**Melhorias Implementadas**:
+- **Narrativas executivas aprimoradas** para todas as intents DW (Q1-Q13):
+  - `clientes_sem_compra`: Detecção de cenários críticos, números concretos, planos acionáveis
+  - `queda_faturamento`: Análise de impacto financeiro, concentração de quedas, ações de recuperação
+  - `meta_departamento`: Identificação de indústrias críticas, vendedores fora da meta, coaching direcionado
+  - `positivacao`: Taxa de positivação por rota, oportunidades de crescimento, blitz de vendas
+  - `vendas_baixas`: Itens com baixa rotação, decisão estratégica push vs remoção
+  - `recompra`: Clientes sem recompra de SKU, ações de fidelização
+  - `clientes_sem_item`: Oportunidades de positivação, aumento de penetração
+  - `mix_nissin`: Adesão ao mix mínimo, replicação de estratégias de sucesso
+
+- **Padrão garantido em todas as respostas**:
+  - Resumo Executivo: 2-3 frases diretas com números concretos
+  - Principais Achados: 3-5 bullets com dados específicos (ex.: "Rota X concentra Y% dos clientes")
+  - Implicações Comerciais: Risco de receita, perda de share, impacto financeiro
+  - Plano de Ação Imediato: Formato imperativo, acionável por área/equipe
+  - Alvos Prioritários (TOP 10): Sempre presente quando há dados
+
+- **Detecção automática de cenários**:
+  - Cenários críticos: Respostas focadas em diagnóstico e recuperação
+  - Cenários positivos: Respostas focadas em replicação e escalonamento
+
+**Arquivos Modificados**:
+- `src/agent/executive_formatter.py`: Helpers aprimorados com conteúdo rico
+- `tests/test_executive_formatter.py`: 12 testes (incluindo novos para cenários críticos)
+
+**Validação**:
+- ✅ Todos os testes passando (12/12)
+- ✅ Q1 e Q2 validados em produção com todas as seções presentes
+- ✅ Narrativas com números concretos dos dados
+- ✅ Planos de ação em formato imperativo e acionável
+
 ## ✅ Correções Implementadas
 
 ### 1. Validação de Variáveis de Ambiente no Startup
