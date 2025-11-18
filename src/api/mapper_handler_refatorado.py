@@ -289,6 +289,12 @@ def _criar_structured_response(
     # Converte insights para formato esperado
     insights_recomendacoes = insights if isinstance(insights, list) else []
     
+    # Extrai texto do post_processor se disponível (contém "Alvos Prioritários (TOP 10)")
+    resposta_estruturada = resposta.get("resposta_estruturada", {})
+    texto_post_processor = None
+    if isinstance(resposta_estruturada, dict) and "texto" in resposta_estruturada:
+        texto_post_processor = resposta_estruturada.get("texto", "")
+    
     # Monta structured response
     structured = {
         "resumo_executivo": resumo_executivo,
@@ -297,6 +303,7 @@ def _criar_structured_response(
         "rankingVendedores": [],
         "clientesCriticos": [],
         "insightsRecomendacoes": insights_recomendacoes,
+        "respostaMarkdown": texto_post_processor,  # Texto completo do post_processor (inclui "Alvos Prioritários (TOP 10)")
         "jsonTecnico": {
             "intent_spec": intent_spec.to_dict() if intent_spec and hasattr(intent_spec, 'to_dict') else None,
             "periodo_analisado": periodo_analisado,
