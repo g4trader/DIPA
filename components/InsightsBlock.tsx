@@ -33,18 +33,18 @@ export function InsightsBlock({
   }
 
   return (
-    <div className="bg-[#0D111A] border border-white/10 rounded-xl p-6 space-y-4 shadow-lg">
-      <div className="flex items-center gap-3 pb-3 border-b border-white/10">
+    <div className="bg-[#0F172A] border border-white/5 rounded-xl p-6 h-full flex flex-col justify-start shadow-lg">
+      <div className="flex items-center gap-3 pb-3 mb-4 border-b border-white/5">
         <span className={`${colorClasses[color]} rounded-lg p-2 text-xl border`}>
           {icon}
         </span>
         <h3 className="text-white font-semibold text-xl">{title}</h3>
       </div>
-      <ul className="space-y-3">
+      <ul className="space-y-3 flex-1">
         {items.map((item, idx) => (
           <li key={idx} className="text-white/80 leading-relaxed flex items-start gap-2">
             <span className="text-blue-400 mt-1 flex-shrink-0">•</span>
-            <span className="flex-1">{item}</span>
+            <span className="flex-1 text-sm opacity-90">{item}</span>
           </li>
         ))}
       </ul>

@@ -23,10 +23,10 @@ export function DataTable({
   const columns = Object.keys(rows[0]);
 
   return (
-    <div className="bg-[#0D111A] border border-white/10 rounded-xl overflow-hidden shadow-lg">
+    <div className="bg-[#0F172A] border border-white/5 rounded-xl overflow-hidden shadow-lg">
       {title && (
-        <div className="px-6 py-4 border-b border-white/10">
-          <h3 className="text-white font-semibold text-lg">{title}</h3>
+        <div className="px-6 py-4 border-b border-white/5">
+          <h3 className="text-white font-semibold text-xl mb-0">{title}</h3>
         </div>
       )}
       <div className="overflow-x-auto max-h-[600px] overflow-y-auto">

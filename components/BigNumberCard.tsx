@@ -37,13 +37,13 @@ export default function BigNumberCard({
   };
 
   return (
-    <div className="bg-[#0D111A] border border-white/10 rounded-xl p-6 flex items-center gap-4 hover:border-white/20 transition-all duration-200 shadow-lg hover:shadow-xl">
-      <div className={`${colorClasses[color]} ${bgColorClasses[color]} rounded-xl p-3 text-3xl border`}>
+    <div className="bg-[#0F172A] border border-white/5 rounded-xl p-6 min-h-[160px] flex items-center gap-4 hover:border-white/20 transition-all duration-200 shadow-lg hover:shadow-xl">
+      <div className={`${colorClasses[color]} ${bgColorClasses[color]} rounded-xl p-4 text-2xl border flex-shrink-0`}>
         {icon}
       </div>
-      <div className="flex-1">
-        <p className="text-sm text-white/60 uppercase tracking-wide mb-1">{label}</p>
-        <p className={`text-3xl font-bold text-white ${trend === "up" ? "text-emerald-400" : trend === "down" ? "text-red-400" : ""}`}>
+      <div className="flex-1 flex flex-col justify-center">
+        <p className="text-sm text-white/70 opacity-70 uppercase tracking-wide mb-2">{label}</p>
+        <p className={`text-5xl font-bold text-white ${trend === "up" ? "text-emerald-400" : trend === "down" ? "text-red-400" : ""}`}>
           {typeof value === "number" ? value.toLocaleString("pt-BR") : value}
         </p>
       </div>

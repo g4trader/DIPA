@@ -5,7 +5,9 @@ import { clsx } from "clsx";
 import BigNumberCard from "./BigNumberCard";
 import { InsightsBlock } from "./InsightsBlock";
 import { DataTable } from "./DataTable";
+import { ExecutiveSectionCard } from "./ExecutiveSectionCard";
 import { parseMarkdownExecutivo } from "./markdownParser";
+import { FileText } from "lucide-react";
 
 type Props = {
   data: CopilotStructuredResponse;
@@ -217,47 +219,46 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
   const dataAny = data as any;
   
   return (
-    <div className="space-y-6">
+    <div className="max-w-[1200px] mx-auto px-4 py-6">
       {/* 1. Título da Consulta (se disponível) */}
       {dataAny.intent && (
-        <div className="flex items-center gap-3 mb-2">
-          <Target className="w-5 h-5 text-blue-400" />
-          <h2 className="text-xl font-semibold text-white">
+        <div className="flex items-center gap-3 mb-8">
+          <Target className="w-6 h-6 text-blue-400" />
+          <h1 className="text-2xl font-bold text-white">
             {dataAny.intent_label || dataAny.intent}
-          </h2>
+          </h1>
         </div>
       )}
       
       {/* 2. Resumo Executivo (PRIMEIRO) */}
       {parsedMarkdown?.resumoExecutivo && (
-        <div className="rounded-2xl border border-[#1D2532] bg-[#0B0F17] p-6 shadow-xl">
-          <div className="flex items-start gap-4">
-            <div className="rounded-xl bg-blue-500/10 p-3 border border-blue-500/20">
-              <Target className="w-6 h-6 text-blue-400" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-slate-100 mb-3">Resumo Executivo</h3>
-              <p className="text-sm leading-relaxed text-slate-300 whitespace-pre-line">
-                {parsedMarkdown.resumoExecutivo}
-              </p>
-            </div>
-          </div>
+        <div className="mb-10">
+          <ExecutiveSectionCard
+            title="Resumo Executivo"
+            icon={<FileText className="w-5 h-5" />}
+          >
+            <p className="text-sm opacity-90 leading-relaxed whitespace-pre-line">
+              {parsedMarkdown.resumoExecutivo}
+            </p>
+          </ExecutiveSectionCard>
         </div>
       )}
       
       {/* 3. Big Numbers Cards (KPIs) */}
       {bigNumberKPIs.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {bigNumberKPIs.map((kpi, idx) => (
-            <BigNumberCard
-              key={idx}
-              label={kpi.label}
-              value={kpi.value}
-              icon={kpi.icon}
-              trend={kpi.trend}
-              color={kpi.color}
-            />
-          ))}
+        <div className="mb-10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
+            {bigNumberKPIs.map((kpi, idx) => (
+              <BigNumberCard
+                key={idx}
+                label={kpi.label}
+                value={kpi.value}
+                icon={kpi.icon}
+                trend={kpi.trend}
+                color={kpi.color}
+              />
+            ))}
+          </div>
         </div>
       )}
       
@@ -265,62 +266,75 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
       {(parsedMarkdown?.principaisAchados?.length > 0 || 
         parsedMarkdown?.implicacoesComerciais?.length > 0 || 
         parsedMarkdown?.planoAcao?.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {parsedMarkdown.principaisAchados && parsedMarkdown.principaisAchados.length > 0 && (
-            <InsightsBlock
-              title="Principais Achados"
-              items={parsedMarkdown.principaisAchados}
-              icon="🔍"
-              color="blue"
-            />
-          )}
-          {parsedMarkdown.implicacoesComerciais && parsedMarkdown.implicacoesComerciais.length > 0 && (
-            <InsightsBlock
-              title="Implicações Comerciais"
-              items={parsedMarkdown.implicacoesComerciais}
-              icon="⚠️"
-              color="orange"
-            />
-          )}
-          {parsedMarkdown.planoAcao && parsedMarkdown.planoAcao.length > 0 && (
-            <InsightsBlock
-              title="Plano de Ação Imediato"
-              items={parsedMarkdown.planoAcao}
-              icon="🚀"
-              color="green"
-            />
-          )}
+        <div className="mb-10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-fr">
+            {parsedMarkdown.principaisAchados && parsedMarkdown.principaisAchados.length > 0 && (
+              <InsightsBlock
+                title="Principais Achados"
+                items={parsedMarkdown.principaisAchados}
+                icon="🔍"
+                color="blue"
+              />
+            )}
+            {parsedMarkdown.implicacoesComerciais && parsedMarkdown.implicacoesComerciais.length > 0 && (
+              <InsightsBlock
+                title="Implicações Comerciais"
+                items={parsedMarkdown.implicacoesComerciais}
+                icon="⚠️"
+                color="orange"
+              />
+            )}
+            {parsedMarkdown.planoAcao && parsedMarkdown.planoAcao.length > 0 && (
+              <InsightsBlock
+                title="Plano de Ação Imediato"
+                items={parsedMarkdown.planoAcao}
+                icon="🚀"
+                color="green"
+              />
+            )}
+          </div>
         </div>
       )}
       
       {/* 5. Alvos Prioritários (lista E tabela se disponível) */}
       {parsedMarkdown?.alvosPrioritarios && parsedMarkdown.alvosPrioritarios.length > 0 && (
-        <>
-          {/* Lista de alvos como InsightsBlock */}
-          <InsightsBlock
+        <div className="mb-10">
+          <ExecutiveSectionCard
             title="Alvos Prioritários (TOP 10)"
-            items={parsedMarkdown.alvosPrioritarios}
-            icon="🎯"
-            color="purple"
-          />
+            icon={<Target className="w-5 h-5" />}
+          >
+            <ul className="space-y-2">
+              {parsedMarkdown.alvosPrioritarios.map((alvo, idx) => (
+                <li key={idx} className="flex items-start gap-2 text-sm opacity-90">
+                  <span className="text-purple-400 mt-1 flex-shrink-0">•</span>
+                  <span className="flex-1">{alvo}</span>
+                </li>
+              ))}
+            </ul>
+          </ExecutiveSectionCard>
+          
           {/* Tabela de alvos se disponível */}
           {parsedMarkdown.topAlvos && parsedMarkdown.topAlvos.length > 0 && (
-            <DataTable
-              rows={parsedMarkdown.topAlvos}
-              title="Alvos Prioritários - Detalhamento"
-              highlightFirstColumn={true}
-            />
+            <div className="mt-6">
+              <DataTable
+                rows={parsedMarkdown.topAlvos}
+                title="Alvos Prioritários — Detalhamento"
+                highlightFirstColumn={true}
+              />
+            </div>
           )}
-        </>
+        </div>
       )}
       
       {/* 6. Tabela de dados analíticos (se não for alvos prioritários) */}
       {tableData.length > 0 && (!parsedMarkdown?.topAlvos || parsedMarkdown.topAlvos.length === 0) && (
-        <DataTable
-          rows={tableData}
-          title="Dados Analíticos"
-          highlightFirstColumn={true}
-        />
+        <div className="mb-10">
+          <DataTable
+            rows={tableData}
+            title="Dados Analíticos"
+            highlightFirstColumn={true}
+          />
+        </div>
       )}
       
       {/* Fallback: Markdown completo se não foi parseado */}
