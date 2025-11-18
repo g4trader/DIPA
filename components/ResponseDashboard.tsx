@@ -2,6 +2,10 @@ import React, { useState, useMemo } from "react";
 import { TrendingUp, TrendingDown, Minus, Target, Users, AlertCircle, Lightbulb, Package, ChevronDown, Brain, Zap, DollarSign, Percent } from "lucide-react";
 import { CopilotStructuredResponse } from "@/types/agent";
 import { clsx } from "clsx";
+import BigNumberCard from "./BigNumberCard";
+import { InsightsBlock } from "./InsightsBlock";
+import { DataTable } from "./DataTable";
+import { parseMarkdownExecutivo } from "./markdownParser";
 
 type Props = {
   data: CopilotStructuredResponse;
@@ -141,49 +145,165 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
     insightsText.length > 0 &&
     !/erro no processamento avançado da resposta/i.test(insightsText);
   
+  // Parse markdown executivo para extrair seções estruturadas
+  const parsedMarkdown = useMemo(() => {
+    if (respostaMarkdown) {
+      return parseMarkdownExecutivo(respostaMarkdown);
+    }
+    return null;
+  }, [respostaMarkdown]);
+  
+  // Prepara KPIs para BigNumberCard (combinando kpis existentes + parsedMarkdown)
+  const bigNumberKPIs = useMemo(() => {
+    const kpisList: Array<{ label: string; value: string | number; icon: React.ReactNode; trend?: "up" | "down" | "neutral"; color?: "blue" | "green" | "red" | "yellow" | "orange" }> = [];
+    
+    // Usa KPIs já calculados
+    if (kpis.length > 0) {
+      for (const kpi of kpis) {
+        let color: "blue" | "green" | "red" | "yellow" | "orange" = "blue";
+        if (kpi.color.includes("emerald")) color = "green";
+        else if (kpi.color.includes("yellow")) color = "yellow";
+        else if (kpi.color.includes("red") || kpi.color.includes("orange")) color = "red";
+        
+        kpisList.push({
+          label: kpi.label,
+          value: kpi.value,
+          icon: kpi.icon,
+          trend: kpi.trend,
+          color,
+        });
+      }
+    }
+    
+    // Adiciona KPIs do markdown parseado se disponível
+    if (parsedMarkdown?.kpis && parsedMarkdown.kpis.length > 0) {
+      for (const kpi of parsedMarkdown.kpis) {
+        kpisList.push({
+          label: kpi.label,
+          value: kpi.value,
+          icon: <span>{kpi.icon || "📊"}</span>,
+          color: "blue",
+        });
+      }
+    }
+    
+    return kpisList;
+  }, [kpis, parsedMarkdown]);
+  
+  // Prepara dados da tabela (top 10 alvos ou tabela principal)
+  const tableData = useMemo(() => {
+    // Tenta usar topAlvos do markdown parseado
+    if (parsedMarkdown?.topAlvos && parsedMarkdown.topAlvos.length > 0) {
+      return parsedMarkdown.topAlvos;
+    }
+    
+    // Fallback: usa tabela_principal se disponível (type assertion segura)
+    const dataAny = data as any;
+    const tabelaPrincipal = dataAny.tabela_principal || dataAny.tabelaPrincipal;
+    if (tabelaPrincipal && Array.isArray(tabelaPrincipal) && tabelaPrincipal.length > 0) {
+      return tabelaPrincipal;
+    }
+    
+    // Fallback: tenta extrair de seções
+    const tabelaSecao = data.secoes?.find(s => s.tipo === "tabela");
+    if (tabelaSecao?.dados && Array.isArray(tabelaSecao.dados)) {
+      return tabelaSecao.dados;
+    }
+    
+    return [];
+  }, [parsedMarkdown, data]);
+  
+  // Type assertion segura para acessar propriedades opcionais
+  const dataAny = data as any;
+  
   return (
     <div className="space-y-6">
-      {/* KPIs no Topo */}
-      {kpis.length > 0 && (
+      {/* 1. Título da Consulta (se disponível) */}
+      {dataAny.intent && (
+        <div className="flex items-center gap-3 mb-2">
+          <Target className="w-5 h-5 text-blue-400" />
+          <h2 className="text-xl font-semibold text-white">
+            {dataAny.intent_label || dataAny.intent}
+          </h2>
+        </div>
+      )}
+      
+      {/* 2. Big Numbers Cards */}
+      {bigNumberKPIs.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {kpis.map((kpi, idx) => (
-            <div
+          {bigNumberKPIs.map((kpi, idx) => (
+            <BigNumberCard
               key={idx}
-              className={clsx(
-                "rounded-2xl border bg-gradient-to-br p-5 shadow-lg transition-all hover:shadow-xl",
-                kpi.color.includes("emerald")
-                  ? "border-emerald-500/30 from-emerald-500/10 to-emerald-500/5"
-                  : kpi.color.includes("yellow")
-                  ? "border-yellow-500/30 from-yellow-500/10 to-yellow-500/5"
-                  : kpi.color.includes("red") || kpi.color.includes("orange")
-                  ? "border-red-500/30 from-red-500/10 to-red-500/5"
-                  : "border-slate-800 from-slate-900/80 to-slate-950/80"
-              )}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className={clsx("rounded-lg p-2", kpi.color.includes("emerald") ? "bg-emerald-500/20" : kpi.color.includes("yellow") ? "bg-yellow-500/20" : kpi.color.includes("red") || kpi.color.includes("orange") ? "bg-red-500/20" : "bg-slate-800/50")}>
-                  {kpi.icon}
-                </div>
-                {kpi.trend && (
-                  <div className={clsx(
-                    "rounded-full p-1",
-                    kpi.trend === "up" ? "bg-emerald-500/20 text-emerald-400" : kpi.trend === "down" ? "bg-red-500/20 text-red-400" : "bg-slate-700/50 text-slate-400"
-                  )}>
-                    {kpi.trend === "up" ? <TrendingUp className="w-3 h-3" /> : kpi.trend === "down" ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
-                  </div>
-                )}
-              </div>
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">{kpi.label}</p>
-              <p className={clsx("text-2xl font-bold", kpi.color)}>
-                {typeof kpi.value === "number" ? kpi.value.toLocaleString("pt-BR") : kpi.value}
-              </p>
-            </div>
+              label={kpi.label}
+              value={kpi.value}
+              icon={kpi.icon}
+              trend={kpi.trend}
+              color={kpi.color}
+            />
           ))}
         </div>
       )}
       
-      {/* Card 1: Resumo Executivo ou Markdown Completo */}
-      {respostaMarkdown ? (
+      {/* 3. Insights Blocks (3 colunas desktop, 1 coluna mobile) */}
+      {(parsedMarkdown?.principaisAchados?.length > 0 || 
+        parsedMarkdown?.implicacoesComerciais?.length > 0 || 
+        parsedMarkdown?.planoAcao?.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {parsedMarkdown.principaisAchados && parsedMarkdown.principaisAchados.length > 0 && (
+            <InsightsBlock
+              title="Principais Achados"
+              items={parsedMarkdown.principaisAchados}
+              icon="🔍"
+              color="blue"
+            />
+          )}
+          {parsedMarkdown.implicacoesComerciais && parsedMarkdown.implicacoesComerciais.length > 0 && (
+            <InsightsBlock
+              title="Implicações Comerciais"
+              items={parsedMarkdown.implicacoesComerciais}
+              icon="⚠️"
+              color="orange"
+            />
+          )}
+          {parsedMarkdown.planoAcao && parsedMarkdown.planoAcao.length > 0 && (
+            <InsightsBlock
+              title="Plano de Ação Imediato"
+              items={parsedMarkdown.planoAcao}
+              icon="🚀"
+              color="green"
+            />
+          )}
+        </div>
+      )}
+      
+      {/* 4. Tabela TOP 10 */}
+      {tableData.length > 0 && (
+        <DataTable
+          rows={tableData}
+          title="Alvos Prioritários (TOP 10)"
+          highlightFirstColumn={true}
+        />
+      )}
+      
+      {/* 5. Resumo Executivo (se não foi parseado em seções) */}
+      {parsedMarkdown?.resumoExecutivo && (
+        <div className="rounded-2xl border border-[#1D2532] bg-[#0B0F17] p-6 shadow-xl">
+          <div className="flex items-start gap-4">
+            <div className="rounded-xl bg-blue-500/10 p-3 border border-blue-500/20">
+              <Target className="w-6 h-6 text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-slate-100 mb-3">Resumo Executivo</h3>
+              <p className="text-sm leading-relaxed text-slate-300">
+                {parsedMarkdown.resumoExecutivo}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Fallback: Markdown completo se não foi parseado */}
+      {respostaMarkdown && !parsedMarkdown && (
         <div className="rounded-2xl border border-[#1D2532] bg-[#0B0F17] p-6 shadow-xl">
           <div className="prose prose-invert max-w-none whitespace-pre-line space-y-6">
             <div className="text-sm leading-relaxed text-slate-300">
@@ -225,7 +345,10 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
             </div>
           </div>
         </div>
-      ) : resumoExecutivo ? (
+      )}
+      
+      {/* Fallback: Resumo Executivo simples se não houver markdown */}
+      {!respostaMarkdown && resumoExecutivo && (
         <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl">
           <div className="flex items-start gap-4">
             <div className="rounded-xl bg-blue-500/10 p-3 border border-blue-500/20">
@@ -243,9 +366,9 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
             </div>
           </div>
         </div>
-      ) : null}
-
-      {/* Seção: Insights Preditivos (FASE 5) */}
+      )}
+      
+      {/* 6. Insights e Recomendações (se houver) */}
       {data.insights_preditivos && (
         <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-purple-900/10 p-6 shadow-xl">
           <div className="flex items-center gap-3 mb-4">
