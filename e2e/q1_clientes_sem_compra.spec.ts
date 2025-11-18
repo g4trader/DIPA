@@ -20,9 +20,16 @@ test.describe('Q1 - Clientes sem compra há mais de 60 dias', () => {
     // Aguarda a página carregar completamente
     await page.waitForLoadState('networkidle');
     
+    // Aguarda o componente React carregar (pode ser renderizado client-side)
+    // Tenta múltiplos seletores possíveis
+    await page.waitForSelector('textarea, input[type="text"], [placeholder*="pergunta"], [placeholder*="Pergunta"]', { 
+      timeout: 15000,
+      state: 'visible'
+    });
+    
     // Aguarda o textarea aparecer (pode levar um tempo para carregar)
-    const inputPergunta = page.locator('textarea').first();
-    await expect(inputPergunta).toBeVisible({ timeout: 10000 });
+    const inputPergunta = page.locator('textarea, input[type="text"]').first();
+    await expect(inputPergunta).toBeVisible({ timeout: 5000 });
     
     // Digita a pergunta Q1
     await inputPergunta.fill(PERGUNTA_Q1);
@@ -68,8 +75,14 @@ test.describe('Q1 - Clientes sem compra há mais de 60 dias', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     
-    const inputPergunta = page.locator('textarea').first();
-    await expect(inputPergunta).toBeVisible({ timeout: 10000 });
+    // Aguarda o componente React carregar
+    await page.waitForSelector('textarea, input[type="text"], [placeholder*="pergunta"], [placeholder*="Pergunta"]', { 
+      timeout: 15000,
+      state: 'visible'
+    });
+    
+    const inputPergunta = page.locator('textarea, input[type="text"]').first();
+    await expect(inputPergunta).toBeVisible({ timeout: 5000 });
     await inputPergunta.fill(PERGUNTA_Q1);
     
     const botaoEnviar = page.locator('button:has-text("Enviar"), button[type="submit"], button:has-text("Enviar pergunta")').first();
@@ -97,8 +110,14 @@ test.describe('Q1 - Clientes sem compra há mais de 60 dias', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     
-    const inputPergunta = page.locator('textarea').first();
-    await expect(inputPergunta).toBeVisible({ timeout: 10000 });
+    // Aguarda o componente React carregar
+    await page.waitForSelector('textarea, input[type="text"], [placeholder*="pergunta"], [placeholder*="Pergunta"]', { 
+      timeout: 15000,
+      state: 'visible'
+    });
+    
+    const inputPergunta = page.locator('textarea, input[type="text"]').first();
+    await expect(inputPergunta).toBeVisible({ timeout: 5000 });
     await inputPergunta.fill(PERGUNTA_Q1);
     
     const botaoEnviar = page.locator('button:has-text("Enviar"), button[type="submit"], button:has-text("Enviar pergunta")').first();
