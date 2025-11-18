@@ -135,6 +135,12 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
     setExpandedSections(prev => ({ ...prev, [index]: !prev[index] }));
   };
   
+  // Helper para verificar se deve mostrar insights (não mostrar se for apenas mensagem de erro)
+  const insightsText = data.insightsRecomendacoes?.join(' ')?.trim() ?? '';
+  const deveMostrarInsights =
+    insightsText.length > 0 &&
+    !/erro no processamento avançado da resposta/i.test(insightsText);
+  
   return (
     <div className="space-y-6">
       {/* KPIs no Topo */}
@@ -179,8 +185,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
       {/* Card 1: Resumo Executivo ou Markdown Completo */}
       {respostaMarkdown ? (
         <div className="rounded-2xl border border-[#1D2532] bg-[#0B0F17] p-6 shadow-xl">
-          <div className="prose prose-invert max-w-none space-y-8">
-            <div className="text-sm leading-relaxed text-slate-300 whitespace-pre-line">
+          <div className="prose prose-invert max-w-none whitespace-pre-line space-y-6">
+            <div className="text-sm leading-relaxed text-slate-300">
               {respostaMarkdown.split("\n").map((line, idx) => {
                 // Renderiza headings
                 if (line.match(/^##+\s+/)) {
@@ -1333,8 +1339,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
         </div>
       )}
 
-      {/* Card 5: Insights e Recomendações */}
-      {data.insightsRecomendacoes && data.insightsRecomendacoes.length > 0 && (
+      {/* Card 5: Insights e Recomendações - Só renderiza se não for apenas mensagem de erro */}
+      {deveMostrarInsights && data.insightsRecomendacoes && data.insightsRecomendacoes.length > 0 && (
         <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl">
           <div className="flex items-center gap-3 mb-4">
             <div className="rounded-xl bg-purple-500/10 p-2 border border-purple-500/20">

@@ -2,3 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 :root{color-scheme: light;}
+
+/* Melhorias de espaçamento e legibilidade para markdown executivo */
+.prose ul li {
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+
+.prose strong {
+  color: #ffffff;
+  font-weight: 600;
+}
