@@ -36,7 +36,19 @@ class IntentType(Enum):
     CONSULTA_VENDEDORES_PERFORMANCE = "consulta_vendedores_performance"  # Análise de performance de vendedores (piores, impacto negativo, etc.)
     RANKING = "ranking"  # Rankings e comparações
     EXPLICACAO = "explicacao"  # Explicação de resultados
-    OUTROS = "outros"  # Outras perguntas (fallback)
+    
+    # TIPOS DW OFICIAIS (Q1-Q13 do ENGINEERING_QUERIES.md) - FIRST-CLASS
+    CLIENTES_SEM_COMPRA = "clientes_sem_compra"  # Q1: Clientes ativos sem compras há N dias
+    QUEDA_FATURAMENTO = "queda_faturamento"  # Q2: Queda de faturamento ano contra ano
+    META_DEPARTAMENTO_DW = "meta_departamento"  # Q3: Indústrias com mais vendedores fora da meta
+    POSITIVACAO = "positivacao"  # Q4: Rotas com melhor/pior positivação de indústria
+    MIX = "mix"  # Q5: Itens com baixa média mensal
+    RECOMPRA = "recompra"  # Q6: Clientes sem recompra de SKU
+    CLIENTES_SEM_ITEM = "clientes_sem_item"  # Q7/Q9/Q10/Q11: Clientes sem positivação de SKU
+    VENDAS_BAIXAS = "vendas_baixas"  # Q8: Clientes com apenas 1 unidade de indústria no mês
+    MIX_NISSIN = "mix_nissin"  # Q12/Q13: Mix mínimo de Nissin
+    
+    OUTROS = "outros"  # Outras perguntas (fallback - NÃO usar para tipos DW acima)
     DESCONHECIDA = "desconhecida"  # Intenção não reconhecida
 
 

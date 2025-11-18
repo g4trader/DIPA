@@ -127,8 +127,209 @@ def intent_to_spec(
             confianca=0.8
         )
     
+    # ========================================================================
+    # TIPOS DW OFICIAIS (Q1-Q13 do ENGINEERING_QUERIES.md) - FIRST-CLASS
+    # ========================================================================
+    
+    elif intent == IntentType.CLIENTES_SEM_COMPRA:
+        # Q1: Clientes ativos sem compras há N dias
+        filtros = {
+            "dias": entities.get("dias") or entities.get("dias_sem_compra") or 60,
+            "data_referencia": entities.get("data_referencia")
+        }
+        return IntentSpec(
+            tipo="clientes_sem_compra",
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            dimensao_principal="cliente",
+            filtros=filtros,
+            metricas=["dias_sem_compra", "ultima_compra"],
+            confianca=0.8,
+            entidades_extraidas=entities
+        )
+    
+    elif intent == IntentType.QUEDA_FATURAMENTO:
+        # Q2: Queda de faturamento ano contra ano
+        filtros = {
+            "ano_base": entities.get("ano_base") or 2024,
+            "ano_comparado": entities.get("ano_comparado") or 2025,
+            "top_n": entities.get("top_n") or entities.get("limite") or 50
+        }
+        return IntentSpec(
+            tipo="queda_faturamento",
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            dimensao_principal="cliente",
+            filtros=filtros,
+            metricas=["faturamento_base", "faturamento_comparado", "delta_faturamento", "delta_percentual"],
+            confianca=0.8,
+            entidades_extraidas=entities
+        )
+    
+    elif intent == IntentType.META_DEPARTAMENTO_DW:
+        # Q3: Indústrias com mais vendedores fora da meta
+        # Extrai ano/mês do período ou entities
+        ano = entities.get("ano")
+        mes = entities.get("mes")
+        if periodo_inicio and not ano:
+            try:
+                ano = int(periodo_inicio.split("-")[0])
+                mes = int(periodo_inicio.split("-")[1])
+            except (ValueError, IndexError):
+                pass
+        
+        filtros = {
+            "ano": ano,
+            "mes": mes,
+            "atingimento_limite": entities.get("atingimento_limite") or 100.0
+        }
+        return IntentSpec(
+            tipo="meta_departamento",
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            dimensao_principal="nenhuma",
+            filtros=filtros,
+            metricas=["qtd_vendedores_fora_meta"],
+            confianca=0.8,
+            entidades_extraidas=entities
+        )
+    
+    elif intent == IntentType.POSITIVACAO:
+        # Q4: Rotas com melhor/pior positivação de indústria
+        filtros = {
+            "industria": entities.get("industria") or entities.get("marca") or "",
+            "data_inicio": periodo_inicio or "",
+            "data_fim": periodo_fim or ""
+        }
+        return IntentSpec(
+            tipo="positivacao",
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            dimensao_principal="rota",
+            filtros=filtros,
+            metricas=["clientes_positivados", "total_clientes_ativos", "positivacao_pct"],
+            confianca=0.8,
+            entidades_extraidas=entities
+        )
+    
+    elif intent == IntentType.MIX:
+        # Q5: Itens com baixa média mensal
+        filtros = {
+            "meses_janela": entities.get("meses_janela") or entities.get("janela_meses") or 12,
+            "limite_media": entities.get("limite_media") or entities.get("limite") or 10.0,
+            "data_referencia": entities.get("data_referencia") or periodo_fim or periodo_inicio
+        }
+        return IntentSpec(
+            tipo="mix",
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            dimensao_principal="produto",
+            filtros=filtros,
+            metricas=["media_mensal", "qtd_total", "meses_com_venda"],
+            confianca=0.8,
+            entidades_extraidas=entities
+        )
+    
+    elif intent == IntentType.RECOMPRA:
+        # Q6: Clientes sem recompra de SKU
+        filtros = {
+            "sku": entities.get("sku") or entities.get("produto") or "",
+            "meses_janela": entities.get("meses_janela") or entities.get("janela_meses") or 6,
+            "data_referencia": entities.get("data_referencia") or periodo_fim or periodo_inicio
+        }
+        return IntentSpec(
+            tipo="recompra",
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            dimensao_principal="cliente",
+            filtros=filtros,
+            metricas=["qtd_compras", "primeira_compra", "ultima_compra"],
+            confianca=0.8,
+            entidades_extraidas=entities
+        )
+    
+    elif intent == IntentType.CLIENTES_SEM_ITEM:
+        # Q7/Q9/Q10/Q11: Clientes sem positivação de SKU no período
+        filtros = {
+            "sku": entities.get("sku") or entities.get("produto") or "",
+            "segmento": entities.get("segmento"),
+            "data_inicio": periodo_inicio or "",
+            "data_fim": periodo_fim or ""
+        }
+        return IntentSpec(
+            tipo="clientes_sem_item",
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            dimensao_principal="cliente",
+            filtros=filtros,
+            metricas=[],
+            confianca=0.8,
+            entidades_extraidas=entities
+        )
+    
+    elif intent == IntentType.VENDAS_BAIXAS:
+        # Q8: Clientes com apenas 1 unidade de indústria no mês
+        # Extrai ano/mês do período ou entities
+        ano = entities.get("ano")
+        mes = entities.get("mes")
+        if periodo_inicio and not ano:
+            try:
+                ano = int(periodo_inicio.split("-")[0])
+                mes = int(periodo_inicio.split("-")[1])
+            except (ValueError, IndexError):
+                pass
+        
+        filtros = {
+            "industria": entities.get("industria") or entities.get("marca") or "",
+            "ano": ano,
+            "mes": mes
+        }
+        return IntentSpec(
+            tipo="vendas_baixas",
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            dimensao_principal="cliente",
+            filtros=filtros,
+            metricas=["qtd_total"],
+            confianca=0.8,
+            entidades_extraidas=entities
+        )
+    
+    elif intent == IntentType.MIX_NISSIN:
+        # Q12/Q13: Mix mínimo de Nissin
+        # Extrai ano/mês do período ou entities
+        ano = entities.get("ano")
+        mes = entities.get("mes")
+        if periodo_inicio and not ano:
+            try:
+                ano = int(periodo_inicio.split("-")[0])
+                mes = int(periodo_inicio.split("-")[1])
+            except (ValueError, IndexError):
+                pass
+        
+        # Dimensão pode ser "cliente" ou "rota" dependendo da pergunta
+        dimensao = entities.get("dimensao") or "cliente"
+        if "rota" in entities.get("pergunta_original", "").lower() or "rota" in str(entities.get("rota", "")).lower():
+            dimensao = "rota"
+        
+        filtros = {
+            "ano": ano,
+            "mes": mes
+        }
+        return IntentSpec(
+            tipo="mix_nissin",
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            dimensao_principal=dimensao,
+            filtros=filtros,
+            metricas=["qtd_skus_nissin", "mix_completo"],
+            confianca=0.8,
+            entidades_extraidas=entities
+        )
+    
     else:
-        # Fallback: intent genérica
+        # Fallback: intent genérica (APENAS para tipos realmente não mapeados)
+        # NUNCA usar para tipos DW oficiais (Q1-Q13)
         logger.warning(f"[intent_to_spec] Intent não mapeada: {intent.value}, usando fallback")
         return IntentSpec(
             tipo="outros",
