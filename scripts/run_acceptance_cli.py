@@ -218,20 +218,47 @@ def main():
         print(f"  Confidence: {confidence:.2f}")
         print(f"  Tempo de processamento: {tempo_processamento:.2f}s")
         
-        # Extrai e exibe trechos
+        # Valida estrutura executiva
+        headers_obrigatorios = [
+            "Resumo Executivo",
+            "Principais Achados",
+            "Implicações Comerciais",
+            "Plano de Ação Imediato"
+        ]
+        
+        estrutura_ok = all(header in texto_completo for header in headers_obrigatorios)
+        if not estrutura_ok:
+            print(f"\n  ⚠️  [AVISO] Estrutura executiva não encontrada!")
+            headers_encontrados = [h for h in headers_obrigatorios if h in texto_completo]
+            headers_faltando = [h for h in headers_obrigatorios if h not in texto_completo]
+            if headers_faltando:
+                print(f"     Headers faltando: {', '.join(headers_faltando)}")
+        
+        # Extrai e exibe trechos dos novos headers
         print(f"\n  📊 Resumo Executivo:")
         print("  " + "-" * 76)
         trecho_resumo = extrair_trecho(texto_completo, "Resumo Executivo", 10)
         for linha in trecho_resumo.split('\n'):
-            if linha.strip():
+            if linha.strip() and not linha.strip().startswith("Principais Achados"):
                 print(f"  {linha}")
         
-        print(f"\n  📋 Plano de Ação Sugerido:")
+        print(f"\n  🔍 Principais Achados:")
         print("  " + "-" * 76)
-        trecho_plano = extrair_trecho(texto_completo, "Plano de Ação", 10)
-        if "[Plano de Ação" not in trecho_plano:
-            # Tenta outros marcadores
-            trecho_plano = extrair_trecho(texto_completo, "Ações", 10)
+        trecho_achados = extrair_trecho(texto_completo, "Principais Achados", 10)
+        for linha in trecho_achados.split('\n'):
+            if linha.strip() and not linha.strip().startswith("Implicações Comerciais"):
+                print(f"  {linha}")
+        
+        print(f"\n  💼 Implicações Comerciais:")
+        print("  " + "-" * 76)
+        trecho_implicacoes = extrair_trecho(texto_completo, "Implicações Comerciais", 10)
+        for linha in trecho_implicacoes.split('\n'):
+            if linha.strip() and not linha.strip().startswith("Plano de Ação Imediato"):
+                print(f"  {linha}")
+        
+        print(f"\n  📋 Plano de Ação Imediato:")
+        print("  " + "-" * 76)
+        trecho_plano = extrair_trecho(texto_completo, "Plano de Ação Imediato", 10)
         for linha in trecho_plano.split('\n'):
             if linha.strip():
                 print(f"  {linha}")
