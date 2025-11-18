@@ -230,6 +230,21 @@ async def startup_event():
         init_db()
         logger.info("Conexão com banco de dados inicializada")
         
+        # Garante que estruturas de aplicação existam (behavior_rules, intent_prevista)
+        # Isso deve ser feito APÓS init_db() para ter o engine disponível
+        try:
+            from src.dw.bootstrap_schema import ensure_application_schema
+            from src.dw.connection import get_db_engine
+            
+            engine = get_db_engine()
+            ensure_application_schema(engine)
+            logger.info("✅ Schema de aplicação verificado/criado")
+        except Exception as e:
+            error_msg = f"Erro ao garantir schema de aplicação: {str(e)}"
+            logger.warning(f"⚠️  {error_msg}")
+            app.state.startup_errors.append(error_msg)
+            # Não bloqueia o startup, apenas registra o erro
+        
         # Marca banco como disponível se init_db não deu erro
         # IMPORTANTE: NÃO faz teste de conexão síncrono aqui para não bloquear startup
         # O teste de conexão será feito no primeiro request ou no endpoint /health/db
