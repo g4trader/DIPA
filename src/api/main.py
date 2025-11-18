@@ -5,7 +5,7 @@ Este módulo expõe endpoints REST para o agente conversacional,
 permitindo interação em linguagem natural com os dados da empresa.
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Query, Path, Request
+from fastapi import FastAPI, HTTPException, Depends, Query, Path as FastAPIPath, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -1697,7 +1697,7 @@ async def feedback_interacao_fase4(
 
 @app.post("/feedback/{interacao_id}", response_model=FeedbackResponse)
 async def feedback_interacao(
-    interacao_id: int = Path(..., description="ID da interação a receber feedback", gt=0),
+    interacao_id: int = FastAPIPath(..., description="ID da interação a receber feedback", gt=0),
     feedback: FeedbackRequest = ...,
     session: Session = Depends(get_db_session)
 ):
