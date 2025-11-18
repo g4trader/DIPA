@@ -48,40 +48,82 @@ def test_formatter_chaves_existentes():
 
 
 def test_formatter_clientes_sem_compra_usa_narrativa_especifica():
-    """Testa que clientes_sem_compra usa narrativa específica."""
+    """Testa que clientes_sem_compra usa narrativa específica com diagnóstico numérico e risco comercial."""
     spec = IntentSpec(tipo="clientes_sem_compra", filtros={"dias": 60})
+    # Cenário negativo forte: muitos clientes sem compra há muito tempo
     dados = [
-        {"cliente_id": 1, "nome": "Cliente A", "dias_sem_compra": 75, "rota_id": "ROTA 01"},
-        {"cliente_id": 2, "nome": "Cliente B", "dias_sem_compra": 90, "rota_id": "ROTA 02"},
+        {"cliente_id": 1, "nome": "Cliente A", "dias_sem_compra": 120, "rota_id": "ROTA 01", "supervisor": "Supervisor X"},
+        {"cliente_id": 2, "nome": "Cliente B", "dias_sem_compra": 150, "rota_id": "ROTA 01", "supervisor": "Supervisor X"},
+        {"cliente_id": 3, "nome": "Cliente C", "dias_sem_compra": 200, "rota_id": "ROTA 02", "supervisor": "Supervisor Y"},
+        {"cliente_id": 4, "nome": "Cliente D", "dias_sem_compra": 180, "rota_id": "ROTA 02", "supervisor": "Supervisor Y"},
+        {"cliente_id": 5, "nome": "Cliente E", "dias_sem_compra": 160, "rota_id": "ROTA 01", "supervisor": "Supervisor X"},
     ]
     out = formatar_execucao(dados, spec, spec.filtros, [])
     
-    assert "clientes ativos sem compras" in out["resumo"]
-    assert len(out["plano"]) >= 3
-    assert "Priorizar contato" in out["plano"][0] or "priorizar" in out["plano"][0].lower()
+    # Valida estrutura
+    assert set(out.keys()) == {"resumo", "achados", "implicacoes", "plano", "top_alvos"}
+    
+    # Valida diagnóstico numérico: deve mencionar número de clientes
+    import re
+    numeros_clientes = re.findall(r'\d+', out["resumo"])
+    assert len(numeros_clientes) > 0, "Resumo deve conter números (quantidade de clientes)"
+    assert "5" in out["resumo"] or "cinco" in out["resumo"].lower(), "Resumo deve mencionar 5 clientes"
+    
+    # Valida menção a risco comercial
+    texto_completo = " ".join([out["resumo"]] + out["implicacoes"]).lower()
+    termos_risco = ["perda", "risco", "queda", "share", "receita", "faturamento", "churn", "rompimento"]
+    assert any(termo in texto_completo for termo in termos_risco), \
+        f"Texto deve mencionar risco comercial. Termos esperados: {termos_risco}"
+    
+    # Valida plano acionável
+    assert len(out["plano"]) >= 3, "Plano deve ter pelo menos 3 bullets"
+    assert any("Priorizar" in p or "priorizar" in p.lower() or "Agendar" in p or "agendar" in p.lower() 
+               for p in out["plano"]), "Plano deve conter ações imperativas"
+    
     # Validações de top_alvos
     assert "top_alvos" in out
     assert isinstance(out["top_alvos"], list)
-    assert len(out["top_alvos"]) >= 1  # Com 2 clientes, deve ter pelo menos 1 entrada
+    assert len(out["top_alvos"]) >= 1  # Com 5 clientes, deve ter pelo menos 1 entrada
 
 
 def test_formatter_mix_nissin_usa_narrativa_especifica():
-    """Testa que mix_nissin usa narrativa específica."""
-    spec = IntentSpec(tipo="mix_nissin", filtros={"mes": "2025-10"})
+    """Testa que mix_nissin usa narrativa específica com cenário positivo (>100 clientes)."""
+    spec = IntentSpec(tipo="mix_nissin", filtros={"mes": "2025-10", "ano": "2025"})
+    # Cenário positivo: mais de 100 clientes batendo o mix mínimo
     dados = [
-        {"cliente_id": 1, "nome": "Cliente A", "rota_id": "ROTA 01"},
-        {"cliente_id": 2, "nome": "Cliente B", "rota_id": "ROTA 02"},
-        {"cliente_id": 3, "nome": "Cliente C", "rota_id": "ROTA 03"},
+        {"cliente_id": i, "nome": f"Cliente {i}", "rota_id": f"ROTA {(i % 5) + 1:02d}"}
+        for i in range(1, 105)  # 104 clientes
     ]
     out = formatar_execucao(dados, spec, spec.filtros, [])
     
-    assert "mix mínimo de Nissin" in out["resumo"] or "mix" in out["resumo"].lower()
-    assert len(out["implicacoes"]) >= 2
-    assert "mix" in out["plano"][0].lower() or "Nissin" in out["plano"][0]
+    # Valida estrutura
+    assert set(out.keys()) == {"resumo", "achados", "implicacoes", "plano", "top_alvos"}
+    
+    # Valida diagnóstico numérico: deve mencionar número de clientes
+    import re
+    numeros_clientes = re.findall(r'\d+', out["resumo"])
+    assert len(numeros_clientes) > 0, "Resumo deve conter números (quantidade de clientes)"
+    assert "104" in out["resumo"] or "cento" in out["resumo"].lower(), "Resumo deve mencionar 104 clientes"
+    
+    # Valida que é cenário positivo (boa adesão)
+    texto_completo = " ".join([out["resumo"]] + out["achados"]).lower()
+    assert "boa" in texto_completo or "adesão" in texto_completo or "104" in out["resumo"], \
+        "Narrativa deve destacar boa adesão ao mix mínimo"
+    
+    # Valida menção a quem "puxou" o resultado (rota/supervisor/equipe)
+    assert "rota" in texto_completo or "ROTA" in out["resumo"], \
+        "Narrativa deve mencionar rotas que puxaram o resultado"
+    
+    # Valida recomendações sobre escalar estratégia
+    plano_texto = " ".join(out["plano"]).lower()
+    termos_escalar = ["replicar", "escalar", "expandir", "outras rotas", "playbook", "estratégia"]
+    assert any(termo in plano_texto for termo in termos_escalar), \
+        f"Plano deve recomendar escalar estratégia. Termos esperados: {termos_escalar}"
+    
     # Validações de top_alvos
     assert "top_alvos" in out
     assert isinstance(out["top_alvos"], list)
-    assert len(out["top_alvos"]) >= 1  # Com 3 clientes, deve ter pelo menos 1 entrada
+    assert len(out["top_alvos"]) >= 1  # Com 104 clientes, deve ter pelo menos 1 entrada
 
 
 def test_formatter_generico_top_alvos_nunca_quebra():
@@ -215,6 +257,63 @@ def test_formatter_positivacao_cenario_critico():
     
     # Valida que menciona números dos dados
     assert "20" in out["resumo"] or "20.0" in out["resumo"] or "10" in out["resumo"]
+
+
+def test_formatter_mix_usa_narrativa_especifica():
+    """Testa que mix (Q5) usa narrativa específica com diagnóstico numérico e plano acionável."""
+    spec = IntentSpec(tipo="mix", filtros={"limite": 10.0, "limite_media": 10.0})
+    # Simula pelo menos 3 itens com média < 10 caixas
+    dados = [
+        {"sku": "SKU001", "descricao": "Produto A", "media_mensal": 2.5, "industria": "Mars", "categoria": "Chocolate"},
+        {"sku": "SKU002", "descricao": "Produto B", "media_mensal": 4.0, "industria": "Mars", "categoria": "Chocolate"},
+        {"sku": "SKU003", "descricao": "Produto C", "media_mensal": 6.5, "industria": "Nissin", "categoria": "Macarrão"},
+        {"sku": "SKU004", "descricao": "Produto D", "media_mensal": 8.0, "industria": "Mars", "categoria": "Chocolate"},
+        {"sku": "SKU005", "descricao": "Produto E", "media_mensal": 9.5, "industria": "Red Bull", "categoria": "Energético"},
+    ]
+    out = formatar_execucao(dados, spec, spec.filtros, [])
+    
+    # Valida estrutura
+    assert set(out.keys()) == {"resumo", "achados", "implicacoes", "plano", "top_alvos"}
+    
+    # Valida diagnóstico numérico: deve mencionar número de itens
+    import re
+    numeros_itens = re.findall(r'\d+', out["resumo"])
+    assert len(numeros_itens) > 0, "Resumo deve conter números (quantidade de itens)"
+    assert "5" in out["resumo"] or "cinco" in out["resumo"].lower(), "Resumo deve mencionar 5 itens"
+    
+    # Valida que menciona limite usado
+    assert "10" in out["resumo"] or "dez" in out["resumo"].lower(), "Resumo deve mencionar limite de 10 caixas"
+    
+    # Valida que todas as 5 seções estão presentes no texto final (via post_processor)
+    from src.agent.post_processor import post_processar_resposta
+    resposta_dw = {"dados": dados, "tem_dados": True}
+    resultado = post_processar_resposta(resposta_dw, spec, [], [])
+    texto = resultado.get("texto", "")
+    
+    secoes_obrigatorias = [
+        "Resumo Executivo",
+        "Principais Achados",
+        "Implicações Comerciais",
+        "Plano de Ação Imediato",
+        "Alvos Prioritários (TOP 10)"
+    ]
+    
+    for secao in secoes_obrigatorias:
+        assert secao in texto, f"Seção '{secao}' não encontrada no texto final"
+    
+    # Valida que "Plano de Ação Imediato" contém pelo menos 3 bullets
+    if "Plano de Ação Imediato" in texto:
+        bloco_plano = texto.split("Plano de Ação Imediato", 1)[1].split("Alvos Prioritários", 1)[0]
+        bullets_plano = [l.strip() for l in bloco_plano.splitlines() if l.strip() and l.strip().startswith("-")]
+        assert len(bullets_plano) >= 3, f"Plano deve ter pelo menos 3 bullets, encontrados: {len(bullets_plano)}"
+    
+    # Valida que "Alvos Prioritários (TOP 10)" aparece no texto
+    assert "Alvos Prioritários (TOP 10)" in texto, "Seção 'Alvos Prioritários (TOP 10)' deve estar presente"
+    
+    # Validações de top_alvos
+    assert "top_alvos" in out
+    assert isinstance(out["top_alvos"], list)
+    assert len(out["top_alvos"]) >= 1  # Com 5 itens, deve ter pelo menos 1 entrada
 
 
 def test_formatter_todas_secoes_presentes():

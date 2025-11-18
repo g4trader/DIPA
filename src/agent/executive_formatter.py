@@ -68,6 +68,8 @@ def formatar_execucao(dados, intent_spec, filtros, regras_behavior):
         return _format_clientes_sem_item(dados, intent_spec, filtros, regras_behavior)
     elif intent_tipo == "mix_nissin":
         return _format_mix_nissin(dados, intent_spec, filtros, regras_behavior)
+    elif intent_tipo == "mix":
+        return _format_mix(dados, intent_spec, filtros, regras_behavior)
     else:
         # Fallback genérico para outros tipos
         return _format_generico(dados, intent_spec, filtros, regras_behavior)
@@ -657,6 +659,159 @@ def _format_vendas_baixas(dados, intent_spec, filtros, regras_behavior):
         
         if "media_mensal" in row:
             media = row.get("media_mensal", 0) or 0
+            partes.append(f"Média: {media:.2f} caixas/mês")
+        
+        if "industria" in row:
+            partes.append(f"Indústria: {row['industria']}")
+        elif "marca" in row:
+            partes.append(f"Marca: {row['marca']}")
+        
+        if partes:
+            top_alvos.append(" | ".join(partes))
+    
+    return {
+        "resumo": resumo,
+        "achados": achados,
+        "implicacoes": implicacoes,
+        "plano": plano,
+        "top_alvos": top_alvos
+    }
+
+
+def _format_mix(dados, intent_spec, filtros, regras_behavior):
+    """
+    Formata narrativa para análise de mix (Q5 - itens com média de vendas mensal < limite).
+    
+    Campos esperados em 'dados':
+    - sku, descricao, produto_id
+    - media_mensal, media_mensal_caixas
+    - industria, categoria
+    - total_vendido, meses_com_venda
+    """
+    if not dados:
+        return {
+            "resumo": "Nenhum item foi identificado com média de vendas mensal abaixo do limite no período analisado.",
+            "achados": [
+                "A ausência de itens críticos pode indicar boa rotação de portfólio.",
+                "Pode também indicar que o limite de média está muito alto ou os filtros estão muito restritivos."
+            ],
+            "implicacoes": [
+                "Situação positiva: portfólio com boa rotação e mix saudável.",
+                "Recomenda-se manter monitoramento para identificar itens em declínio antecipadamente."
+            ],
+            "plano": [
+                "Validar se o limite de média mensal está adequado.",
+                "Manter análise trimestral de rotação de itens.",
+                "Criar alertas para itens com média abaixo do limiar estabelecido."
+            ],
+            "top_alvos": []
+        }
+    
+    # Ordena por média mensal (crescente) - piores primeiro
+    if dados and isinstance(dados[0], dict) and "media_mensal" in dados[0]:
+        dados_ordenados = sorted(dados, key=lambda x: x.get("media_mensal", 0) or 0)
+    elif dados and isinstance(dados[0], dict) and "media_mensal_caixas" in dados[0]:
+        dados_ordenados = sorted(dados, key=lambda x: x.get("media_mensal_caixas", 0) or 0)
+    else:
+        dados_ordenados = dados
+    
+    # TOP 10 itens mais críticos (menor média)
+    top_10 = dados_ordenados[:10] if len(dados_ordenados) > 10 else dados_ordenados
+    
+    # Calcula métricas
+    total_itens_criticos = len(dados)
+    limite = filtros.get("limite", filtros.get("limite_media", 10.0))
+    
+    # Tenta calcular média geral dos itens críticos
+    media_list = [d.get("media_mensal") for d in dados if isinstance(d, dict) and d.get("media_mensal")]
+    if not media_list:
+        media_list = [d.get("media_mensal_caixas") for d in dados if isinstance(d, dict) and d.get("media_mensal_caixas")]
+    media_geral = sum(media_list) / len(media_list) if media_list else None
+    
+    # Tenta identificar indústrias/categorias mais impactadas
+    industrias_afetadas = {}
+    categorias_afetadas = {}
+    for d in dados:
+        if isinstance(d, dict):
+            if d.get("industria"):
+                industria = d.get("industria")
+                industrias_afetadas[industria] = industrias_afetadas.get(industria, 0) + 1
+            if d.get("categoria"):
+                categoria = d.get("categoria")
+                categorias_afetadas[categoria] = categorias_afetadas.get(categoria, 0) + 1
+    
+    industria_top = sorted(industrias_afetadas.items(), key=lambda x: x[1], reverse=True)[:1] if industrias_afetadas else []
+    
+    # Detecta cenário crítico
+    is_critico = total_itens_criticos > 20 or (media_geral and media_geral < 5.0)
+    
+    # Constrói resumo executivo (2-3 frases, direto, com números)
+    resumo_parts = [
+        f"Foram identificados {total_itens_criticos} itens com média de vendas mensal abaixo de {limite:.0f} caixas."
+    ]
+    if media_geral:
+        resumo_parts.append(f"A média geral desses itens é de {media_geral:.2f} caixas/mês.")
+    if industria_top:
+        resumo_parts.append(f"A indústria {industria_top[0][0]} concentra {industria_top[0][1]} itens críticos ({industria_top[0][1] * 100.0 / total_itens_criticos:.0f}% do total).")
+    
+    resumo = " ".join(resumo_parts)
+    
+    # Principais Achados (3-5 bullets concretos)
+    achados = [
+        f"Os {min(10, total_itens_criticos)} itens com menor média concentram a maior parte do problema de rotação."
+    ]
+    if top_10:
+        pior_item = top_10[0]
+        media_pior = pior_item.get("media_mensal", pior_item.get("media_mensal_caixas", 0)) or 0
+        desc_pior = pior_item.get("descricao", pior_item.get("sku", "N/A"))
+        achados.append(f"Item '{desc_pior}' apresenta média de apenas {media_pior:.2f} caixas/mês, indicando risco de obsolescência.")
+    if industria_top:
+        pct_industria = (industria_top[0][1] * 100.0 / total_itens_criticos) if total_itens_criticos > 0 else 0
+        achados.append(f"Indústria {industria_top[0][0]} concentra {pct_industria:.0f}% dos itens críticos ({industria_top[0][1]} itens), indicando problema estrutural.")
+    if total_itens_criticos > 30:
+        achados.append(f"Volume de {total_itens_criticos} itens com baixa rotação representa oportunidade significativa de limpeza de portfólio.")
+    if media_geral and media_geral < 5.0:
+        achados.append(f"Média geral de {media_geral:.2f} caixas/mês indica rotação muito baixa, com risco de perda de espaço no PDV.")
+    achados.append("Há concentração de itens com baixa rotação em categorias ou indústrias específicas, indicando necessidade de revisão de mix.")
+    
+    # Implicações Comerciais (risco de receita, estoque parado, etc.)
+    implicacoes = [
+        f"Risco de estoque parado e capital empatado em {total_itens_criticos} itens com baixa rotação."
+    ]
+    if media_geral and media_geral < 5.0:
+        implicacoes.append(f"Média de {media_geral:.2f} caixas/mês indica risco de vencimento e obsolescência para produtos perecíveis.")
+    implicacoes.append("Oportunidade de limpeza de portfólio e otimização de mix para focar em itens de maior rotatividade.")
+    if total_itens_criticos > 20:
+        implicacoes.append(f"Volume de {total_itens_criticos} itens requer decisão estratégica: acelerar vendas (push) ou remover do portfólio para liberar espaço no PDV.")
+    implicacoes.append("Perda de oportunidade de margem em produtos estratégicos que poderiam ocupar o espaço desses itens parados.")
+    
+    # Plano de Ação Imediato (formato imperativo, acionável)
+    plano = [
+        f"Criar campanha de empurrão imediata para os {min(20, total_itens_criticos)} SKUs com menor média mensal."
+    ]
+    plano.append("Rever cadastro e mix por cliente para retirar itens que não fazem sentido no sortimento atual.")
+    if industria_top:
+        plano.append(f"Negociar ações de sell-out com a indústria {industria_top[0][0]} para os {industria_top[0][1]} itens críticos identificados.")
+    plano.append("Criar plano de ação por item: itens com potencial recebem push (promoções, treinamento), itens sem potencial são removidos do portfólio.")
+    plano.append("Monitorar evolução trimestralmente e tomar decisão de continuidade baseada em resultados de rotação.")
+    
+    # Gera TOP 10 alvos prioritários
+    top_alvos = []
+    for row in top_10:
+        partes = []
+        
+        if "sku" in row:
+            partes.append(f"SKU: {row['sku']}")
+        elif "produto_id" in row:
+            partes.append(f"Produto {row['produto_id']}")
+        
+        if "descricao" in row:
+            partes.append(row["descricao"])
+        elif "descricao_produto" in row:
+            partes.append(row["descricao_produto"])
+        
+        media = row.get("media_mensal", row.get("media_mensal_caixas", 0)) or 0
+        if media:
             partes.append(f"Média: {media:.2f} caixas/mês")
         
         if "industria" in row:
