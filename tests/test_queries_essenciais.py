@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 # Importa modelos
 from src.dw.models import (
     Base, Cliente, Vendedor, Supervisor, Venda,
-    MetaVendedor, MetaDepartamento
+    MetaVendedor, MetaDepartamento, DimProduto
 )
 
 # Importa queries
@@ -130,7 +130,128 @@ def _popular_dados_teste(session: Session):
     session.add_all([cli1, cli2, cli3])
     session.flush()
     
-    # Vendas (fato_vendas_detalhado)
+    # Produtos (dim_produto) - SKUs canônicos conforme ENGINEERING_QUERIES.md
+    # Nissin
+    prod_2257 = DimProduto(
+        id=1,
+        produto_id=2257,
+        sku="2257",
+        descricao="Nissin Lamen Galinha Caipira 85g",
+        industria="Nissin",
+        marca="Nissin",
+        categoria="Massas instantâneas",
+        ativo=True
+    )
+    prod_2087 = DimProduto(
+        id=2,
+        produto_id=2087,
+        sku="2087",
+        descricao="Nissin Lamen Carne 85g",
+        industria="Nissin",
+        marca="Nissin",
+        categoria="Massas instantâneas",
+        ativo=True
+    )
+    prod_2086 = DimProduto(
+        id=3,
+        produto_id=2086,
+        sku="2086",
+        descricao="Nissin Lamen Frango 85g",
+        industria="Nissin",
+        marca="Nissin",
+        categoria="Massas instantâneas",
+        ativo=True
+    )
+    prod_2101 = DimProduto(
+        id=4,
+        produto_id=2101,
+        sku="2101",
+        descricao="Nissin Lamen Camarão 85g",
+        industria="Nissin",
+        marca="Nissin",
+        categoria="Massas instantâneas",
+        ativo=True
+    )
+    prod_2102 = DimProduto(
+        id=5,
+        produto_id=2102,
+        sku="2102",
+        descricao="Nissin Lamen Picanha 85g",
+        industria="Nissin",
+        marca="Nissin",
+        categoria="Massas instantâneas",
+        ativo=True
+    )
+    prod_2103 = DimProduto(
+        id=6,
+        produto_id=2103,
+        sku="2103",
+        descricao="Nissin Lamen Costela 85g",
+        industria="Nissin",
+        marca="Nissin",
+        categoria="Massas instantâneas",
+        ativo=True
+    )
+    # Mars
+    prod_snickers_dobro = DimProduto(
+        id=7,
+        produto_id=7001,
+        sku="SNICKERS_DOBRO",
+        descricao="Snickers Duplo 45g",
+        industria="Mars",
+        marca="Mars",
+        categoria="Confeitos",
+        ativo=True
+    )
+    prod_snickers_45g = DimProduto(
+        id=8,
+        produto_id=7002,
+        sku="SNICKERS_45G",
+        descricao="Snickers Original 45g",
+        industria="Mars",
+        marca="Mars",
+        categoria="Confeitos",
+        ativo=True
+    )
+    prod_mm_choco = DimProduto(
+        id=9,
+        produto_id=8001,
+        sku="MM_CHOCO_40G",
+        descricao="M&Ms Chocolate 40g",
+        industria="Mars",
+        marca="Mars",
+        categoria="Confeitos",
+        ativo=True
+    )
+    prod_mm_tubo = DimProduto(
+        id=10,
+        produto_id=8002,
+        sku="MM_TUBO",
+        descricao="M&Ms Tubo 45g",
+        industria="Mars",
+        marca="Mars",
+        categoria="Confeitos",
+        ativo=True
+    )
+    # Red Bull
+    prod_rb_zero = DimProduto(
+        id=11,
+        produto_id=9001,
+        sku="RB_ZERO",
+        descricao="Red Bull Zero 250ml",
+        industria="Red Bull",
+        marca="Red Bull",
+        categoria="Bebidas energéticas",
+        ativo=True
+    )
+    session.add_all([
+        prod_2257, prod_2087, prod_2086, prod_2101, prod_2102, prod_2103,
+        prod_snickers_dobro, prod_snickers_45g, prod_mm_choco, prod_mm_tubo,
+        prod_rb_zero
+    ])
+    session.flush()
+    
+    # Vendas (fato_vendas_detalhado) - usando produto_id referenciando dim_produto
     # Cliente 1: comprou em 2024 e 2025
     venda1_2024 = Venda(
         id=1,
@@ -139,8 +260,9 @@ def _popular_dados_teste(session: Session):
         codigo_cliente="CLI001",
         vendedor_id=1,
         supervisor_id=1,
+        produto_id=1,  # prod_2257
         codigo_produto="2257",
-        desc_produto="Produto Nissin 2257",
+        desc_produto="Nissin Lamen Galinha Caipira 85g",
         departamento="NISSIN",
         valor_total_liquido=1000.0,
         qtd_caixas=10,
@@ -153,8 +275,9 @@ def _popular_dados_teste(session: Session):
         codigo_cliente="CLI001",
         vendedor_id=1,
         supervisor_id=1,
+        produto_id=1,  # prod_2257
         codigo_produto="2257",
-        desc_produto="Produto Nissin 2257",
+        desc_produto="Nissin Lamen Galinha Caipira 85g",
         departamento="NISSIN",
         valor_total_liquido=800.0,  # Queda de 20%
         qtd_caixas=8,
@@ -169,8 +292,9 @@ def _popular_dados_teste(session: Session):
         codigo_cliente="CLI002",
         vendedor_id=2,
         supervisor_id=2,
+        produto_id=2,  # prod_2087
         codigo_produto="2087",
-        desc_produto="Produto Nissin 2087",
+        desc_produto="Nissin Lamen Carne 85g",
         departamento="NISSIN",
         valor_total_liquido=2000.0,
         qtd_caixas=20,
@@ -185,23 +309,25 @@ def _popular_dados_teste(session: Session):
         codigo_cliente="CLI003",
         vendedor_id=1,
         supervisor_id=1,
+        produto_id=4,  # prod_2101
         codigo_produto="2101",
-        desc_produto="Produto Nissin 2101",
+        desc_produto="Nissin Lamen Camarão 85g",
         departamento="NISSIN",
         valor_total_liquido=500.0,
         qtd_caixas=5,
         qtd_unidades=50
     )
     
-    # Vendas Mars para positivação
+    # Vendas Mars para positivação (no período 2025-10-01 a 2025-10-31)
     venda_mars = Venda(
         id=5,
-        data_venda=date(2025, 10, 15),
+        data_venda=date(2025, 10, 15),  # Dentro do período de teste
         cliente_id=1,
         codigo_cliente="CLI001",
         vendedor_id=1,
         supervisor_id=1,
-        codigo_produto="MARS001",
+        produto_id=8,  # prod_snickers_45g
+        codigo_produto="SNICKERS_45G",
         desc_produto="Snickers Original 45g",
         departamento="MARS",
         valor_total_liquido=300.0,
@@ -214,10 +340,11 @@ def _popular_dados_teste(session: Session):
     ])
     session.flush()
     
-    # Metas vendedor
+    # Metas vendedor (conforme Q3 - fato_metas_vendedor_mensal.industria)
     meta_vend1_out = MetaVendedor(
         id=1,
         vendedor_id=1,
+        industria="Nissin",  # Campo industria conforme ENGINEERING_QUERIES.md
         ano=2025,
         mes=10,
         mes_ano="2025-10",
@@ -228,6 +355,7 @@ def _popular_dados_teste(session: Session):
     meta_vend2_out = MetaVendedor(
         id=2,
         vendedor_id=2,
+        industria="Mars",  # Campo industria conforme ENGINEERING_QUERIES.md
         ano=2025,
         mes=10,
         mes_ano="2025-10",
@@ -397,7 +525,7 @@ def test_get_rotas_positivacao_industria_happy_path(db_session):
     """Teste happy path: rotas com positivação de indústria."""
     resultado = get_rotas_positivacao_industria(
         db_session,
-        industria="MARS",
+        industria="Mars",  # Industria canônica conforme ENGINEERING_QUERIES.md
         data_inicio="2025-10-01",
         data_fim="2025-10-31"
     )
@@ -414,7 +542,7 @@ def test_get_rotas_positivacao_industria_edge_empty(db_session):
     """Teste edge: indústria sem vendas no período."""
     resultado = get_rotas_positivacao_industria(
         db_session,
-        industria="RED BULL",  # Sem vendas
+        industria="Red Bull",  # Industria canônica (sem vendas no período)
         data_inicio="2025-10-01",
         data_fim="2025-10-31"
     )
@@ -463,7 +591,7 @@ def test_get_clientes_sem_recompra_sku_happy_path(db_session):
     """Teste happy path: clientes sem recompra de SKU."""
     resultado = get_clientes_sem_recompra_sku(
         db_session,
-        sku="Produto Nissin 2257",
+        sku="2257",  # SKU canônico conforme ENGINEERING_QUERIES.md
         meses_janela=6,
         data_referencia="2025-11-17"
     )
@@ -496,7 +624,7 @@ def test_get_clientes_segmento_sem_sku_no_periodo_happy_path(db_session):
     resultado = get_clientes_segmento_sem_sku_no_periodo(
         db_session,
         segmento="conveniencia",
-        sku="Snickers Original 45g",
+        sku="SNICKERS_45G",  # SKU canônico conforme ENGINEERING_QUERIES.md
         data_inicio="2025-10-01",
         data_fim="2025-10-31"
     )
@@ -510,7 +638,7 @@ def test_get_clientes_segmento_sem_sku_no_periodo_edge_empty(db_session):
     resultado = get_clientes_segmento_sem_sku_no_periodo(
         db_session,
         segmento="varejo",
-        sku="Produto Nissin 2087",
+        sku="2087",  # SKU canônico conforme ENGINEERING_QUERIES.md
         data_inicio="2024-09-01",
         data_fim="2024-09-30"
     )
@@ -527,7 +655,7 @@ def test_get_clientes_uma_unidade_industria_mes_happy_path(db_session):
     """Teste happy path: clientes com 1 unidade de indústria."""
     resultado = get_clientes_uma_unidade_industria_mes(
         db_session,
-        industria="NISSIN",
+        industria="Nissin",  # Industria canônica conforme ENGINEERING_QUERIES.md
         ano=2025,
         mes=8
     )
@@ -542,7 +670,7 @@ def test_get_clientes_uma_unidade_industria_mes_edge_empty(db_session):
     """Teste edge: mês sem vendas da indústria."""
     resultado = get_clientes_uma_unidade_industria_mes(
         db_session,
-        industria="AB BRASIL",
+        industria="AB Brasil",  # Industria canônica conforme ENGINEERING_QUERIES.md
         ano=2025,
         mes=10
     )
@@ -559,7 +687,7 @@ def test_get_clientes_sem_sku_no_periodo_happy_path(db_session):
     """Teste happy path: clientes ativos sem positivação de SKU."""
     resultado = get_clientes_sem_sku_no_periodo(
         db_session,
-        sku="Snickers Original 45g",
+        sku="SNICKERS_45G",  # SKU canônico conforme ENGINEERING_QUERIES.md
         data_inicio="2025-10-01",
         data_fim="2025-10-31"
     )
@@ -596,8 +724,9 @@ def test_get_clientes_mix_minimo_nissin_mes_happy_path(db_session):
         codigo_cliente="CLI001",
         vendedor_id=1,
         supervisor_id=1,
+        produto_id=2,  # prod_2087
         codigo_produto="2087",
-        desc_produto="Produto Nissin 2087",
+        desc_produto="Nissin Lamen Carne 85g",
         departamento="NISSIN",
         valor_total_liquido=200.0,
         qtd_caixas=2,
@@ -610,8 +739,9 @@ def test_get_clientes_mix_minimo_nissin_mes_happy_path(db_session):
         codigo_cliente="CLI001",
         vendedor_id=1,
         supervisor_id=1,
+        produto_id=3,  # prod_2086
         codigo_produto="2086",
-        desc_produto="Produto Nissin 2086",
+        desc_produto="Nissin Lamen Frango 85g",
         departamento="NISSIN",
         valor_total_liquido=150.0,
         qtd_caixas=1,
@@ -624,8 +754,9 @@ def test_get_clientes_mix_minimo_nissin_mes_happy_path(db_session):
         codigo_cliente="CLI001",
         vendedor_id=1,
         supervisor_id=1,
+        produto_id=4,  # prod_2101
         codigo_produto="2101",
-        desc_produto="Produto Nissin 2101",
+        desc_produto="Nissin Lamen Camarão 85g",
         departamento="NISSIN",
         valor_total_liquido=100.0,
         qtd_caixas=1,
@@ -703,12 +834,12 @@ def test_queries_nao_quebram_sqlite(db_session):
         lambda: get_clientes_sem_compra_ha_dias(db_session, dias=60, data_referencia=hoje.isoformat()),
         lambda: get_clientes_queda_faturamento_ano_contra_ano(db_session, 2024, 2025, top_n=10),
         lambda: get_industrias_com_mais_vendedores_fora_meta(db_session, 2025, 10, 100.0),
-        lambda: get_rotas_positivacao_industria(db_session, "MARS", "2025-10-01", "2025-10-31"),
+        lambda: get_rotas_positivacao_industria(db_session, "Mars", "2025-10-01", "2025-10-31"),  # Industria canônica
         lambda: get_itens_baixa_media_mensal(db_session, 12, 10.0, hoje.isoformat()),
-        lambda: get_clientes_sem_recompra_sku(db_session, "2257", 6, hoje.isoformat()),
-        lambda: get_clientes_segmento_sem_sku_no_periodo(db_session, "conveniencia", "2257", "2025-10-01", "2025-10-31"),
-        lambda: get_clientes_uma_unidade_industria_mes(db_session, "NISSIN", 2025, 8),
-        lambda: get_clientes_sem_sku_no_periodo(db_session, "2257", "2025-10-01", "2025-10-31"),
+        lambda: get_clientes_sem_recompra_sku(db_session, "2257", 6, hoje.isoformat()),  # SKU canônico
+        lambda: get_clientes_segmento_sem_sku_no_periodo(db_session, "conveniencia", "2257", "2025-10-01", "2025-10-31"),  # SKU canônico
+        lambda: get_clientes_uma_unidade_industria_mes(db_session, "Nissin", 2025, 8),  # Industria canônica
+        lambda: get_clientes_sem_sku_no_periodo(db_session, "2257", "2025-10-01", "2025-10-31"),  # SKU canônico
         lambda: get_clientes_mix_minimo_nissin_mes(db_session, 2025, 10),
         lambda: get_rotas_desempenho_mix_minimo_nissin_mes(db_session, 2025, 10)
     ]

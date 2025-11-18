@@ -83,23 +83,30 @@ REGRAS PARA FILTROS:
 - Se mencionar rota específica: inclua "rota": "ROTA XX" nos filtros.
 - Se mencionar supervisor: inclua "supervisor_id" se conhecido, ou deixe null.
 
-REGRAS PARA TIPO:
+REGRAS PARA TIPO (TODOS OS TIPOS SÃO FIRST-CLASS, NUNCA USE FALLBACK):
+
+TIPOS LEGADOS (para compatibilidade):
 - "meta": perguntas sobre metas e atingimento.
 - "vendas": perguntas sobre faturamento e vendas.
 - "clientes_criticos" ou "churn": perguntas sobre risco de churn.
 - "ranking_vendedores": perguntas sobre ranking/comparação de vendedores (use dimensao_principal = "vendedor").
 - "ranking_produtos": perguntas sobre ranking/comparação de produtos (use dimensao_principal = "categoria" ou "sku").
 - "analise_meta_detalhada": análise multi-dimensional (vendedor + produto + cliente).
-- "clientes_sem_compra": clientes ativos sem compras há N dias (use dimensao_principal = "cliente").
-- "queda_faturamento": queda de faturamento ano contra ano (use dimensao_principal = "cliente").
+
+TIPOS DW OFICIAIS (Q1-Q13 do ENGINEERING_QUERIES.md - USE ESTES QUANDO APLICÁVEL):
+- "clientes_sem_compra": clientes ativos sem compras há N dias (use dimensao_principal = "cliente", filtros: {"dias": N}).
+- "queda_faturamento": queda de faturamento ano contra ano (use dimensao_principal = "cliente", filtros: {"ano_base": YYYY, "ano_comparado": YYYY}).
 - "meta_departamento": indústrias/departamentos com mais vendedores fora da meta (use dimensao_principal = "nenhuma").
-- "positivacao": rotas com melhor/pior positivação de indústria (use dimensao_principal = "rota").
-- "mix": itens com baixa média mensal (use dimensao_principal = "produto").
-- "recompra": clientes sem recompra de SKU (use dimensao_principal = "cliente").
-- "clientes_sem_item": clientes sem positivação de SKU no período (use dimensao_principal = "cliente").
-- "vendas_baixas": clientes com apenas 1 unidade de indústria no mês (use dimensao_principal = "cliente").
-- "mix_nissin": mix mínimo de Nissin (use dimensao_principal = "cliente" ou "rota").
-- "outros": pergunta vaga ou não classificável.
+- "positivacao": rotas com melhor/pior positivação de indústria (use dimensao_principal = "rota", filtros: {"industria": "Mars"|"Nissin"|etc}).
+- "mix": itens com baixa média mensal (use dimensao_principal = "produto", filtros: {"meses_janela": 12, "limite_media": 10.0}).
+- "recompra": clientes sem recompra de SKU (use dimensao_principal = "cliente", filtros: {"sku": "2257"|etc}).
+- "clientes_sem_item": clientes sem positivação de SKU no período (use dimensao_principal = "cliente", filtros: {"sku": "2257"|etc, "segmento": opcional}).
+- "vendas_baixas": clientes com apenas 1 unidade de indústria no mês (use dimensao_principal = "cliente", filtros: {"industria": "Mars"|"Nissin"|etc}).
+- "mix_nissin": mix mínimo de Nissin (use dimensao_principal = "cliente" ou "rota", filtros: {"ano": YYYY, "mes": MM}).
+
+- "outros": APENAS se a pergunta não se encaixar em nenhum tipo acima.
+
+IMPORTANTE: Se a pergunta se encaixar em um dos tipos DW oficiais (clientes_sem_compra, mix_nissin, etc.), USE EXATAMENTE ESSE TIPO. NÃO converta para tipos legados (meta, vendas, etc.). NÃO use "outros" como fallback para perguntas que claramente se encaixam em um tipo DW oficial.
 
 REGRAS PARA DIMENSÕES:
 - "dimensao_principal": dimensão principal da análise.

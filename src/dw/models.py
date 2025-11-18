@@ -273,6 +273,9 @@ class MetaVendedor(Base):
     mes = Column(Integer, nullable=False, index=True)
     mes_ano = Column(String(7), nullable=False, index=True)  # "2024-01" para facilitar queries
     
+    # Indústria (conforme ENGINEERING_QUERIES.md - fato_metas_vendedor_mensal.industria)
+    industria = Column(String(100), nullable=True, index=True)  # Mars, Nissin, Red Bull, AB Brasil
+    
     # Metas de valor
     valor_meta = Column(Float, nullable=False)
     valor_faturado = Column(Float, nullable=True, default=0.0)

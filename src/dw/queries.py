@@ -316,9 +316,7 @@ def get_industrias_com_mais_vendedores_fora_meta(
     Retorna indústrias com mais vendedores fora da meta.
     
     Conforme Q3 em ENGINEERING_QUERIES.md:
-    - Deve usar fato_metas_vendedor_mensal.industria
-    - NOTA: O modelo atual usa MetaDepartamento.departamento como industria
-    - TODO: Migrar para fato_metas_vendedor_mensal quando disponível
+    - Usa fato_metas_vendedor_mensal.industria (MetaVendedor.industria)
     
     Args:
         session: Sessão SQLAlchemy
@@ -332,41 +330,25 @@ def get_industrias_com_mais_vendedores_fora_meta(
         - industria
         - qtd_vendedores_fora_meta
     """
-    # Conforme blueprint: agrupa por industria de fato_metas_vendedor_mensal
-    # NOTA: Usando MetaDepartamento.departamento como industria até migração completa
-    from src.dw.models import MetaDepartamento
-    
-    # Agrega vendedores fora da meta por departamento/industria
-    # Join com MetaDepartamento para obter industria/departamento
+    # Conforme Q3 em ENGINEERING_QUERIES.md:
+    # SELECT fm.industria, COUNT(DISTINCT fm.vendedor_id) AS qtd_vendedores_fora_meta
+    # FROM fato_metas_vendedor_mensal fm
+    # WHERE fm.ano = :ano AND fm.mes = :mes AND fm.atingimento_pct < :atingimento_limite
+    # GROUP BY fm.industria
     query = (
         session.query(
-            MetaDepartamento.departamento.label('industria'),
+            MetaVendedor.industria,
             func.count(func.distinct(MetaVendedor.vendedor_id)).label('qtd_vendedores_fora_meta')
-        )
-        .join(
-            Vendedor,
-            MetaVendedor.vendedor_id == Vendedor.id
-        )
-        .join(
-            Supervisor,
-            Vendedor.supervisor_id == Supervisor.id
-        )
-        .join(
-            MetaDepartamento,
-            and_(
-                MetaDepartamento.supervisor_id == Supervisor.id,
-                MetaDepartamento.ano == ano,
-                MetaDepartamento.mes == mes
-            )
         )
         .filter(
             and_(
                 MetaVendedor.ano == ano,
                 MetaVendedor.mes == mes,
-                MetaVendedor.percentual_atingido_valor < atingimento_limite
+                MetaVendedor.percentual_atingido_valor < atingimento_limite,
+                MetaVendedor.industria.isnot(None)  # Apenas vendedores com industria definida
             )
         )
-        .group_by(MetaDepartamento.departamento)
+        .group_by(MetaVendedor.industria)
     )
     
     # Aplica filtros do Behavior Memory
