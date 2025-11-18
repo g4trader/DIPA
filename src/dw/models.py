@@ -11,6 +11,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
 
 from src.dw.connection import Base
 
@@ -610,3 +612,43 @@ class SkillSugestao(Base):
     
     def __repr__(self):
         return f"<SkillSugestao(id={self.id}, intent='{self.intent_sugerida}', status='{self.status}')>"
+
+
+class BehaviorRule(Base):
+    """
+    Regra de comportamento persistente do DIPAM COPILOT™.
+    
+    Armazena instruções permanentes do Diretor que ajustam o IntentSpec
+    antes da execução no DW (ex.: "excluir pasta verde", "forçar industria Mars").
+    """
+    __tablename__ = "behavior_rules"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    criado_por = Column(String(50), nullable=False, default="diretor")  # diretor, supervisor, sistema
+    ativo = Column(Boolean, default=True, nullable=False, index=True)
+    
+    # Escopo da regra
+    escopo = Column(String(50), nullable=False, index=True)  # global, tipo_intent, tipo_dimensao, tipo_intent_dimensao
+    tipo_intent = Column(String(100), nullable=True, index=True)  # ex.: "mix_nissin", "meta"
+    dimensao_principal = Column(String(50), nullable=True, index=True)  # ex.: "cliente", "rota"
+    
+    # Tipo de regra
+    tipo_regra = Column(String(50), nullable=False, index=True)  # EXCLUIR_FILTRO, FORÇAR_FILTRO, AJUSTAR_LIMIAR
+    
+    # Regra em JSON (campo, operador, valor, limiar, etc.)
+    regra_json = Column(JSON, nullable=False)  # Compatível com SQLite e PostgreSQL
+    
+    # Metadados
+    comentario = Column(Text, nullable=True)
+    fonte_feedback = Column(Text, nullable=True)  # Payload original ou resumo
+    
+    # Índices compostos
+    __table_args__ = (
+        Index('idx_behavior_rule_escopo_ativo', 'escopo', 'ativo'),
+        Index('idx_behavior_rule_tipo_intent_ativo', 'tipo_intent', 'ativo'),
+        Index('idx_behavior_rule_tipo_intent_dimensao', 'tipo_intent', 'dimensao_principal', 'ativo'),
+    )
+    
+    def __repr__(self):
+        return f"<BehaviorRule(id={self.id}, escopo='{self.escopo}', tipo_regra='{self.tipo_regra}', ativo={self.ativo})>"

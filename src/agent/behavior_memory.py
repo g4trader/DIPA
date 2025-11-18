@@ -1,240 +1,175 @@
 """
-Behavior Memory - DIPAM COPILOT™.
+Behavior Memory V1 - DIPAM COPILOT™.
 
 Este módulo gerencia a memória comportamental do agente, armazenando instruções permanentes
-do Diretor (ex.: "ignorar pasta verde") em arquivo JSON.
+do Diretor (ex.: "ignorar pasta verde") em tabela BehaviorRule do banco de dados.
 
 ARQUITETURA:
-- Armazena regras em data/behavior_rules.json
+- Armazena regras em tabela behavior_rules (BehaviorRule model)
 - Não toca dados do DW
 - Apenas ajusta IntentSpec / filtros antes da consulta DW
 - Logs mostrando regras aplicadas
+- Suporta escopos: global, tipo_intent, tipo_dimensao, tipo_intent_dimensao
 """
 
 import json
 import logging
-import os
-from typing import Dict, Any, Optional, List
-from pathlib import Path
+from typing import Dict, Any, Optional, List, Tuple
+from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
+
+from src.dw.models import BehaviorRule
+from src.agent.intent_spec import IntentSpec
 
 logger = logging.getLogger(__name__)
 
-# Caminho do arquivo de regras
-BEHAVIOR_RULES_FILE = Path(__file__).parent.parent.parent / "data" / "behavior_rules.json"
 
-
-def _garantir_arquivo_existe() -> None:
-    """Garante que o arquivo behavior_rules.json existe."""
-    BEHAVIOR_RULES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if not BEHAVIOR_RULES_FILE.exists():
-        with open(BEHAVIOR_RULES_FILE, 'w', encoding='utf-8') as f:
-            json.dump({"regras_por_tipo_analise": {}}, f, indent=2, ensure_ascii=False)
-        logger.info(f"[behavior_memory] Arquivo criado: {BEHAVIOR_RULES_FILE}")
-
-
-def carregar_regras() -> Dict[str, Any]:
+def aplicar_regras_ao_intent(
+    intent_spec: IntentSpec,
+    session_dw: Session
+) -> Tuple[IntentSpec, List[Dict[str, Any]]]:
     """
-    Carrega regras comportamentais do arquivo JSON.
+    Aplica regras comportamentais persistentes ao IntentSpec.
     
-    Returns:
-        dict com estrutura:
-        {
-            "regras_por_tipo_analise": {
-                "analise_meta_mensal": {
-                    "excluir_carteiras": ["pasta_verde"],
-                    "comentario": "..."
-                },
-                ...
-            }
-        }
-    """
-    _garantir_arquivo_existe()
-    
-    try:
-        with open(BEHAVIOR_RULES_FILE, 'r', encoding='utf-8') as f:
-            regras = json.load(f)
-        
-        logger.debug(f"[behavior_memory] Regras carregadas: {len(regras.get('regras_por_tipo_analise', {}))} tipos")
-        return regras
-    except Exception as e:
-        logger.error(f"[behavior_memory] Erro ao carregar regras: {e}")
-        return {"regras_por_tipo_analise": {}}
-
-
-def salvar_regras(regras: Dict[str, Any]) -> None:
-    """
-    Salva regras comportamentais no arquivo JSON.
+    Busca na tabela BehaviorRule todas as regras ativo=True compatíveis com o IntentSpec,
+    aplica-as na ordem de prioridade e retorna o IntentSpec modificado.
     
     Args:
-        regras: Dict com estrutura de regras
-    """
-    _garantir_arquivo_existe()
-    
-    try:
-        with open(BEHAVIOR_RULES_FILE, 'w', encoding='utf-8') as f:
-            json.dump(regras, f, indent=2, ensure_ascii=False)
-        
-        logger.info(f"[behavior_memory] Regras salvas: {len(regras.get('regras_por_tipo_analise', {}))} tipos")
-    except Exception as e:
-        logger.error(f"[behavior_memory] Erro ao salvar regras: {e}")
-        raise
-
-
-def registrar_feedback(
-    tipo_analise: str,
-    tipo_regra: str,
-    valor: Any,
-    comentario: Optional[str] = None,
-    payload_opcional: Optional[Dict[str, Any]] = None
-) -> None:
-    """
-    Registra feedback do Diretor como regra comportamental permanente.
-    
-    Args:
-        tipo_analise: Tipo de análise (ex.: "analise_meta_mensal", "analise_clientes_queda")
-        tipo_regra: Tipo de regra (ex.: "excluir_carteira", "priorizar_rota")
-        valor: Valor da regra (ex.: "pasta_verde", ["rota_22", "rota_75"])
-        comentario: Comentário opcional explicando a regra
-        payload_opcional: Dados adicionais opcionais
-        
-    Exemplo:
-        >>> registrar_feedback(
-        ...     "analise_meta_mensal",
-        ...     "excluir_carteira",
-        ...     "pasta_verde",
-        ...     "Regra definida pelo Diretor em 2025-11-17"
-        ... )
-    """
-    regras = carregar_regras()
-    
-    # Inicializa estrutura se não existir
-    if tipo_analise not in regras["regras_por_tipo_analise"]:
-        regras["regras_por_tipo_analise"][tipo_analise] = {}
-    
-    # Adiciona ou atualiza regra
-    if tipo_regra not in regras["regras_por_tipo_analise"][tipo_analise]:
-        regras["regras_por_tipo_analise"][tipo_analise][tipo_regra] = []
-    
-    # Se valor é lista, adiciona cada item
-    if isinstance(valor, list):
-        regras["regras_por_tipo_analise"][tipo_analise][tipo_regra].extend(valor)
-        # Remove duplicatas
-        regras["regras_por_tipo_analise"][tipo_analise][tipo_regra] = list(set(
-            regras["regras_por_tipo_analise"][tipo_analise][tipo_regra]
-        ))
-    else:
-        # Se valor não está na lista, adiciona
-        if valor not in regras["regras_por_tipo_analise"][tipo_analise][tipo_regra]:
-            regras["regras_por_tipo_analise"][tipo_analise][tipo_regra].append(valor)
-    
-    # Adiciona comentário se fornecido
-    if comentario:
-        regras["regras_por_tipo_analise"][tipo_analise]["comentario"] = comentario
-    
-    # Adiciona payload opcional
-    if payload_opcional:
-        regras["regras_por_tipo_analise"][tipo_analise].update(payload_opcional)
-    
-    salvar_regras(regras)
-    
-    logger.info(
-        f"[behavior_memory] Feedback registrado: "
-        f"tipo_analise={tipo_analise}, tipo_regra={tipo_regra}, valor={valor}"
-    )
-
-
-def aplicar_regras_ao_intent(intent_spec: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Aplica regras comportamentais ao IntentSpec, ajustando filtros conforme necessário.
-    
-    Args:
-        intent_spec: IntentSpec como dict (ou objeto com .to_dict())
+        intent_spec: IntentSpec a ser ajustado
+        session_dw: Sessão SQLAlchemy para acessar BehaviorRule
         
     Returns:
-        IntentSpec ajustado com filtros aplicados
-        
-    Exemplo:
-        >>> intent = {"tipo": "analise_meta_mensal", "filtros": {}}
-        >>> intent_ajustado = aplicar_regras_ao_intent(intent)
-        >>> intent_ajustado["filtros"]  # Pode conter "excluir_carteiras": ["pasta_verde"]
+        (intent_spec_modificado, regras_aplicadas)
+        - intent_spec_modificado: IntentSpec com filtros ajustados
+        - regras_aplicadas: Lista de dicts com {id, tipo_regra, escopo, resumo}
     """
-    # Converte para dict se necessário
-    if hasattr(intent_spec, 'to_dict'):
-        intent_dict = intent_spec.to_dict()
-    else:
-        intent_dict = intent_spec.copy()
+    tipo_intent = intent_spec.tipo
+    dimensao_principal = intent_spec.dimensao_principal
     
-    # Carrega regras
-    regras = carregar_regras()
+    # Busca regras compatíveis, ordenadas por prioridade
+    regras_compatíveis = []
     
-    # Determina tipo de análise baseado no intent
-    tipo_intent = intent_dict.get("tipo", "")
+    # 1. Escopo tipo_intent_dimensao (maior prioridade)
+    regras_tipo_dimensao = session_dw.query(BehaviorRule).filter(
+        and_(
+            BehaviorRule.ativo == True,
+            BehaviorRule.escopo == "tipo_intent_dimensao",
+            BehaviorRule.tipo_intent == tipo_intent,
+            BehaviorRule.dimensao_principal == dimensao_principal
+        )
+    ).all()
+    regras_compatíveis.extend([(r, 1) for r in regras_tipo_dimensao])
     
-    # Mapeia tipo de intent para tipo de análise
-    mapeamento_tipo = {
-        "meta": "analise_meta_mensal",
-        "analise_meta_detalhada": "analise_meta_mensal",
-        "clientes_criticos": "analise_clientes_queda",
-        "churn": "analise_clientes_queda",
-        "vendas": "analise_vendas",
-        "ranking_vendedores": "analise_meta_mensal",
-        # Novos tipos do ENGINEERING_QUERIES.md
-        "clientes_sem_compra": "analise_clientes_queda",
-        "queda_faturamento": "analise_clientes_queda",
-        "meta_departamento": "analise_meta_mensal",
-        "positivacao": "analise_positivacao",
-        "mix": "analise_mix",
-        "recompra": "analise_recompra",
-        "clientes_sem_item": "analise_clientes_queda",
-        "vendas_baixas": "analise_vendas",
-        "mix_nissin": "analise_mix"
-    }
+    # 2. Escopo tipo_intent
+    regras_tipo = session_dw.query(BehaviorRule).filter(
+        and_(
+            BehaviorRule.ativo == True,
+            BehaviorRule.escopo == "tipo_intent",
+            BehaviorRule.tipo_intent == tipo_intent
+        )
+    ).all()
+    regras_compatíveis.extend([(r, 2) for r in regras_tipo])
     
-    tipo_analise = mapeamento_tipo.get(tipo_intent, tipo_intent)
+    # 3. Escopo tipo_dimensao
+    regras_dimensao = session_dw.query(BehaviorRule).filter(
+        and_(
+            BehaviorRule.ativo == True,
+            BehaviorRule.escopo == "tipo_dimensao",
+            BehaviorRule.dimensao_principal == dimensao_principal
+        )
+    ).all()
+    regras_compatíveis.extend([(r, 3) for r in regras_dimensao])
     
-    # Se não há regras para este tipo, retorna sem alterações
-    if tipo_analise not in regras["regras_por_tipo_analise"]:
-        return intent_dict
+    # 4. Escopo global (menor prioridade)
+    regras_global = session_dw.query(BehaviorRule).filter(
+        and_(
+            BehaviorRule.ativo == True,
+            BehaviorRule.escopo == "global"
+        )
+    ).all()
+    regras_compatíveis.extend([(r, 4) for r in regras_global])
     
-    regras_tipo = regras["regras_por_tipo_analise"][tipo_analise]
+    # Ordena por prioridade (menor número = maior prioridade)
+    # IMPORTANTE: Aplicamos na ordem inversa (maior prioridade por último) para que sobrescreva as anteriores
+    regras_compatíveis.sort(key=lambda x: x[1], reverse=True)  # Inverte: maior prioridade (1) por último
     
-    # Inicializa filtros se não existir
-    if "filtros" not in intent_dict:
-        intent_dict["filtros"] = {}
-    
+    # Aplica regras na ordem (menor prioridade primeiro, maior prioridade por último para sobrescrever)
+    intent_spec_modificado = intent_spec
     regras_aplicadas = []
     
-    # Aplica regra "excluir_carteira"
-    if "excluir_carteira" in regras_tipo:
-        carteiras_excluir = regras_tipo["excluir_carteira"]
-        if isinstance(carteiras_excluir, list):
-            if "excluir_carteiras" not in intent_dict["filtros"]:
-                intent_dict["filtros"]["excluir_carteiras"] = []
-            intent_dict["filtros"]["excluir_carteiras"].extend(carteiras_excluir)
-            regras_aplicadas.append(f"Excluindo carteiras: {', '.join(carteiras_excluir)}")
-    
-    # Aplica regra "excluir_rotas"
-    if "excluir_rotas" in regras_tipo:
-        rotas_excluir = regras_tipo["excluir_rotas"]
-        if isinstance(rotas_excluir, list):
-            if "excluir_rotas" not in intent_dict["filtros"]:
-                intent_dict["filtros"]["excluir_rotas"] = []
-            intent_dict["filtros"]["excluir_rotas"].extend(rotas_excluir)
-            regras_aplicadas.append(f"Excluindo rotas: {', '.join(rotas_excluir)}")
-    
-    # Aplica regra "priorizar_rotas"
-    if "priorizar_rotas" in regras_tipo:
-        rotas_priorizar = regras_tipo["priorizar_rotas"]
-        if isinstance(rotas_priorizar, list):
-            intent_dict["filtros"]["priorizar_rotas"] = rotas_priorizar
-            regras_aplicadas.append(f"Priorizando rotas: {', '.join(rotas_priorizar)}")
+    for regra, prioridade in regras_compatíveis:
+        regra_json = regra.regra_json if isinstance(regra.regra_json, dict) else {}
+        
+        if regra.tipo_regra == "EXCLUIR_FILTRO":
+            campo = regra_json.get("campo")
+            operador = regra_json.get("operador", "!=")
+            valor = regra_json.get("valor")
+            
+            if campo and valor:
+                # Adiciona filtro de exclusão
+                if campo == "pasta":
+                    if "excluir_pastas" not in intent_spec_modificado.filtros:
+                        intent_spec_modificado.filtros["excluir_pastas"] = []
+                    if valor not in intent_spec_modificado.filtros["excluir_pastas"]:
+                        intent_spec_modificado.filtros["excluir_pastas"].append(valor)
+                elif campo == "rota":
+                    if "excluir_rotas" not in intent_spec_modificado.filtros:
+                        intent_spec_modificado.filtros["excluir_rotas"] = []
+                    if valor not in intent_spec_modificado.filtros["excluir_rotas"]:
+                        intent_spec_modificado.filtros["excluir_rotas"].append(valor)
+                else:
+                    # Campo genérico
+                    chave_excluir = f"excluir_{campo}"
+                    if chave_excluir not in intent_spec_modificado.filtros:
+                        intent_spec_modificado.filtros[chave_excluir] = []
+                    if valor not in intent_spec_modificado.filtros[chave_excluir]:
+                        intent_spec_modificado.filtros[chave_excluir].append(valor)
+                
+                regras_aplicadas.append({
+                    "id": regra.id,
+                    "tipo_regra": regra.tipo_regra,
+                    "escopo": regra.escopo,
+                    "resumo": f"Excluir {campo}={valor}"
+                })
+        
+        elif regra.tipo_regra == "FORÇAR_FILTRO":
+            campo = regra_json.get("campo")
+            valor = regra_json.get("valor")
+            
+            if campo and valor:
+                # Força o filtro (sobrescreve se existir)
+                intent_spec_modificado.filtros[campo] = valor
+                
+                regras_aplicadas.append({
+                    "id": regra.id,
+                    "tipo_regra": regra.tipo_regra,
+                    "escopo": regra.escopo,
+                    "resumo": f"Forçar {campo}={valor}"
+                })
+        
+        elif regra.tipo_regra == "AJUSTAR_LIMIAR":
+            campo = regra_json.get("campo")
+            limiar = regra_json.get("limiar")
+            
+            if campo and limiar is not None:
+                # Ajusta limiar (ex.: limite_media, atingimento_limite)
+                intent_spec_modificado.filtros[campo] = limiar
+                
+                regras_aplicadas.append({
+                    "id": regra.id,
+                    "tipo_regra": regra.tipo_regra,
+                    "escopo": regra.escopo,
+                    "resumo": f"Ajustar {campo}={limiar}"
+                })
     
     # Loga regras aplicadas
     if regras_aplicadas:
         logger.info(
-            f"[behavior_memory] Regras aplicadas ao intent {tipo_intent}: "
-            f"{', '.join(regras_aplicadas)}"
+            f"[behavior_memory] {len(regras_aplicadas)} regra(s) aplicada(s) ao intent "
+            f"tipo={tipo_intent}, dimensao={dimensao_principal}"
         )
+        for regra_info in regras_aplicadas:
+            logger.debug(f"[behavior_memory] - {regra_info['resumo']} (id={regra_info['id']}, escopo={regra_info['escopo']})")
     
-    return intent_dict
+    return intent_spec_modificado, regras_aplicadas
 

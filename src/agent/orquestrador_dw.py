@@ -548,11 +548,11 @@ def executar_intent_spec(
     # PASSO 1: Aplica período padrão se necessário
     intent_spec = _aplicar_periodo_padrao(intent_spec)
     
-    # PASSO 1.5: Aplica behavior memory (regras comportamentais do JSON)
-    intent_dict = aplicar_regras_ao_intent(intent_spec)
-    # Atualiza intent_spec com filtros ajustados
-    if isinstance(intent_dict, dict) and "filtros" in intent_dict:
-        intent_spec.filtros.update(intent_dict["filtros"])
+    # PASSO 1.5: Aplica behavior memory (regras persistentes do banco)
+    intent_spec, regras_behavior_aplicadas = aplicar_regras_ao_intent(intent_spec, session)
+    # regras_behavior_aplicadas será incluído em detalhes_tecnicos
+    if not regras_behavior_aplicadas:
+        regras_behavior_aplicadas = []  # Garante que é sempre uma lista
     
     # PASSO 1.6: Aplica instruções comportamentais e regras de feedback (antes de validar)
     filtros_sql = intent_spec.filtros.copy()
@@ -732,6 +732,7 @@ def executar_intent_spec(
     
     # PASSO 6.5: Detecta atingimento abaixo de meta e gera análise de causas
     analise_causas = {}
+    causas_detector = {}  # Inicializa causas_detector
     if status == "ok" and dados_normalizados:
         # Prepara dados_dw para detecção
         dados_dw_para_deteccao = {
@@ -770,6 +771,14 @@ def executar_intent_spec(
                     logger.error(f"[orquestrador_dw] Erro ao gerar análise de causas: {e}")
     
     # PASSO 7: Envelopa resposta
+    # Prepara detalhes_tecnicos com regras aplicadas
+    detalhes_tecnicos = {
+        "intent_spec": intent_spec.to_dict(),
+        "filtros_aplicados": intent_spec.filtros.copy(),
+        "regras_behavior_aplicadas": regras_behavior_aplicadas,  # Regras persistentes do BehaviorRule
+        "regras_instrucoes_aplicadas": regras_aplicadas  # Regras de instruções comportamentais (legado)
+    }
+    
     resposta = {
         "status": status,
         "mensagem": mensagem,
@@ -779,9 +788,10 @@ def executar_intent_spec(
             "fim": intent_spec.periodo_fim
         },
         "dados": dados_normalizados,
-        "regras_aplicadas": regras_aplicadas,
+        "regras_aplicadas": regras_aplicadas,  # Mantido para compatibilidade
         "analise_causas": analise_causas,  # Análise de causas quando meta não batida (legado)
-        "causas_detector": causas_detector  # Causas detectadas pelo novo módulo
+        "causas_detector": causas_detector,  # Causas detectadas pelo novo módulo
+        "detalhes_tecnicos": detalhes_tecnicos  # Detalhes técnicos incluindo regras behavior
     }
     
     logger.info(

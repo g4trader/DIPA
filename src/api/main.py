@@ -1406,6 +1406,138 @@ async def ml_status():
         }
 
 
+class BehaviorRuleRequest(BaseModel):
+    """Modelo de requisição para endpoint /feedback/behavior (Behavior Memory V1)."""
+    tipo_regra: str = Field(..., description="Tipo de regra: EXCLUIR_FILTRO, FORÇAR_FILTRO, AJUSTAR_LIMIAR")
+    escopo: str = Field(..., description="Escopo: global, tipo_intent, tipo_dimensao, tipo_intent_dimensao")
+    tipo_intent: Optional[str] = Field(None, description="Tipo de intent (ex.: 'mix_nissin', 'meta')")
+    dimensao_principal: Optional[str] = Field(None, description="Dimensão principal (ex.: 'cliente', 'rota')")
+    regra: Dict[str, Any] = Field(..., description="Regra em JSON (campo, operador, valor, limiar, etc.)")
+    comentario: Optional[str] = Field(None, description="Comentário explicando a regra")
+    fonte_feedback: Optional[str] = Field(None, description="Payload original ou resumo")
+    criado_por: Optional[str] = Field("diretor", description="Quem criou a regra (diretor, supervisor, sistema)")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "tipo_regra": "EXCLUIR_FILTRO",
+                "escopo": "tipo_intent",
+                "tipo_intent": "mix_nissin",
+                "dimensao_principal": None,
+                "regra": {
+                    "campo": "pasta",
+                    "operador": "!=",
+                    "valor": "VERDE"
+                },
+                "comentario": "pedido do diretor: excluir pasta verde nesse tipo de análise",
+                "fonte_feedback": "texto original ou contexto opcional"
+            }
+        }
+
+
+@app.post("/feedback/behavior", response_model=Dict[str, Any])
+async def feedback_behavior_rule(
+    request: BehaviorRuleRequest,
+    session: Session = Depends(get_db_session)
+):
+    """
+    Endpoint para registrar regras de comportamento persistentes (Behavior Memory V1).
+    
+    Cria uma nova BehaviorRule que será aplicada automaticamente em consultas futuras
+    compatíveis com o escopo especificado.
+    
+    Args:
+        request: Requisição com dados da regra
+        session: Sessão de banco de dados (injetada)
+        
+    Returns:
+        Dict com status, behavior_rule_id e mensagem
+        
+    Example:
+        POST /feedback/behavior
+        {
+            "tipo_regra": "EXCLUIR_FILTRO",
+            "escopo": "tipo_intent",
+            "tipo_intent": "mix_nissin",
+            "regra": {
+                "campo": "pasta",
+                "operador": "!=",
+                "valor": "VERDE"
+            },
+            "comentario": "pedido do diretor: excluir pasta verde nesse tipo de análise"
+        }
+    """
+    try:
+        # Valida tipo_regra
+        tipos_validos = ["EXCLUIR_FILTRO", "FORÇAR_FILTRO", "AJUSTAR_LIMIAR"]
+        if request.tipo_regra not in tipos_validos:
+            raise HTTPException(
+                status_code=400,
+                detail=f"tipo_regra deve ser um de: {tipos_validos}"
+            )
+        
+        # Valida escopo
+        escopos_validos = ["global", "tipo_intent", "tipo_dimensao", "tipo_intent_dimensao"]
+        if request.escopo not in escopos_validos:
+            raise HTTPException(
+                status_code=400,
+                detail=f"escopo deve ser um de: {escopos_validos}"
+            )
+        
+        # Valida que tipo_intent e dimensao_principal são fornecidos quando necessário
+        if request.escopo in ["tipo_intent", "tipo_intent_dimensao"] and not request.tipo_intent:
+            raise HTTPException(
+                status_code=400,
+                detail=f"tipo_intent é obrigatório para escopo '{request.escopo}'"
+            )
+        
+        if request.escopo in ["tipo_dimensao", "tipo_intent_dimensao"] and not request.dimensao_principal:
+            raise HTTPException(
+                status_code=400,
+                detail=f"dimensao_principal é obrigatória para escopo '{request.escopo}'"
+            )
+        
+        # Cria BehaviorRule
+        from src.dw.models import BehaviorRule
+        
+        behavior_rule = BehaviorRule(
+            criado_por=request.criado_por or "diretor",
+            ativo=True,
+            escopo=request.escopo,
+            tipo_intent=request.tipo_intent,
+            dimensao_principal=request.dimensao_principal,
+            tipo_regra=request.tipo_regra,
+            regra_json=request.regra,
+            comentario=request.comentario,
+            fonte_feedback=request.fonte_feedback
+        )
+        
+        session.add(behavior_rule)
+        session.commit()
+        session.refresh(behavior_rule)
+        
+        logger.info(
+            f"[feedback/behavior] Regra criada: id={behavior_rule.id}, "
+            f"escopo={request.escopo}, tipo_regra={request.tipo_regra}"
+        )
+        
+        return {
+            "status": "ok",
+            "behavior_rule_id": behavior_rule.id,
+            "mensagem": "Regra de comportamento registrada com sucesso e será aplicada nas próximas consultas compatíveis."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[feedback/behavior] Erro ao criar regra: {e}")
+        session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao registrar regra de comportamento: {str(e)}"
+        )
+
+
 @app.post("/feedback", response_model=Dict[str, Any])
 async def feedback_interacao_fase4(
     feedback: FeedbackRequestFase4 = ...,
