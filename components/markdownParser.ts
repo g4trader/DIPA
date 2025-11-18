@@ -103,6 +103,8 @@ export function parseMarkdownExecutivo(markdown: string): ParsedMarkdown {
         result.alvosPrioritarios.push(content);
         
         // Tenta também parsear como objeto se tiver formato "Chave: Valor | Chave2: Valor2"
+        // Nota: O parser preserva TODOS os campos que vêm do backend (incluindo "Rota" se presente).
+        // Se a coluna "Rota" aparecer vazia na tabela, é porque o backend não está enviando esse campo.
         if (content.includes("|") || content.includes(":")) {
           const parts = content.split("|").map(p => p.trim());
           const obj: Record<string, any> = {};

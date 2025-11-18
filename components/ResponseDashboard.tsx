@@ -247,7 +247,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
       {/* 3. Big Numbers Cards (KPIs) */}
       {bigNumberKPIs.length > 0 && (
         <div className="mb-10">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {bigNumberKPIs.map((kpi, idx) => (
               <BigNumberCard
                 key={idx}
@@ -262,12 +262,12 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
         </div>
       )}
       
-      {/* 4. Insights Blocks (3 colunas desktop, 1 coluna mobile) */}
+      {/* 4. Insights Blocks (sempre empilhados verticalmente) */}
       {(parsedMarkdown?.principaisAchados?.length > 0 || 
         parsedMarkdown?.implicacoesComerciais?.length > 0 || 
         parsedMarkdown?.planoAcao?.length > 0) && (
         <div className="mb-10">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-fr">
+          <div className="mt-8 flex flex-col gap-6">
             {parsedMarkdown.principaisAchados && parsedMarkdown.principaisAchados.length > 0 && (
               <InsightsBlock
                 title="Principais Achados"
@@ -316,6 +316,11 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
           {/* Tabela de alvos se disponível */}
           {parsedMarkdown.topAlvos && parsedMarkdown.topAlvos.length > 0 && (
             <div className="mt-6">
+              {/* 
+                Nota: A coluna "Rota" está vazia porque o backend ainda não envia essa informação
+                em topAlvos. Quando o DW expuser a dimensão de rota, basta preencher aqui.
+                O parser (markdownParser.ts) preserva todos os campos que vêm do backend.
+              */}
               <DataTable
                 rows={parsedMarkdown.topAlvos}
                 title="Alvos Prioritários — Detalhamento"
