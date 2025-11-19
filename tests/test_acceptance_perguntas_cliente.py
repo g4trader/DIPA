@@ -15,13 +15,17 @@ import pytest
 import os
 import requests
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # Marca testes como aceitação
 pytestmark = pytest.mark.acceptance
 
 # URL do backend (pode ser configurada via variável de ambiente)
-BACKEND_URL = os.getenv("DIPAM_BACKEND_URL", "http://localhost:8000")
+# Fallback: Cloud Run público fornecido pelo time de engenharia
+BACKEND_URL = os.getenv(
+    "DIPAM_BACKEND_URL",
+    "https://dipam-ai-backend-642830139828.us-central1.run.app"
+)
 
 
 # Lista das 13 perguntas essenciais do cliente
@@ -94,6 +98,10 @@ PERGUNTAS_CLIENTE = [
 ]
 
 
+# Intents onde o frontend depende explicitamente de respostaMarkdown
+RESPOSTA_MARKDOWN_OBRIGATORIA = {"Q1", "Q2", "Q5", "Q12", "Q13"}
+
+
 def chamar_backend(pergunta: str, papel: str = "diretor") -> Dict[str, Any]:
     """
     Chama o endpoint /ask do backend.
@@ -119,6 +127,22 @@ def chamar_backend(pergunta: str, papel: str = "diretor") -> Dict[str, Any]:
         pytest.fail(f"Erro ao chamar backend: {e}")
 
 
+def obter_resposta_markdown(resposta: Dict[str, Any]) -> Optional[str]:
+    """Retorna o texto markdown prioritário se existir."""
+
+    structured = resposta.get("structured", {})
+    if isinstance(structured, dict):
+        texto = structured.get("respostaMarkdown")
+        if texto:
+            return texto
+
+    texto = resposta.get("respostaMarkdown")
+    if texto:
+        return texto
+
+    return None
+
+
 def extrair_texto_resposta(resposta: Dict[str, Any]) -> str:
     """
     Extrai o texto completo da resposta (markdown ou texto executivo).
@@ -134,15 +158,10 @@ def extrair_texto_resposta(resposta: Dict[str, Any]) -> str:
     Returns:
         Texto completo da resposta
     """
-    # Tenta respostaMarkdown direto
-    if "respostaMarkdown" in resposta:
-        return resposta["resumoExecutivo"] + "\n\n" + resposta.get("resumoMarkdown", "")
-    
-    # Tenta structured.respostaMarkdown
-    structured = resposta.get("structured", {})
-    if isinstance(structured, dict) and "respostaMarkdown" in structured:
-        return structured["respostaMarkdown"]
-    
+    markdown = obter_resposta_markdown(resposta)
+    if markdown:
+        return markdown
+
     # Fallback: usa resumoExecutivo (sempre existe)
     return resposta.get("resumoExecutivo", "")
 
@@ -212,9 +231,15 @@ def test_pergunta_cliente_pipeline_completo(pergunta_data: Dict[str, Any]):
     resumo_executivo = resposta.get("resumoExecutivo", "")
     assert resumo_executivo and len(resumo_executivo.strip()) > 0, \
         f"{pergunta_id}: Resumo executivo está vazio"
-    
+
     # Validação 6: Extrai texto completo e verifica seções obrigatórias
-    texto_completo = extrair_texto_resposta(resposta)
+    markdown_texto = obter_resposta_markdown(resposta)
+
+    if pergunta_id in RESPOSTA_MARKDOWN_OBRIGATORIA:
+        assert markdown_texto and markdown_texto.strip(), \
+            f"{pergunta_id}: respostaMarkdown não foi preenchido para intent crítica"
+
+    texto_completo = markdown_texto or extrair_texto_resposta(resposta)
     secoes_encontradas = verificar_secoes_obrigatorias(texto_completo)
     
     # Resumo Executivo deve sempre existir (já validado acima, mas verifica no texto completo)
