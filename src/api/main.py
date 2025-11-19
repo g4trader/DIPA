@@ -42,7 +42,7 @@ app = FastAPI(
 # REGRA CRÍTICA: NÃO colocar barra no final das origens (ex.: NUNCA usar "https://dipam.smartiasolutions.com.br/")
 allowed_origins = [
     # Produção
-    "https://dipam.smartiasolutions.com.br",
+    "https://dipam.smartiasolutions.com.br",  # URL correta
     "https://dipam-copilot-frontend-6arhlm3mha-uc.a.run.app",
     # Local development
     "http://localhost:3000",
@@ -71,13 +71,20 @@ app.add_middleware(
 )
 
 # Middleware CORS manual por cima de TUDO (segunda camada - garante CORS mesmo em erros)
+# IMPORTANTE: Este middleware NÃO interfere com requisições OPTIONS (preflight)
+# porque os handlers OPTIONS já adicionam os headers corretos
 @app.middleware("http")
 async def add_cors_headers(request: Request, call_next):
     """
     Middleware HTTP que SEMPRE adiciona headers CORS, mesmo em erros.
     Esta é uma camada extra de segurança para garantir que TODAS as respostas
     (200, 4xx, 5xx, 503) incluam headers CORS corretos.
+    
+    IMPORTANTE: Requisições OPTIONS (preflight) são tratadas pelos handlers específicos
+    e não passam por este middleware para adicionar headers duplicados.
     """
+    # Se for requisição OPTIONS, deixa os handlers específicos tratarem
+    # (mas ainda processa para garantir que erros também tenham CORS)
     try:
         response = await call_next(request)
     except Exception as exc:
@@ -93,7 +100,13 @@ async def add_cors_headers(request: Request, call_next):
             media_type="application/json",
         )
     
-    # Adiciona headers CORS se a origem for permitida
+    # IMPORTANTE: Se a resposta já tem Access-Control-Allow-Origin (vindo de handler OPTIONS),
+    # não sobrescreve para evitar conflitos
+    if "Access-Control-Allow-Origin" in response.headers:
+        # Headers CORS já foram adicionados pelo handler OPTIONS ou CORSMiddleware
+        return response
+    
+    # Adiciona headers CORS se a origem for permitida (para respostas que não são OPTIONS)
     origin = request.headers.get("origin")
     if origin:
         if origin in allowed_origins:
@@ -108,7 +121,7 @@ async def add_cors_headers(request: Request, call_next):
             else:
                 response.headers["Vary"] = "Origin"
         else:
-            logger.warning(f"[CORS] Origem não permitida: {origin} (permitidas: {allowed_origins})")
+            logger.warning(f"[CORS middleware] Origem não permitida: {origin} (permitidas: {allowed_origins})")
     else:
         # Se não há origin header, pode ser uma requisição same-origin ou sem CORS
         # Não adiciona headers CORS neste caso
@@ -116,19 +129,54 @@ async def add_cors_headers(request: Request, call_next):
     
     return response
 
+# Handler OPTIONS específico para /ask (DEVE vir ANTES do handler genérico)
+# IMPORTANTE: Handlers específicos têm prioridade sobre genéricos no FastAPI
+@app.options("/ask")
+async def options_ask(request: Request):
+    """
+    Handler OPTIONS específico para /ask - garante que preflight funcione corretamente.
+    Este handler tem prioridade sobre o handler genérico.
+    """
+    origin = request.headers.get("origin")
+    request_method = request.headers.get("Access-Control-Request-Method", "POST")
+    request_headers = request.headers.get("Access-Control-Request-Headers", "Content-Type")
+    
+    logger.info(f"[CORS OPTIONS /ask] origin={origin}, method={request_method}, headers={request_headers}")
+    
+    response = Response(status_code=200)
+    
+    # IMPORTANTE: Sempre adiciona headers CORS se a origem estiver na lista
+    if origin and origin in allowed_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS, GET"
+        response.headers["Access-Control-Allow-Headers"] = request_headers or "Content-Type, Authorization"
+        response.headers["Access-Control-Max-Age"] = "600"
+        response.headers["Vary"] = "Origin"
+        logger.info(f"[CORS OPTIONS /ask] ✅ Headers CORS adicionados para origem: {origin}")
+    else:
+        logger.warning(f"[CORS OPTIONS /ask] ❌ Origem não permitida: {origin} (permitidas: {allowed_origins})")
+        # Mesmo assim, adiciona headers básicos (mas sem Access-Control-Allow-Origin para manter segurança)
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS, GET"
+        response.headers["Access-Control-Allow-Headers"] = request_headers or "Content-Type, Authorization"
+        response.headers["Vary"] = "Origin"
+    
+    return response
+
 # Handler global para OPTIONS (preflight) - funciona para QUALQUER rota
+# IMPORTANTE: Este handler genérico é usado apenas se não houver handler específico
 @app.options("/{path:path}")
 async def options_cors_handler(path: str, request: Request):
     """
     Handler genérico de preflight CORS para qualquer rota.
-    Este endpoint captura TODAS as requisições OPTIONS e retorna headers CORS corretos.
+    Este endpoint captura TODAS as requisições OPTIONS que não têm handler específico.
     """
     origin = request.headers.get("origin")
     request_method = request.headers.get("Access-Control-Request-Method", "POST")
     request_headers = request.headers.get("Access-Control-Request-Headers", "Content-Type")
     
     # Log para debug
-    logger.info(f"[CORS OPTIONS] path={path}, origin={origin}, method={request_method}")
+    logger.info(f"[CORS OPTIONS genérico] path={path}, origin={origin}, method={request_method}")
     
     response = Response(status_code=200)
     
@@ -140,13 +188,13 @@ async def options_cors_handler(path: str, request: Request):
         response.headers["Access-Control-Allow-Headers"] = request_headers or "Content-Type, Authorization"
         response.headers["Access-Control-Max-Age"] = "600"
         response.headers["Vary"] = "Origin"
-        logger.info(f"[CORS OPTIONS] Headers CORS adicionados para origem: {origin}")
+        logger.info(f"[CORS OPTIONS genérico] ✅ Headers CORS adicionados para origem: {origin}")
     else:
-        logger.warning(f"[CORS OPTIONS] Origem não permitida: {origin} (permitidas: {allowed_origins})")
+        logger.warning(f"[CORS OPTIONS genérico] ❌ Origem não permitida: {origin} (permitidas: {allowed_origins})")
         # Mesmo assim, adiciona headers básicos para evitar erro completo
         # (mas sem Access-Control-Allow-Origin para manter segurança)
         response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Headers"] = request_headers or "Content-Type, Authorization"
         response.headers["Vary"] = "Origin"
     
     return response
@@ -180,11 +228,11 @@ async def startup_event():
     try:
         from src.llm_client import get_llm_config, get_llm_provider
         provider = get_llm_provider()
-        config = get_llm_config(provider)
-        if config:
+        llm_config = get_llm_config(provider)  # Renomeado para não sobrescrever config global
+        if llm_config:
             app.state.openai_available = True  # Mantém nome para compatibilidade
             app.state.llm_provider = provider
-            logger.info(f"✅ LLM configurado: {provider.upper()} (model={config['model']})")
+            logger.info(f"✅ LLM configurado: {provider.upper()} (model={llm_config['model']})")
         else:
             logger.warning("⚠️  LLM client retornou None")
             app.state.startup_errors.append("LLM: client retornou None")
@@ -1227,32 +1275,6 @@ def _resumir_contexto(contexto: Dict[str, Any]) -> Dict[str, Any]:
         }
     
     return resumo
-
-
-# Handler OPTIONS específico para /ask (garante que preflight funcione)
-@app.options("/ask")
-async def options_ask(request: Request):
-    """Handler OPTIONS específico para /ask."""
-    origin = request.headers.get("origin")
-    request_method = request.headers.get("Access-Control-Request-Method", "POST")
-    request_headers = request.headers.get("Access-Control-Request-Headers", "Content-Type")
-    
-    logger.info(f"[CORS OPTIONS /ask] origin={origin}, method={request_method}")
-    
-    response = Response(status_code=200)
-    
-    if origin and origin in allowed_origins:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = request_headers or "Content-Type, Authorization"
-        response.headers["Access-Control-Max-Age"] = "600"
-        response.headers["Vary"] = "Origin"
-        logger.info(f"[CORS OPTIONS /ask] Headers CORS adicionados para origem: {origin}")
-    else:
-        logger.warning(f"[CORS OPTIONS /ask] Origem não permitida: {origin}")
-    
-    return response
 
 
 @app.post("/ask", response_model=AskResponse)
