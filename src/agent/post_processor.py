@@ -60,18 +60,11 @@ def post_processar_resposta(resposta_dw, intent_spec, regras_aplicadas, regras_b
     elif isinstance(intent_spec, dict):
         intent_tipo = intent_spec.get("tipo", "outros")
     
-    # Para clientes_sem_compra, usa headings executivos específicos
-    if intent_tipo == "clientes_sem_compra":
-        heading_achados = "Síntese Analítica"
-        heading_implicacoes = "Riscos Comerciais"
-        heading_plano = "Plano de Ação Imediato"
-        heading_top_alvos = "Carteiras Prioritárias (TOP 10)"
-    else:
-        # Headings padrão para outros tipos
-        heading_achados = "Principais Achados"
-        heading_implicacoes = "Implicações Comerciais"
-        heading_plano = "Plano de Ação Imediato"
-        heading_top_alvos = "Alvos Prioritários (TOP 10)"
+    # Headings padrão (usados para TODAS as intents DW)
+    heading_achados = "Principais Achados"
+    heading_implicacoes = "Implicações Comerciais"
+    heading_plano = "Plano de Ação Imediato"
+    heading_top_alvos = "Alvos Prioritários (TOP 10)"
     
     # Construi o texto final da resposta
     texto_final = (
