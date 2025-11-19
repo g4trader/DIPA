@@ -377,28 +377,15 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
   
   return (
     <div ref={respostaRef} className="max-w-[1200px] mx-auto px-4 py-6 space-y-8">
-      {/* Header com título e botão de PDF */}
-      <div id={generateCardId('header')} className="flex items-center justify-between mb-8 gap-4">
-        {dataAny.intent && (
-          <div className="flex items-center gap-3 flex-1">
-            <Target className="w-6 h-6 text-blue-400" />
-            <h1 className="text-2xl font-bold text-white">
-              {dataAny.intent_label || dataAny.intent}
-            </h1>
-          </div>
-        )}
-        
-        {/* Botão de download PDF */}
-        {(parsedMarkdown?.resumoExecutivo || bigNumberKPIs.length > 0) && (
-          <button
-            onClick={handleDownloadPdf}
-            className="inline-flex items-center gap-2 rounded-full bg-[#0EA5E9] hover:bg-[#0284C7] px-4 py-2 text-sm font-medium text-white shadow-lg shadow-cyan-500/20 transition-colors flex-shrink-0"
-          >
-            <Download className="w-4 h-4" />
-            <span>Baixar PDF</span>
-          </button>
-        )}
-      </div>
+      {/* Header com título (botão PDF movido para CopilotAnswerCard) */}
+      {dataAny.intent && (
+        <div id={generateCardId('header')} className="flex items-center gap-3 mb-8">
+          <Target className="w-6 h-6 text-blue-400" />
+          <h1 className="text-2xl font-bold text-white">
+            {dataAny.intent_label || dataAny.intent}
+          </h1>
+        </div>
+      )}
       
       {/* 1. BigNumber com título "Total de Clientes" (PRIMEIRO) */}
       {bigNumberKPIs.length > 0 && (

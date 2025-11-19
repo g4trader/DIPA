@@ -1,8 +1,9 @@
 import React, { useState, forwardRef } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { clsx } from "clsx";
 import { CopilotAnswerPayload } from "@/types/agent";
 import { ResponseDashboard } from "./ResponseDashboard";
+import { generateExecutivePdf } from "./pdf/generateExecutivePdf";
 
 type Props = {
   payload: CopilotAnswerPayload;
@@ -31,6 +32,39 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
 
   const rawData = respostaMarkdown ? { respostaMarkdown, ...payload } : payload;
 
+  // Handler para gerar PDF
+  const handleDownloadPdf = () => {
+    if (!payload.structured) return;
+    
+    const structured = payload.structured;
+    const dataAny = structured as any;
+    
+    // Prepara dados para o PDF
+    const pdfData = {
+      pergunta: question || intentLabel || intent || 'Consulta DIPAM COPILOT™',
+      resumoExecutivo: structured.resumo_executivo || structured.resumoExecutivo || resumoExecutivo,
+      kpis: structured.kpis?.map((kpi: any) => ({
+        label: kpi.label,
+        valor: kpi.value,
+      })) || [],
+      principaisAchados: dataAny.principaisAchados,
+      implicacoes: dataAny.implicacoesComerciais,
+      planoAcao: dataAny.planoAcao,
+      alvosPrioritariosLista: dataAny.alvosPrioritarios,
+      tabelaTop10: dataAny.topAlvos?.map((alvo: any) => ({
+        cliente: alvo.Cliente || alvo.cliente || alvo.item || '—',
+        diasSemCompra: alvo["Dias sem compra"] || alvo.diasSemCompra || alvo.dias || 0,
+        rota: alvo.Rota || alvo.rota || null,
+      })),
+      tabelaPrincipal: structured.detalhe_tabela ? {
+        colunas: structured.detalhe_tabela.colunas || [],
+        linhas: structured.detalhe_tabela.linhas || [],
+      } : null,
+    };
+    
+    generateExecutivePdf(pdfData);
+  };
+
   // NOVO: Se houver resposta estruturada, renderiza dashboard diretamente
   if (payload.structured) {
     // Garante que respostaMarkdown seja passado para o ResponseDashboard se disponível
@@ -58,6 +92,15 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
             <span id="dipam-card-header-badge-confidence" className="rounded-full bg-emerald-500/10 border border-emerald-400/40 px-3 py-1 text-[11px] text-emerald-300">
               {Math.round(confidence * 100)}% confiança
             </span>
+            {/* Botão de download PDF */}
+            <button
+              onClick={handleDownloadPdf}
+              className="inline-flex items-center gap-1.5 rounded-full bg-[#0EA5E9] hover:bg-[#0284C7] px-3 py-1.5 text-[11px] font-medium text-white shadow-lg shadow-cyan-500/20 transition-colors"
+              title="Baixar relatório em PDF"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Baixar PDF</span>
+            </button>
           </div>
         </div>
 
