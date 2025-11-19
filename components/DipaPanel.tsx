@@ -1190,10 +1190,35 @@ function MessagesList({
   expandedContext: string | null; 
   setExpandedContext: (id: string | null) => void;
 }) {
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const answerCardRef = useRef<HTMLDivElement | null>(null);
+  const lastAnswerIdRef = useRef<string | null>(null);
 
+  // Detecta quando uma nova resposta chega e faz scroll para o topo do card
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // Encontra a última mensagem do assistente com payload
+    const lastAnswer = [...messages].reverse().find(msg => 
+      msg.role === 'assistant' && msg.payload
+    );
+    
+    if (lastAnswer && lastAnswer.id !== lastAnswerIdRef.current) {
+      lastAnswerIdRef.current = lastAnswer.id;
+      
+      // Aguarda o React renderizar antes de fazer scroll
+      // Usa requestAnimationFrame para garantir que o DOM foi atualizado
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (answerCardRef.current) {
+            const rect = answerCardRef.current.getBoundingClientRect();
+            const offset = window.scrollY + rect.top - 80; // 80px de margem do topo
+            
+            window.scrollTo({
+              top: offset,
+              behavior: 'smooth',
+            });
+          }
+        }, 150);
+      });
+    }
   }, [messages]);
 
   return (
@@ -1211,7 +1236,10 @@ function MessagesList({
               <div className="w-full max-w-[85%] sm:max-w-[90%]">
                 {/* Usa CopilotAnswerCard se tiver payload estruturado, senão usa DipamAnswerCard */}
                 {message.payload ? (
-                  <CopilotAnswerCard payload={message.payload} />
+                  <CopilotAnswerCard 
+                    ref={index === messages.length - 1 && message.role === 'assistant' ? answerCardRef : undefined}
+                    payload={message.payload} 
+                  />
                 ) : (
                   <DipamAnswerCard
                     pergunta={messages[index - 1]?.role === 'user' ? messages[index - 1].content : "Pergunta não disponível"}
@@ -1230,7 +1258,6 @@ function MessagesList({
           )}
         </div>
       ))}
-      <div ref={messagesEndRef} />
     </div>
   );
 }

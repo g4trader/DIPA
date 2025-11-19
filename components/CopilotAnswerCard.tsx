@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, forwardRef } from "react";
 import { ChevronDown } from "lucide-react";
 import { clsx } from "clsx";
 import { CopilotAnswerPayload } from "@/types/agent";
@@ -12,7 +12,7 @@ type Props = {
  * Componente de card de resposta do DIPAM COPILOT™
  * Renderiza respostas estruturadas com Resumo executivo, KPIs, Top vendedores, Insights e Observações
  */
-export const CopilotAnswerCard: React.FC<Props> = ({ payload }) => {
+export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload }, ref) => {
   const [showDetails, setShowDetails] = useState(false);
 
   const {
@@ -39,7 +39,7 @@ export const CopilotAnswerCard: React.FC<Props> = ({ payload }) => {
       : payload.structured;
 
     return (
-      <div className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-slate-950/95 shadow-2xl overflow-hidden">
+      <div ref={ref} className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-slate-950/95 shadow-2xl overflow-hidden">
         {/* Header do card */}
         <div className="flex items-center gap-2 px-6 pt-5 pb-4 border-b border-slate-800/70 bg-slate-950/70">
           <div className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-sky-500/10 border border-sky-500/40 text-sky-300 text-xs font-semibold">
@@ -75,7 +75,7 @@ export const CopilotAnswerCard: React.FC<Props> = ({ payload }) => {
 
   // FALLBACK: Renderização antiga (apenas para debug/compatibilidade)
   return (
-    <div className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-slate-950/95 shadow-2xl overflow-hidden">
+    <div ref={ref} className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-slate-950/95 shadow-2xl overflow-hidden">
       {/* Header do card */}
       <div className="flex items-center gap-2 px-6 pt-5 pb-3 border-b border-slate-800/70 bg-slate-950/70">
         <div className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-sky-500/10 border border-sky-500/40 text-sky-300 text-xs font-semibold">
@@ -427,4 +427,6 @@ export const CopilotAnswerCard: React.FC<Props> = ({ payload }) => {
       )}
     </div>
   );
-};
+});
+
+CopilotAnswerCard.displayName = "CopilotAnswerCard";
