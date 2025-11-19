@@ -33,13 +33,7 @@ export function InsightsBlock({
   }
 
   return (
-    <div className="bg-[#0F172A] border border-white/5 rounded-xl p-6 h-full flex flex-col justify-start shadow-lg">
-      <div className="flex items-center gap-3 pb-3 mb-4 border-b border-white/5">
-        <span className={`${colorClasses[color]} rounded-lg p-2 text-xl border`}>
-          {icon}
-        </span>
-        <h3 className="text-white font-semibold text-xl">{title}</h3>
-      </div>
+    <div className="flex flex-col justify-start">
       <ul className="space-y-3 flex-1">
         {items.map((item, idx) => (
           <li key={idx} className="text-white/80 leading-relaxed flex items-start gap-2">

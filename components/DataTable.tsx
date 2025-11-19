@@ -38,7 +38,7 @@ export function DataTable({
           <h3 className="text-white font-semibold text-xl mb-0">{title}</h3>
         </div>
       )}
-      <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+      <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
         <table className="w-full border-collapse">
           <thead className="bg-white/5 sticky top-0 z-10">
             <tr>

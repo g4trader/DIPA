@@ -194,34 +194,73 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
     return kpisList;
   }, [kpis, parsedMarkdown]);
   
-  // Prepara dados da tabela (top 10 alvos ou tabela principal)
-  const tableData = useMemo(() => {
-    // Tenta usar topAlvos do markdown parseado
-    if (parsedMarkdown?.topAlvos && parsedMarkdown.topAlvos.length > 0) {
-      return parsedMarkdown.topAlvos;
-    }
-    
-    // Fallback: usa tabela_principal se disponível (type assertion segura)
-    const dataAny = data as any;
-    const tabelaPrincipal = dataAny.tabela_principal || dataAny.tabelaPrincipal;
-    if (tabelaPrincipal && Array.isArray(tabelaPrincipal) && tabelaPrincipal.length > 0) {
-      return tabelaPrincipal;
-    }
-    
-    // Fallback: tenta extrair de seções
-    const tabelaSecao = data.secoes?.find(s => s.tipo === "tabela");
-    if (tabelaSecao?.dados && Array.isArray(tabelaSecao.dados)) {
-      return tabelaSecao.dados;
-    }
-    
-    return [];
-  }, [parsedMarkdown, data]);
-  
   // Type assertion segura para acessar propriedades opcionais
   const dataAny = data as any;
   
   // Detecta se é Q1 (clientes_sem_compra)
   const isQ1 = dataAny.intent === "clientes_sem_compra" || dataAny.intent_label?.toLowerCase().includes("clientes sem compra");
+  
+  // Estado de paginação para tabela de clientes (Q1) e tabela geral
+  const [currentPageQ1, setCurrentPageQ1] = useState(0);
+  const [currentPageGeral, setCurrentPageGeral] = useState(0);
+  const itemsPerPage = 20; // Paginação padrão: 20 itens por página
+  
+  // Prepara dados da tabela analítica geral (não Q1)
+  const tableData = useMemo(() => {
+    // Para Q1, não usa esta tabela (usa tabelaClientesPaginada)
+    if (isQ1) return [];
+    
+    // Tenta usar topAlvos do markdown parseado (apenas se não for Q1)
+    if (parsedMarkdown?.topAlvos && parsedMarkdown.topAlvos.length > 0) {
+      return parsedMarkdown.topAlvos;
+    }
+    
+    // Fallback: usa tabela_principal se disponível (type assertion segura)
+    const tabelaPrincipal = dataAny.tabela_principal || dataAny.tabelaPrincipal;
+    if (tabelaPrincipal && Array.isArray(tabelaPrincipal) && tabelaPrincipal.length > 0) {
+      // Se for array de objetos, retorna direto
+      if (typeof tabelaPrincipal[0] === 'object' && !Array.isArray(tabelaPrincipal[0])) {
+        return tabelaPrincipal;
+      }
+      // Se for array de arrays (estrutura antiga), converte
+      if (Array.isArray(tabelaPrincipal[0]) && tabelaPrincipal[0].length > 0) {
+        const tabela = tabelaPrincipal[0] as any;
+        if (tabela && typeof tabela === 'object' && tabela.colunas && tabela.linhas) {
+          return tabela.linhas.map((linha: any[]) => {
+            const obj: Record<string, any> = {};
+            tabela.colunas.forEach((col: string, idx: number) => {
+              obj[col] = linha[idx];
+            });
+            return obj;
+          });
+        }
+      }
+    }
+    
+    // Fallback: tenta extrair de seções
+    const tabelaSecao = data.secoes?.find(s => s.tipo === "tabela" || s.tipo === "tabela_detalhada");
+    if (tabelaSecao?.dados && Array.isArray(tabelaSecao.dados)) {
+      return tabelaSecao.dados;
+    }
+    
+    return [];
+  }, [parsedMarkdown, data, isQ1, dataAny]);
+  
+  // Calcula paginação para tabela analítica geral
+  const tabelaAnaliticaPaginada = useMemo(() => {
+    if (tableData.length === 0) return null;
+    
+    const start = currentPageGeral * itemsPerPage;
+    const end = start + itemsPerPage;
+    const linhasPagina = tableData.slice(start, end);
+    
+    return {
+      linhas: linhasPagina,
+      totalLinhas: tableData.length,
+      totalPages: Math.ceil(tableData.length / itemsPerPage),
+      currentPage: currentPageGeral
+    };
+  }, [tableData, currentPageGeral, itemsPerPage]);
   
   // Extrai tabela_por_rota do jsonTecnico
   const tabelaPorRota = dataAny.jsonTecnico?.tabela_por_rota || null;
@@ -243,15 +282,20 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
     return null;
   }, [isQ1, dataAny.jsonTecnico]);
   
-  // Estado de paginação para tabela de clientes (Q1)
-  const [currentPage, setCurrentPage] = useState(0);
-  const itemsPerPage = 15;
+  // Reset paginação quando dados mudarem
+  useEffect(() => {
+    setCurrentPageQ1(0);
+  }, [tabelaPrincipalQ1]);
   
-  // Calcula dados paginados
+  useEffect(() => {
+    setCurrentPageGeral(0);
+  }, [tableData]);
+  
+  // Calcula dados paginados para Q1
   const tabelaClientesPaginada = useMemo(() => {
     if (!tabelaPrincipalQ1) return null;
     
-    const start = currentPage * itemsPerPage;
+    const start = currentPageQ1 * itemsPerPage;
     const end = start + itemsPerPage;
     const linhasPagina = tabelaPrincipalQ1.linhas.slice(start, end);
     
@@ -260,9 +304,9 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       linhas: linhasPagina,
       totalLinhas: tabelaPrincipalQ1.linhas.length,
       totalPages: Math.ceil(tabelaPrincipalQ1.linhas.length / itemsPerPage),
-      currentPage
+      currentPage: currentPageQ1
     };
-  }, [tabelaPrincipalQ1, currentPage]);
+  }, [tabelaPrincipalQ1, currentPageQ1, itemsPerPage]);
   
   // Handler para gerar PDF
   const handleDownloadPdf = () => {
@@ -341,25 +385,11 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         )}
       </div>
       
-      {/* 2. Resumo Executivo (PRIMEIRO) */}
-      {parsedMarkdown?.resumoExecutivo && (
-        <div className="mb-10">
-          <ExecutiveSectionCard
-            title="Resumo Executivo"
-            icon={<FileText className="w-5 h-5" />}
-          >
-            <p className="text-sm opacity-90 leading-relaxed whitespace-pre-line">
-              {parsedMarkdown.resumoExecutivo}
-            </p>
-          </ExecutiveSectionCard>
-        </div>
-      )}
-      
-      {/* 3. Big Numbers Cards (KPIs) */}
+      {/* 1. BigNumber com título "Total de Clientes" (PRIMEIRO) */}
       {bigNumberKPIs.length > 0 && (
         <div className="mb-10">
-          {/* Para Q1: grid-cols-2 fixo se tiver 2 KPIs, senão adapta */}
-          <div className={`mt-6 grid grid-cols-1 ${bigNumberKPIs.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-6`}>
+          <h2 className="text-xl font-semibold mb-3 text-white">Total de Clientes</h2>
+          <div className={`grid grid-cols-1 ${bigNumberKPIs.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-6`}>
             {bigNumberKPIs.map((kpi, idx) => (
               <BigNumberCard
                 key={idx}
@@ -374,101 +404,155 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         </div>
       )}
       
-      {/* 4. Tabela de clientes (Q1) - ANTES dos insights */}
-      {isQ1 && tabelaClientesPaginada && (
+      {/* 2. Resumo Executivo */}
+      {parsedMarkdown?.resumoExecutivo && (
         <div className="mb-10">
-          <DataTable
-            rows={tabelaClientesPaginada.linhas.map((linha: any[]) => {
-              const obj: Record<string, any> = {};
-              tabelaClientesPaginada.colunas.forEach((col: string, idx: number) => {
-                obj[col] = linha[idx];
-              });
-              return obj;
-            })}
-            title="Clientes sem compra há mais de 60 dias"
-            highlightFirstColumn={true}
-          />
-          
-          {/* Paginação */}
-          {tabelaClientesPaginada.totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-                disabled={currentPage === 0}
-                className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
-              >
-                Anterior
-              </button>
-              <span className="text-sm text-white/70">
-                Página {currentPage + 1} de {tabelaClientesPaginada.totalPages} ({tabelaClientesPaginada.totalLinhas} clientes)
-              </span>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(tabelaClientesPaginada.totalPages - 1, p + 1))}
-                disabled={currentPage >= tabelaClientesPaginada.totalPages - 1}
-                className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
-              >
-                Próxima
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* 4.1. Tabela de vendedores (Q1) */}
-      {isQ1 && tabelaPorRota && Array.isArray(tabelaPorRota) && tabelaPorRota.length > 0 && (
-        <div className="mb-10">
-          <DataTable
-            rows={tabelaPorRota.map((item: any) => ({
-              "Vendedor": item.vendedor_nome || item.vendedor_codigo || "N/A",
-              "Supervisor": item.supervisor_nome || item.supervisor_codigo || "",
-              "Total de clientes sem compra (>60 dias)": item.total_clientes_sem_compra || 0
-            }))}
-            title="Carteiras de vendedores com mais clientes inativos (> 60 dias)"
-            highlightFirstColumn={true}
-          />
-        </div>
-      )}
-      
-      {/* 4.2. Aviso se tabela_por_rota não estiver disponível (Q1) */}
-      {isQ1 && (!tabelaPorRota || (Array.isArray(tabelaPorRota) && tabelaPorRota.length === 0)) && (
-        <div className="mb-10">
-          <div className="rounded-xl border border-white/10 bg-[#0F172A] p-4">
-            <p className="text-sm text-white/60 italic">
-              Ainda não há dados consolidados por vendedor para esta visão.
+          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
+            <h2 className="text-xl font-semibold mb-3 text-white">Resumo Executivo</h2>
+            <p className="text-sm opacity-90 leading-relaxed whitespace-pre-line text-white/80">
+              {parsedMarkdown.resumoExecutivo}
             </p>
           </div>
         </div>
       )}
       
-      {/* 5. Insights Blocks (sempre empilhados verticalmente) */}
+      {/* 3. Tabela "Dados Analíticos – Consulta Geral" com paginação de 20 registros */}
+      {(isQ1 && tabelaClientesPaginada) || (!isQ1 && tabelaAnaliticaPaginada) ? (
+        <div className="mb-10">
+          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
+            <h2 className="text-xl font-semibold mb-3 text-white">
+              {isQ1 ? "Clientes sem compra há mais de 60 dias" : "Dados Analíticos – Consulta Geral"}
+            </h2>
+            <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+              {isQ1 && tabelaClientesPaginada ? (
+                <>
+                  <DataTable
+                    rows={tabelaClientesPaginada.linhas.map((linha: any[]) => {
+                      const obj: Record<string, any> = {};
+                      tabelaClientesPaginada.colunas.forEach((col: string, idx: number) => {
+                        obj[col] = linha[idx];
+                      });
+                      return obj;
+                    })}
+                    highlightFirstColumn={true}
+                  />
+                  
+                  {/* Paginação Q1 */}
+                  {tabelaClientesPaginada.totalPages > 1 && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <button
+                        onClick={() => setCurrentPageQ1(p => Math.max(0, p - 1))}
+                        disabled={currentPageQ1 === 0}
+                        className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                      >
+                        Anterior
+                      </button>
+                      <span className="text-sm text-white/70">
+                        Página {currentPageQ1 + 1} de {tabelaClientesPaginada.totalPages} ({tabelaClientesPaginada.totalLinhas} registros)
+                      </span>
+                      <button
+                        onClick={() => setCurrentPageQ1(p => Math.min(tabelaClientesPaginada.totalPages - 1, p + 1))}
+                        disabled={currentPageQ1 >= tabelaClientesPaginada.totalPages - 1}
+                        className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                      >
+                        Próxima
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : tabelaAnaliticaPaginada ? (
+                <>
+                  <DataTable
+                    rows={tabelaAnaliticaPaginada.linhas}
+                    highlightFirstColumn={true}
+                  />
+                  
+                  {/* Paginação Tabela Geral */}
+                  {tabelaAnaliticaPaginada.totalPages > 1 && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <button
+                        onClick={() => setCurrentPageGeral(p => Math.max(0, p - 1))}
+                        disabled={currentPageGeral === 0}
+                        className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                      >
+                        Anterior
+                      </button>
+                      <span className="text-sm text-white/70">
+                        Página {currentPageGeral + 1} de {tabelaAnaliticaPaginada.totalPages} ({tabelaAnaliticaPaginada.totalLinhas} registros)
+                      </span>
+                      <button
+                        onClick={() => setCurrentPageGeral(p => Math.min(tabelaAnaliticaPaginada.totalPages - 1, p + 1))}
+                        disabled={currentPageGeral >= tabelaAnaliticaPaginada.totalPages - 1}
+                        className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                      >
+                        Próxima
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      
+      {/* 3.1. Tabela de vendedores (Q1) - apenas se houver dados */}
+      {isQ1 && tabelaPorRota && Array.isArray(tabelaPorRota) && tabelaPorRota.length > 0 && (
+        <div className="mb-10">
+          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
+            <h3 className="text-lg font-medium mb-2 mt-6 text-white">Carteiras de vendedores com mais clientes inativos (&gt; 60 dias)</h3>
+            <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+              <DataTable
+                rows={tabelaPorRota.map((item: any) => ({
+                  "Vendedor": item.vendedor_nome || item.vendedor_codigo || "N/A",
+                  "Supervisor": item.supervisor_nome || item.supervisor_codigo || "",
+                  "Total de clientes sem compra (>60 dias)": item.total_clientes_sem_compra || 0
+                }))}
+                highlightFirstColumn={true}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 4. Insights Blocks (sempre empilhados verticalmente) */}
       {(parsedMarkdown?.principaisAchados?.length > 0 || 
         parsedMarkdown?.implicacoesComerciais?.length > 0 || 
         parsedMarkdown?.planoAcao?.length > 0) && (
         <div className="mb-10">
-          <div className="mt-8 flex flex-col gap-6">
+          <div className="flex flex-col gap-6">
             {parsedMarkdown.principaisAchados && parsedMarkdown.principaisAchados.length > 0 && (
-              <InsightsBlock
-                title={isQ1 ? "Síntese Analítica" : "Principais Achados"}
-                items={parsedMarkdown.principaisAchados}
-                icon="🔍"
-                color="blue"
-              />
+              <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
+                <h3 className="text-lg font-medium mb-2 mt-6 text-white">{isQ1 ? "Síntese Analítica" : "Principais Achados"}</h3>
+                <InsightsBlock
+                  title={isQ1 ? "Síntese Analítica" : "Principais Achados"}
+                  items={parsedMarkdown.principaisAchados}
+                  icon="🔍"
+                  color="blue"
+                />
+              </div>
             )}
             {parsedMarkdown.implicacoesComerciais && parsedMarkdown.implicacoesComerciais.length > 0 && (
-              <InsightsBlock
-                title={isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}
-                items={parsedMarkdown.implicacoesComerciais}
-                icon="⚠️"
-                color="orange"
-              />
+              <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
+                <h3 className="text-lg font-medium mb-2 mt-6 text-white">{isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}</h3>
+                <InsightsBlock
+                  title={isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}
+                  items={parsedMarkdown.implicacoesComerciais}
+                  icon="⚠️"
+                  color="orange"
+                />
+              </div>
             )}
             {parsedMarkdown.planoAcao && parsedMarkdown.planoAcao.length > 0 && (
-              <InsightsBlock
-                title="Plano de Ação Imediato"
-                items={parsedMarkdown.planoAcao}
-                icon="🚀"
-                color="green"
-              />
+              <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
+                <h3 className="text-lg font-medium mb-2 mt-6 text-white">Plano de Ação Imediato</h3>
+                <InsightsBlock
+                  title="Plano de Ação Imediato"
+                  items={parsedMarkdown.planoAcao}
+                  icon="🚀"
+                  color="green"
+                />
+              </div>
             )}
           </div>
         </div>
@@ -477,110 +561,90 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       {/* 5. Alvos Prioritários (lista E tabela se disponível) */}
       {parsedMarkdown?.alvosPrioritarios && parsedMarkdown.alvosPrioritarios.length > 0 && (
         <div className="mb-10">
-          <ExecutiveSectionCard
-            title="Alvos Prioritários (TOP 10)"
-            icon={<Target className="w-5 h-5" />}
-          >
+          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
+            <h3 className="text-lg font-medium mb-2 mt-6 text-white">Alvos Prioritários (TOP 10)</h3>
             <ul className="space-y-2">
               {parsedMarkdown.alvosPrioritarios.map((alvo, idx) => (
-                <li key={idx} className="flex items-start gap-2 text-sm opacity-90">
+                <li key={idx} className="flex items-start gap-2 text-sm opacity-90 text-white/80">
                   <span className="text-purple-400 mt-1 flex-shrink-0">•</span>
                   <span className="flex-1">{alvo}</span>
                 </li>
               ))}
             </ul>
-          </ExecutiveSectionCard>
-          
-          {/* Tabela de alvos se disponível */}
-          {parsedMarkdown.topAlvos && parsedMarkdown.topAlvos.length > 0 && (
-            <div className="mt-6">
-              {/* 
-                Nota: O parser extrai dados estruturados do formato "CLIENTE | X dias sem compra | Rota: Y".
-                Se a coluna "Rota" estiver vazia, o DataTable a esconde automaticamente para não chamar atenção.
-                Quando o backend enviar rotas reais, elas aparecerão automaticamente na tabela.
-              */}
-              <DataTable
-                rows={parsedMarkdown.topAlvos}
-                title="Alvos Prioritários — Detalhamento"
-                highlightFirstColumn={true}
-              />
-            </div>
-          )}
+            
+            {/* Tabela de alvos se disponível */}
+            {parsedMarkdown.topAlvos && parsedMarkdown.topAlvos.length > 0 && (
+              <div className="mt-6 overflow-x-auto max-h-[70vh] overflow-y-auto">
+                <DataTable
+                  rows={parsedMarkdown.topAlvos}
+                  title="Alvos Prioritários — Detalhamento"
+                  highlightFirstColumn={true}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
       
-      {/* 6. Tabela de dados analíticos (se não for alvos prioritários) */}
-      {tableData.length > 0 && (!parsedMarkdown?.topAlvos || parsedMarkdown.topAlvos.length === 0) && (
+      {/* Fallback: Markdown completo se não foi parseado (apenas se não houver nenhum outro conteúdo) */}
+      {respostaMarkdown && !parsedMarkdown && !bigNumberKPIs.length && !tableData.length && (
         <div className="mb-10">
-          <DataTable
-            rows={tableData}
-            title="Dados Analíticos"
-            highlightFirstColumn={true}
-          />
-        </div>
-      )}
-      
-      {/* Fallback: Markdown completo se não foi parseado */}
-      {respostaMarkdown && !parsedMarkdown && (
-        <div className="rounded-2xl border border-[#1D2532] bg-[#0B0F17] p-6 shadow-xl">
-          <div className="prose prose-invert max-w-none whitespace-pre-line space-y-6">
-            <div className="text-sm leading-relaxed text-slate-300">
-              {respostaMarkdown.split("\n").map((line, idx) => {
-                // Renderiza headings
-                if (line.match(/^##+\s+/)) {
-                  const level = line.match(/^(##+)/)?.[1].length || 2;
-                  const text = line.replace(/^##+\s+/, "").trim();
-                  const HeadingTag = `h${Math.min(level, 6)}` as keyof JSX.IntrinsicElements;
-                  return (
-                    <HeadingTag
-                      key={idx}
-                      className={`${level === 2 ? 'text-2xl' : level === 3 ? 'text-xl' : 'text-lg'} font-semibold text-slate-100 mt-8 mb-4 first:mt-0`}
-                    >
-                      {text}
-                    </HeadingTag>
-                  );
-                }
-                // Renderiza listas
-                if (line.match(/^[-*]\s+/)) {
-                  const text = line.replace(/^[-*]\s+/, "").trim();
-                  return (
-                    <div key={idx} className="flex items-start gap-2 mb-2">
-                      <span className="text-blue-400 mt-1">•</span>
-                      <span>{text}</span>
-                    </div>
-                  );
-                }
-                // Renderiza parágrafos
-                if (line.trim()) {
-                  return (
-                    <p key={idx} className="mb-3 last:mb-0">
-                      {line.trim()}
-                    </p>
-                  );
-                }
-                return <br key={idx} />;
-              })}
+          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
+            <h2 className="text-xl font-semibold mb-3 text-white">Resposta Completa</h2>
+            <div className="prose prose-invert max-w-none whitespace-pre-line space-y-6">
+              <div className="text-sm leading-relaxed text-white/80">
+                {respostaMarkdown.split("\n").map((line, idx) => {
+                  // Renderiza headings
+                  if (line.match(/^##+\s+/)) {
+                    const level = line.match(/^(##+)/)?.[1].length || 2;
+                    const text = line.replace(/^##+\s+/, "").trim();
+                    const HeadingTag = `h${Math.min(level, 6)}` as keyof JSX.IntrinsicElements;
+                    return (
+                      <HeadingTag
+                        key={idx}
+                        className={`${level === 2 ? 'text-xl font-semibold mb-3' : 'text-lg font-medium mb-2 mt-6'} text-white`}
+                      >
+                        {text}
+                      </HeadingTag>
+                    );
+                  }
+                  // Renderiza listas
+                  if (line.match(/^[-*]\s+/)) {
+                    const text = line.replace(/^[-*]\s+/, "").trim();
+                    return (
+                      <div key={idx} className="flex items-start gap-2 mb-2">
+                        <span className="text-blue-400 mt-1">•</span>
+                        <span>{text}</span>
+                      </div>
+                    );
+                  }
+                  // Renderiza parágrafos
+                  if (line.trim()) {
+                    return (
+                      <p key={idx} className="mb-3 last:mb-0">
+                        {line.trim()}
+                      </p>
+                    );
+                  }
+                  return <br key={idx} />;
+                })}
+              </div>
             </div>
           </div>
         </div>
       )}
       
       {/* Fallback: Resumo Executivo simples se não houver markdown */}
-      {!respostaMarkdown && resumoExecutivo && (
-        <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl">
-          <div className="flex items-start gap-4">
-            <div className="rounded-xl bg-blue-500/10 p-3 border border-blue-500/20">
-              <Target className="w-6 h-6 text-blue-400" />
-            </div>
-            <div className="flex-1 space-y-3">
-              <h3 className="text-lg font-semibold text-slate-100">Resumo Executivo</h3>
-              <div className="text-sm leading-relaxed text-slate-300 whitespace-pre-line">
-                {resumoExecutivo.split("\n\n").map((para, idx) => (
-                  <p key={idx} className="mb-3 last:mb-0">
-                    {para.trim()}
-                  </p>
-                ))}
-              </div>
+      {!respostaMarkdown && resumoExecutivo && !parsedMarkdown && (
+        <div className="mb-10">
+          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
+            <h2 className="text-xl font-semibold mb-3 text-white">Resumo Executivo</h2>
+            <div className="text-sm leading-relaxed text-white/80 whitespace-pre-line">
+              {resumoExecutivo.split("\n\n").map((para, idx) => (
+                <p key={idx} className="mb-3 last:mb-0">
+                  {para.trim()}
+                </p>
+              ))}
             </div>
           </div>
         </div>
