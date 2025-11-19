@@ -11,10 +11,11 @@ Foco:
 - Garantir que respostas negativas ou vazias ainda tragam diagnóstico e plano de ação
 """
 
-import pytest
-import os
-import requests
 from typing import Dict, Any, Optional
+
+import os
+import pytest
+import requests
 from requests.exceptions import (
     ProxyError,
     ConnectionError as RequestsConnectionError,
