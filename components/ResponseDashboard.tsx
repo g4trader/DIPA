@@ -361,31 +361,44 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
             {bigNumberKPIs.map((kpi, idx) => (
               <div key={idx} id={generateCardId('kpi', idx)} className={idx === 0 ? "sm:col-span-2 lg:col-span-3" : ""}>
                 {idx === 0 ? (
-                  // Primeiro card com 3 ícones customizados (mesmo estilo) - ícone de clientes primeiro - largura aumentada
-                  <div id={generateCardId('kpi-card', idx)} className="flex flex-col justify-between rounded-2xl bg-[#0F172A] border border-white/10 px-6 py-5 shadow-lg shadow-black/40 hover:border-white/20 transition-all duration-200">
-                    <div className="flex items-start gap-3 mb-3">
-                      {/* Ícone de clientes - PRIMEIRO */}
-                      <div className="text-blue-400 bg-blue-400/10 rounded-xl p-2.5 border border-blue-400/20 flex flex-col items-center justify-center w-14 h-14 flex-shrink-0">
-                        <Users className="w-5 h-5" />
-                      </div>
-                      {/* Ícone de carrinho vermelho com seta para baixo */}
-                      <div className="text-red-400 bg-red-400/10 rounded-xl p-2.5 border border-red-400/20 flex flex-col items-center justify-center w-14 h-14 flex-shrink-0">
-                        <div className="flex items-center gap-0.5">
-                          <ShoppingCart className="w-4 h-4" />
-                          <ArrowDown className="w-3.5 h-3.5" />
+                  // Primeiro card com 3 ícones customizados (mesmo estilo) - ícone de clientes primeiro - largura aumentada - duas colunas
+                  <div id={generateCardId('kpi-card', idx)} className="flex flex-col md:flex-row gap-6 rounded-2xl bg-[#0F172A] border border-white/10 px-6 py-5 shadow-lg shadow-black/40 hover:border-white/20 transition-all duration-200">
+                    {/* Coluna esquerda: Ícones e número */}
+                    <div className="flex flex-col justify-between flex-1">
+                      <div className="flex items-start gap-3 mb-3">
+                        {/* Ícone de clientes - PRIMEIRO */}
+                        <div className="text-blue-400 bg-blue-400/10 rounded-xl p-2.5 border border-blue-400/20 flex flex-col items-center justify-center w-14 h-14 flex-shrink-0">
+                          <Users className="w-5 h-5" />
+                        </div>
+                        {/* Ícone de carrinho vermelho com seta para baixo */}
+                        <div className="text-red-400 bg-red-400/10 rounded-xl p-2.5 border border-red-400/20 flex flex-col items-center justify-center w-14 h-14 flex-shrink-0">
+                          <div className="flex items-center gap-0.5">
+                            <ShoppingCart className="w-4 h-4" />
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </div>
+                        </div>
+                        {/* Ícone com número 60 e texto "dias" */}
+                        <div className="text-white bg-slate-700/50 rounded-xl p-2.5 border border-white/20 flex flex-col items-center justify-center w-14 h-14 flex-shrink-0">
+                          <span className="text-xl font-bold leading-tight">60</span>
+                          <span className="text-[9px] text-white/70 uppercase tracking-wide mt-0.5 leading-tight">dias</span>
                         </div>
                       </div>
-                      {/* Ícone com número 60 e texto "dias" */}
-                      <div className="text-white bg-slate-700/50 rounded-xl p-2.5 border border-white/20 flex flex-col items-center justify-center w-14 h-14 flex-shrink-0">
-                        <span className="text-xl font-bold leading-tight">60</span>
-                        <span className="text-[9px] text-white/70 uppercase tracking-wide mt-0.5 leading-tight">dias</span>
+                      <div className="flex-1 flex items-end">
+                        <p className="mt-2 text-3xl md:text-4xl font-bold tracking-tight text-white">
+                          {typeof kpi.value === "number" ? kpi.value.toLocaleString("pt-BR") : kpi.value}
+                        </p>
                       </div>
                     </div>
-                    <div className="flex-1 flex items-end">
-                      <p className="mt-2 text-3xl md:text-4xl font-bold tracking-tight text-white">
-                        {typeof kpi.value === "number" ? kpi.value.toLocaleString("pt-BR") : kpi.value}
-                      </p>
-                    </div>
+                    {/* Coluna direita: Resumo Executivo */}
+                    {parsedMarkdown?.resumoExecutivo && (
+                      <div className="flex-1 flex items-center border-l border-white/10 pl-6">
+                        <div id={generateCardId('resumo-executivo-conteudo')} className="prose prose-invert max-w-none">
+                          <p className="text-sm opacity-90 leading-relaxed whitespace-pre-line text-white/80 m-0">
+                            {parsedMarkdown.resumoExecutivo}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <BigNumberCard
@@ -403,17 +416,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         </div>
       )}
       
-      {/* 2. Resumo Executivo */}
-      {parsedMarkdown?.resumoExecutivo && (
-        <div id={generateCardId('resumo-executivo')} className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg">
-          <h2 id={generateCardId('resumo-executivo-titulo')} className="text-xl font-semibold mb-4 text-white">Resumo Executivo</h2>
-          <div id={generateCardId('resumo-executivo-conteudo')} className="prose prose-invert max-w-none">
-            <p className="text-sm opacity-90 leading-relaxed whitespace-pre-line text-white/80">
-              {parsedMarkdown.resumoExecutivo}
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Resumo Executivo removido - agora está dentro do card da resposta */}
       
       {/* 2.1. Tabela Detalhada (logo após resumo executivo) */}
       {(() => {
