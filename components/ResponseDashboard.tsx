@@ -467,8 +467,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                     highlightFirstColumn={true}
                   />
                   
-                  {/* Paginação Tabela Geral */}
-                  {tabelaAnaliticaPaginada.totalPages > 1 && (
+                  {/* Paginação Tabela Geral - sempre exibe quando há dados */}
+                  {tabelaAnaliticaPaginada && (
                     <div className="mt-4 flex items-center justify-between">
                       <button
                         onClick={() => setCurrentPageGeral(p => Math.max(0, p - 1))}

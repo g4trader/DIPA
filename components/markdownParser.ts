@@ -165,7 +165,7 @@ export function parseMarkdownExecutivo(markdown: string): ParsedMarkdown {
     const clientes = Number(clientesMatch[1].replace(/\./g, ''));
     if (!isNaN(clientes)) {
       result.kpis.push({
-        label: "Clientes Impactados",
+        label: "Total de Clientes",
         value: clientes,
         icon: "👥",
       });
