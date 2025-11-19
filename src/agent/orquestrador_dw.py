@@ -400,7 +400,25 @@ def _mapear_para_funcao_dw(
             }
         ) if get_rotas_positivacao_industria else None,
         
+        ("positivacao", "cliente"): (
+            get_clientes_sem_sku_no_periodo,
+            {
+                "sku": intent_spec.filtros.get("sku", ""),
+                "data_inicio": intent_spec.periodo_inicio or "",
+                "data_fim": intent_spec.periodo_fim or ""
+            }
+        ) if get_clientes_sem_sku_no_periodo else None,
+        
         ("mix", "produto"): (
+            get_itens_baixa_media_mensal,
+            {
+                "meses_janela": intent_spec.filtros.get("meses_janela", 12),
+                "limite_media": intent_spec.filtros.get("limite_media", 10.0),
+                "data_referencia": intent_spec.periodo_fim or intent_spec.periodo_inicio
+            }
+        ) if get_itens_baixa_media_mensal else None,
+        
+        ("vendas_baixas", "produto"): (
             get_itens_baixa_media_mensal,
             {
                 "meses_janela": intent_spec.filtros.get("meses_janela", 12),
