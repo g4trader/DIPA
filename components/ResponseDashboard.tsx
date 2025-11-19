@@ -1361,106 +1361,150 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       )}
 
       {/* Botão "Ver detalhamento" com tabela completa - COM PAGINAÇÃO */}
-      {data.detalhe_tabela && data.detalhe_tabela.linhas && data.detalhe_tabela.linhas.length > 0 && (
-        <div id={generateCardId('detalhamento-container')} className="border-t border-slate-800 pt-6 space-y-4">
-          <button
-            onClick={() => {
-              setShowDetails(!showDetails);
-              // Reset página quando expandir/colapsar
-              if (!showDetails) {
-                setCurrentPageDetalhamento(0);
+      {(() => {
+        // Tenta usar detalhe_tabela diretamente
+        let detalheTabela = data.detalhe_tabela;
+        
+        // Fallback: constrói detalhe_tabela a partir de jsonTecnico.tabela_principal se não existir
+        if (!detalheTabela || !detalheTabela.linhas || detalheTabela.linhas.length === 0) {
+          const dataAny = data as any;
+          const tabelaPrincipal = dataAny.jsonTecnico?.tabela_principal;
+          
+          if (tabelaPrincipal && Array.isArray(tabelaPrincipal) && tabelaPrincipal.length > 0) {
+            const tabela = tabelaPrincipal[0];
+            if (tabela && tabela.colunas && tabela.linhas && Array.isArray(tabela.linhas) && tabela.linhas.length > 0) {
+              detalheTabela = {
+                titulo: tabela.titulo || "Dados Analíticos - Consulta Geral",
+                colunas: tabela.colunas,
+                linhas: tabela.linhas
+              };
+              
+              // Log para debug (apenas em desenvolvimento)
+              if (process.env.NODE_ENV === 'development') {
+                console.log('[ResponseDashboard] detalhe_tabela construída a partir de tabela_principal:', {
+                  titulo: detalheTabela.titulo,
+                  colunas: detalheTabela.colunas?.length || 0,
+                  linhas: detalheTabela.linhas.length
+                });
               }
-            }}
-            className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors font-medium"
-          >
-            Ver detalhamento completo
-            <ChevronDown className={clsx("w-4 h-4 transition-transform", showDetails && "rotate-180")} />
-          </button>
-          {showDetails && (() => {
-            // Calcula paginação: 20 registros por página
-            const totalLinhas = data.detalhe_tabela.linhas.length;
-            const totalPages = Math.ceil(totalLinhas / itemsPerPageDetalhamento);
-            const startIdx = currentPageDetalhamento * itemsPerPageDetalhamento;
-            const endIdx = startIdx + itemsPerPageDetalhamento;
-            const linhasPaginadas = data.detalhe_tabela.linhas.slice(startIdx, endIdx);
+            }
+          }
+        } else {
+          // Log para debug (apenas em desenvolvimento)
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[ResponseDashboard] detalhe_tabela encontrada:', {
+              titulo: detalheTabela.titulo,
+              colunas: detalheTabela.colunas?.length || 0,
+              linhas: detalheTabela.linhas.length
+            });
+          }
+        }
+        
+        if (detalheTabela && detalheTabela.linhas && detalheTabela.linhas.length > 0) {
+          
+          return (
+            <div id={generateCardId('detalhamento-container')} className="border-t border-slate-800 pt-6 space-y-4">
+              <button
+                onClick={() => {
+                  setShowDetails(!showDetails);
+                  // Reset página quando expandir/colapsar
+                  if (!showDetails) {
+                    setCurrentPageDetalhamento(0);
+                  }
+                }}
+                className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors font-medium"
+              >
+                Ver detalhamento completo
+                <ChevronDown className={clsx("w-4 h-4 transition-transform", showDetails && "rotate-180")} />
+              </button>
+              {showDetails && (() => {
+                // Calcula paginação: 20 registros por página
+                const totalLinhas = detalheTabela.linhas.length;
+                const totalPages = Math.ceil(totalLinhas / itemsPerPageDetalhamento);
+                const startIdx = currentPageDetalhamento * itemsPerPageDetalhamento;
+                const endIdx = startIdx + itemsPerPageDetalhamento;
+                const linhasPaginadas = detalheTabela.linhas.slice(startIdx, endIdx);
             
-            return (
-              <div id={generateCardId('detalhamento-expandido')} className="mt-4 rounded-xl bg-slate-950/80 p-4 shadow-lg space-y-4">
-                {data.detalhe_tabela.titulo && (
-                  <h4 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wide">
-                    {data.detalhe_tabela.titulo}
-                  </h4>
-                )}
-                <div id={generateTableId('detalhamento')} className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-700">
-                        {data.detalhe_tabela.colunas.map((col, idx) => (
-                          <th
-                            key={idx}
-                            className="text-left py-2 px-3 text-slate-400 font-semibold uppercase tracking-wide"
-                          >
-                            {col}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {linhasPaginadas.map((linha, linhaIdx) => (
-                        <tr
-                          key={startIdx + linhaIdx}
-                            className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
-                        >
-                          {linha.map((celula: any, celulaIdx: number) => (
-                            <td key={celulaIdx} className="py-2 px-3 text-slate-300">
-                              {typeof celula === "number"
-                                ? celula.toString() // ❌ Não formata automaticamente números como moeda - mantém ID numérico cru
-                                : celula || "—"}
-                            </td>
+                return (
+                  <div id={generateCardId('detalhamento-expandido')} className="mt-4 rounded-xl bg-slate-950/80 p-4 shadow-lg space-y-4">
+                    {detalheTabela.titulo && (
+                      <h4 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wide">
+                        {detalheTabela.titulo}
+                      </h4>
+                    )}
+                    <div id={generateTableId('detalhamento')} className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-700">
+                            {detalheTabela.colunas?.map((col, idx) => (
+                              <th
+                                key={idx}
+                                className="text-left py-2 px-3 text-slate-400 font-semibold uppercase tracking-wide"
+                              >
+                                {col}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {linhasPaginadas.map((linha, linhaIdx) => (
+                            <tr
+                              key={startIdx + linhaIdx}
+                              className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
+                            >
+                              {linha.map((celula: any, celulaIdx: number) => (
+                                <td key={celulaIdx} className="py-2 px-3 text-slate-300">
+                                  {typeof celula === "number"
+                                    ? celula.toString()
+                                    : celula || "—"}
+                                </td>
+                              ))}
+                            </tr>
                           ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                </div>
-                
-                {/* Paginação - 20 registros por página - SEMPRE exibe quando há mais de 20 registros */}
-                {totalLinhas > itemsPerPageDetalhamento && (
-                  <div id={generateCardId('paginacao-detalhamento')} className="mt-4 flex items-center justify-between">
-                    <button
-                      id={generateCardId('btn-pagina-anterior-detalhamento')}
-                      onClick={() => setCurrentPageDetalhamento(p => Math.max(0, p - 1))}
-                      disabled={currentPageDetalhamento === 0}
-                      className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
-                    >
-                      Anterior
-                    </button>
-                    <span id={generateCardId('info-paginacao-detalhamento')} className="text-sm text-white/70">
-                      Página {currentPageDetalhamento + 1} de {totalPages} ({totalLinhas} registros - exibindo {startIdx + 1} a {Math.min(endIdx, totalLinhas)})
-                    </span>
-                    <button
-                      id={generateCardId('btn-pagina-proxima-detalhamento')}
-                      onClick={() => setCurrentPageDetalhamento(p => Math.min(totalPages - 1, p + 1))}
-                      disabled={currentPageDetalhamento >= totalPages - 1}
-                      className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
-                    >
-                      Próxima
-                    </button>
+                        </tbody>
+                      </table>
+                    </div>
+                    </div>
+                    
+                    {/* Paginação - 20 registros por página - SEMPRE exibe quando há mais de 20 registros */}
+                    {totalLinhas > itemsPerPageDetalhamento && (
+                      <div id={generateCardId('paginacao-detalhamento')} className="mt-4 flex items-center justify-between">
+                        <button
+                          id={generateCardId('btn-pagina-anterior-detalhamento')}
+                          onClick={() => setCurrentPageDetalhamento(p => Math.max(0, p - 1))}
+                          disabled={currentPageDetalhamento === 0}
+                          className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                        >
+                          Anterior
+                        </button>
+                        <span id={generateCardId('info-paginacao-detalhamento')} className="text-sm text-white/70">
+                          Página {currentPageDetalhamento + 1} de {totalPages} ({totalLinhas} registros - exibindo {startIdx + 1} a {Math.min(endIdx, totalLinhas)})
+                        </span>
+                        <button
+                          id={generateCardId('btn-pagina-proxima-detalhamento')}
+                          onClick={() => setCurrentPageDetalhamento(p => Math.min(totalPages - 1, p + 1))}
+                          disabled={currentPageDetalhamento >= totalPages - 1}
+                          className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                        >
+                          Próxima
+                        </button>
+                      </div>
+                    )}
+                    {/* Informação quando há 20 ou menos registros (sem paginação) */}
+                    {totalLinhas > 0 && totalLinhas <= itemsPerPageDetalhamento && (
+                      <div id={generateCardId('info-total-registros')} className="mt-4 text-xs text-white/50 text-center">
+                        Exibindo todos os {totalLinhas} registro{totalLinhas !== 1 ? 's' : ''}
+                      </div>
+                    )}
                   </div>
-                )}
-                {/* Informação quando há 20 ou menos registros (sem paginação) */}
-                {totalLinhas > 0 && totalLinhas <= itemsPerPageDetalhamento && (
-                  <div id={generateCardId('info-total-registros')} className="mt-4 text-xs text-white/50 text-center">
-                    Exibindo todos os {totalLinhas} registro{totalLinhas !== 1 ? 's' : ''}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </div>
-      )}
+                );
+              })()}
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* Contexto de debug (sempre colapsado por padrão) */}
       {data.contexto_debug && (
