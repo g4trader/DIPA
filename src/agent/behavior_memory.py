@@ -46,48 +46,78 @@ def aplicar_regras_ao_intent(
     tipo_intent = intent_spec.tipo
     dimensao_principal = intent_spec.dimensao_principal
     
+    # Verifica se a tabela behavior_rules existe, se não, retorna sem aplicar regras
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(session_dw.bind)
+        existing_tables = inspector.get_table_names()
+        
+        if "behavior_rules" not in existing_tables:
+            logger.warning("[behavior_memory] Tabela behavior_rules não existe. Tentando criar...")
+            # Tenta criar a tabela
+            try:
+                from src.dw.bootstrap_schema import ensure_application_schema
+                from src.dw.connection import get_db_engine
+                engine = get_db_engine()
+                ensure_application_schema(engine)
+                logger.info("[behavior_memory] ✅ Tabela behavior_rules criada com sucesso")
+            except Exception as e:
+                logger.warning(f"[behavior_memory] ⚠️  Não foi possível criar tabela behavior_rules: {e}")
+                logger.info("[behavior_memory] Continuando sem aplicar regras comportamentais")
+                return intent_spec, []
+    except Exception as e:
+        logger.warning(f"[behavior_memory] ⚠️  Erro ao verificar tabela behavior_rules: {e}")
+        logger.info("[behavior_memory] Continuando sem aplicar regras comportamentais")
+        return intent_spec, []
+    
     # Busca regras compatíveis, ordenadas por prioridade
     regras_compatíveis = []
     
-    # 1. Escopo tipo_intent_dimensao (maior prioridade)
-    regras_tipo_dimensao = session_dw.query(BehaviorRule).filter(
-        and_(
-            BehaviorRule.ativo == True,
-            BehaviorRule.escopo == "tipo_intent_dimensao",
-            BehaviorRule.tipo_intent == tipo_intent,
-            BehaviorRule.dimensao_principal == dimensao_principal
-        )
-    ).all()
-    regras_compatíveis.extend([(r, 1) for r in regras_tipo_dimensao])
-    
-    # 2. Escopo tipo_intent
-    regras_tipo = session_dw.query(BehaviorRule).filter(
-        and_(
-            BehaviorRule.ativo == True,
-            BehaviorRule.escopo == "tipo_intent",
-            BehaviorRule.tipo_intent == tipo_intent
-        )
-    ).all()
-    regras_compatíveis.extend([(r, 2) for r in regras_tipo])
-    
-    # 3. Escopo tipo_dimensao
-    regras_dimensao = session_dw.query(BehaviorRule).filter(
-        and_(
-            BehaviorRule.ativo == True,
-            BehaviorRule.escopo == "tipo_dimensao",
-            BehaviorRule.dimensao_principal == dimensao_principal
-        )
-    ).all()
-    regras_compatíveis.extend([(r, 3) for r in regras_dimensao])
-    
-    # 4. Escopo global (menor prioridade)
-    regras_global = session_dw.query(BehaviorRule).filter(
-        and_(
-            BehaviorRule.ativo == True,
-            BehaviorRule.escopo == "global"
-        )
-    ).all()
-    regras_compatíveis.extend([(r, 4) for r in regras_global])
+    try:
+        # 1. Escopo tipo_intent_dimensao (maior prioridade)
+        regras_tipo_dimensao = session_dw.query(BehaviorRule).filter(
+            and_(
+                BehaviorRule.ativo == True,
+                BehaviorRule.escopo == "tipo_intent_dimensao",
+                BehaviorRule.tipo_intent == tipo_intent,
+                BehaviorRule.dimensao_principal == dimensao_principal
+            )
+        ).all()
+        regras_compatíveis.extend([(r, 1) for r in regras_tipo_dimensao])
+        
+        # 2. Escopo tipo_intent
+        regras_tipo = session_dw.query(BehaviorRule).filter(
+            and_(
+                BehaviorRule.ativo == True,
+                BehaviorRule.escopo == "tipo_intent",
+                BehaviorRule.tipo_intent == tipo_intent
+            )
+        ).all()
+        regras_compatíveis.extend([(r, 2) for r in regras_tipo])
+        
+        # 3. Escopo tipo_dimensao
+        regras_dimensao = session_dw.query(BehaviorRule).filter(
+            and_(
+                BehaviorRule.ativo == True,
+                BehaviorRule.escopo == "tipo_dimensao",
+                BehaviorRule.dimensao_principal == dimensao_principal
+            )
+        ).all()
+        regras_compatíveis.extend([(r, 3) for r in regras_dimensao])
+        
+        # 4. Escopo global (menor prioridade)
+        regras_global = session_dw.query(BehaviorRule).filter(
+            and_(
+                BehaviorRule.ativo == True,
+                BehaviorRule.escopo == "global"
+            )
+        ).all()
+        regras_compatíveis.extend([(r, 4) for r in regras_global])
+    except Exception as e:
+        # Se a tabela não existir ou houver erro na query, retorna sem aplicar regras
+        logger.warning(f"[behavior_memory] ⚠️  Erro ao consultar behavior_rules: {e}")
+        logger.info("[behavior_memory] Continuando sem aplicar regras comportamentais")
+        return intent_spec, []
     
     # Ordena por prioridade (menor número = maior prioridade)
     # IMPORTANTE: Aplicamos na ordem inversa (maior prioridade por último) para que sobrescreva as anteriores

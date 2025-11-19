@@ -45,11 +45,10 @@ type OpenAIChatCompletion = {
   }>;
 };
 
-const DEFAULT_BASE_URL = "https://api.openai.com/v1";
-const DEFAULT_MODEL = "gpt-4o-mini";
-const baseUrl = (process.env.OPENAI_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
-const OPENAI_URL = `${baseUrl}/chat/completions`;
-const MODEL = process.env.OPENAI_MODEL || DEFAULT_MODEL;
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function jsonResponse<T>(status: number, payload: T) {
@@ -74,8 +73,8 @@ export async function POST(req: Request) {
 
   const { question } = body as { question: string };
 
-  // Detecta qual provedor usar (prioridade: Grok > OpenAI)
-  const grokApiKey = process.env.GROK_API_KEY;
+  // Detecta qual provedor usar (prioridade: Groq > OpenAI)
+  const groqApiKey = process.env.GROQ_API_KEY;
   const openaiApiKey = process.env.OPENAI_API_KEY;
   
   let apiKey: string;
@@ -83,18 +82,18 @@ export async function POST(req: Request) {
   let model: string;
   let provider: string;
   
-  if (grokApiKey) {
-    apiKey = grokApiKey;
-    apiUrl = GROK_URL;
-    model = GROK_MODEL;
-    provider = "Grok";
+  if (groqApiKey) {
+    apiKey = groqApiKey;
+    apiUrl = GROQ_URL;
+    model = GROQ_MODEL;
+    provider = "Groq";
   } else if (openaiApiKey) {
     apiKey = openaiApiKey;
     apiUrl = OPENAI_URL;
     model = OPENAI_MODEL;
     provider = "OpenAI";
   } else {
-    return jsonResponse(500, { ok: false, error: "LLM API key is not configured. Set GROK_API_KEY or OPENAI_API_KEY." });
+    return jsonResponse(500, { ok: false, error: "LLM API key is not configured. Set GROQ_API_KEY or OPENAI_API_KEY." });
   }
 
   const tools = functions.map((fn) => ({ type: "function", function: fn }));

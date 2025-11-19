@@ -1,8 +1,8 @@
 """
-Cliente LLM genérico que suporta múltiplos provedores (OpenAI, Grok/xAI).
+Cliente LLM genérico que suporta múltiplos provedores (OpenAI, Groq).
 
 Este módulo fornece funções para interagir com APIs de LLM de forma unificada,
-suportando OpenAI e Grok (xAI) através de variáveis de ambiente.
+suportando OpenAI e Groq através de variáveis de ambiente.
 """
 
 import os
@@ -14,7 +14,7 @@ from requests.exceptions import RequestException, Timeout
 logger = logging.getLogger(__name__)
 
 # Tipos de provedores suportados
-LLMProvider = Literal["openai", "grok"]
+LLMProvider = Literal["openai", "groq"]
 
 
 class LLMError(Exception):
@@ -27,24 +27,24 @@ def get_llm_provider() -> LLMProvider:
     Determina qual provedor LLM usar baseado em variáveis de ambiente.
     
     Prioridade:
-    1. GROK_API_KEY presente → usa Grok
+    1. GROQ_API_KEY presente → usa Groq
     2. OPENAI_API_KEY presente → usa OpenAI
     3. Padrão: OpenAI (se nenhuma chave estiver presente, retorna erro)
     
     Returns:
-        LLMProvider: "openai" ou "grok"
+        LLMProvider: "openai" ou "groq"
     """
-    grok_key = os.getenv("GROK_API_KEY")
+    groq_key = os.getenv("GROQ_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
     
-    if grok_key:
-        return "grok"
+    if groq_key:
+        return "groq"
     elif openai_key:
         return "openai"
     else:
         raise LLMError(
             "Nenhuma chave de API LLM configurada. "
-            "Configure GROK_API_KEY ou OPENAI_API_KEY."
+            "Configure GROQ_API_KEY ou OPENAI_API_KEY."
         )
 
 
@@ -52,10 +52,10 @@ def get_llm_config(provider: Optional[LLMProvider] = None) -> Dict[str, str]:
     """
     Lê e valida configurações do LLM a partir de variáveis de ambiente.
     
-    Para Grok:
-    - GROK_API_KEY: Chave de API (obrigatória)
-    - GROK_BASE_URL: URL base (opcional, padrão: https://api.x.ai/v1)
-    - GROK_MODEL: Modelo (opcional, padrão: grok-beta)
+    Para Groq:
+    - GROQ_API_KEY: Chave de API (obrigatória)
+    - GROQ_BASE_URL: URL base (opcional, padrão: https://api.groq.com/openai/v1)
+    - GROQ_MODEL: Modelo (opcional, padrão: mixtral-8x7b-32768)
     
     Para OpenAI:
     - OPENAI_API_KEY: Chave de API (obrigatória)
@@ -63,7 +63,7 @@ def get_llm_config(provider: Optional[LLMProvider] = None) -> Dict[str, str]:
     - OPENAI_MODEL: Modelo (opcional, padrão: gpt-4o-mini)
     
     Args:
-        provider: Provedor a usar ("openai" ou "grok"). Se None, detecta automaticamente.
+        provider: Provedor a usar ("openai" ou "groq"). Se None, detecta automaticamente.
     
     Returns:
         dict: Dicionário com configurações do cliente
@@ -80,16 +80,16 @@ def get_llm_config(provider: Optional[LLMProvider] = None) -> Dict[str, str]:
     if provider is None:
         provider = get_llm_provider()
     
-    if provider == "grok":
-        api_key = os.getenv("GROK_API_KEY")
+    if provider == "groq":
+        api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             raise LLMError(
-                "GROK_API_KEY não encontrada. "
-                "Configure a variável de ambiente GROK_API_KEY com sua chave de API do Grok."
+                "GROQ_API_KEY não encontrada. "
+                "Configure a variável de ambiente GROQ_API_KEY com sua chave de API do Groq."
             )
         
-        base_url = os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
-        model = os.getenv("GROK_MODEL", "grok-beta")
+        base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+        model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
         
     else:  # OpenAI
         api_key = os.getenv("OPENAI_API_KEY")
@@ -122,14 +122,14 @@ def call_llm(
     **kwargs
 ) -> str:
     """
-    Faz uma chamada HTTP à API de chat/completions do LLM (OpenAI ou Grok).
+    Faz uma chamada HTTP à API de chat/completions do LLM (OpenAI ou Groq).
     
     Envia o prompt e system_prompt para a API e retorna a resposta gerada.
     
     Args:
         prompt: Prompt do usuário
         system_prompt: Prompt do sistema (opcional)
-        provider: Provedor a usar ("openai" ou "grok"). Se None, detecta automaticamente.
+        provider: Provedor a usar ("openai" ou "groq"). Se None, detecta automaticamente.
         **kwargs: Argumentos adicionais para a API:
             - temperature: float (padrão: 0.7)
             - max_tokens: int (padrão: 1000)

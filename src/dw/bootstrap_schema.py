@@ -42,7 +42,34 @@ def ensure_application_schema(engine):
             logger.info("[BOOTSTRAP-SCHEMA] ✅ Tabela behavior_rules criada com sucesso")
         except Exception as e:
             logger.error(f"[BOOTSTRAP-SCHEMA] ❌ Erro ao criar tabela behavior_rules: {e}")
-            # Não faz raise - apenas loga o erro para não quebrar a inicialização
+            logger.exception("[BOOTSTRAP-SCHEMA] Detalhes do erro:")
+            # Tenta criar manualmente com SQL direto como fallback
+            try:
+                logger.info("[BOOTSTRAP-SCHEMA] Tentando criar tabela manualmente...")
+                with engine.connect() as conn:
+                    conn.execute(text("""
+                        CREATE TABLE IF NOT EXISTS behavior_rules (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            criado_em DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                            criado_por VARCHAR(50) NOT NULL DEFAULT 'diretor',
+                            ativo BOOLEAN NOT NULL DEFAULT 1,
+                            escopo VARCHAR(50) NOT NULL,
+                            tipo_intent VARCHAR(100),
+                            dimensao_principal VARCHAR(50),
+                            tipo_regra VARCHAR(50) NOT NULL,
+                            regra_json TEXT NOT NULL,
+                            comentario TEXT,
+                            fonte_feedback TEXT
+                        )
+                    """))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS idx_behavior_rule_escopo_ativo ON behavior_rules(escopo, ativo)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS idx_behavior_rule_tipo_intent_ativo ON behavior_rules(tipo_intent, ativo)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS idx_behavior_rule_tipo_intent_dimensao ON behavior_rules(tipo_intent, dimensao_principal, ativo)"))
+                    conn.commit()
+                logger.info("[BOOTSTRAP-SCHEMA] ✅ Tabela behavior_rules criada manualmente com sucesso")
+            except Exception as e2:
+                logger.error(f"[BOOTSTRAP-SCHEMA] ❌ Erro ao criar tabela manualmente: {e2}")
+                # Não faz raise - apenas loga o erro para não quebrar a inicialização
     else:
         logger.debug("[BOOTSTRAP-SCHEMA] Tabela behavior_rules já existe")
     

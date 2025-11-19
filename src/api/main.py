@@ -175,8 +175,8 @@ async def startup_event():
     # Limpa erros anteriores (se houver restart)
     app.state.startup_errors = []
     
-    # 1. Validação de LLM (OpenAI ou Grok) - não crítica para o servidor subir
-    logger.info("Verificando configuração LLM (OpenAI/Grok)...")
+    # 1. Validação de LLM (OpenAI ou Groq) - não crítica para o servidor subir
+    logger.info("Verificando configuração LLM (OpenAI/Groq)...")
     try:
         from src.llm_client import get_llm_config, get_llm_provider
         provider = get_llm_provider()
@@ -189,7 +189,7 @@ async def startup_event():
             logger.warning("⚠️  LLM client retornou None")
             app.state.startup_errors.append("LLM: client retornou None")
     except Exception as e:
-        error_msg = f"LLM não configurado (GROK_API_KEY ou OPENAI_API_KEY): {str(e)}"
+        error_msg = f"LLM não configurado (GROQ_API_KEY ou OPENAI_API_KEY): {str(e)}"
         logger.error(f"❌ {error_msg}")
         app.state.startup_errors.append(error_msg)
         logger.warning("⚠️  Servidor continuará funcionando, mas funcionalidades de LLM podem não estar disponíveis")
@@ -767,7 +767,7 @@ async def health_check_openai():
     try:
         from src.llm_client import get_llm_config, get_llm_provider
         
-        # Valida configuração (detecta automaticamente Grok ou OpenAI)
+        # Valida configuração (detecta automaticamente Groq ou OpenAI)
         try:
             provider = get_llm_provider()
             client_config = get_llm_config(provider)
