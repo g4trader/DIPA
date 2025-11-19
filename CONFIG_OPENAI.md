@@ -1,12 +1,12 @@
-# Configuração da OpenAI API
+# Configuração da OpenAI / Grok API
 
-Este documento explica como configurar as variáveis de ambiente da OpenAI para o backend da Dipam AI.
+Este documento explica como configurar as variáveis de ambiente do provedor LLM (OpenAI ou Grok/xAI) para o backend da Dipam AI.
 
 ## Variáveis Necessárias
 
 O backend precisa das seguintes variáveis de ambiente:
 
-- `OPENAI_API_KEY`: Sua chave de API da OpenAI (obrigatória)
+- `OPENAI_API_KEY`: Sua chave de API (OpenAI: `sk-...`, Grok: `gsk_...` ou `xai-...`) – obrigatória
 - `OPENAI_BASE_URL`: URL base da API (opcional, padrão: `https://api.openai.com/v1`)
 - `OPENAI_MODEL`: Modelo a ser usado (opcional, padrão: `gpt-4o-mini`)
 
@@ -16,8 +16,8 @@ O backend precisa das seguintes variáveis de ambiente:
 
 1. Crie um arquivo `.env` na raiz do projeto:
 ```bash
-# OpenAI Configuration
-OPENAI_API_KEY=sk-proj-sua-chave-aqui
+# LLM Configuration (OpenAI ou Grok)
+OPENAI_API_KEY=gsk_sua-chave-grok-ou-sk-openai
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
 ```
@@ -29,7 +29,7 @@ OPENAI_MODEL=gpt-4o-mini
 Exporte as variáveis antes de iniciar a API:
 
 ```bash
-export OPENAI_API_KEY="sk-proj-sua-chave-aqui"
+export OPENAI_API_KEY="gsk_sua-chave-ou-sk-openai"
 export OPENAI_BASE_URL="https://api.openai.com/v1"
 export OPENAI_MODEL="gpt-4o-mini"
 ```
@@ -67,6 +67,22 @@ curl -X POST http://localhost:8000/ask \
 - Nunca commite sua chave de API no Git
 - O arquivo `.env` já está no `.gitignore`
 - Use variáveis de ambiente em produção
+
+## Usando o Grok (xAI)
+
+O Grok fornece uma API compatível com o formato da OpenAI. Para utilizá-lo:
+
+1. Configure as variáveis:
+
+```bash
+export OPENAI_API_KEY="gsk_sua_chave_grok"
+export OPENAI_BASE_URL="https://api.x.ai/v1"
+export OPENAI_MODEL="grok-beta"
+```
+
+2. O backend e o frontend (rota `app/api/query/route.ts`) lerão automaticamente essas variáveis e chamarão `https://api.x.ai/v1/chat/completions`.
+
+3. Certifique-se de que o Secret Manager/CI use o mesmo secret (`OPENAI_API_KEY`) – o script `scripts/setup-openai-secret.sh` já aceita as novas chaves `gsk_`.
 
 
 
