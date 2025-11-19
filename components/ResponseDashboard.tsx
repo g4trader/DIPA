@@ -7,8 +7,7 @@ import { InsightsBlock } from "./InsightsBlock";
 import { DataTable } from "./DataTable";
 import { ExecutiveSectionCard } from "./ExecutiveSectionCard";
 import { parseMarkdownExecutivo } from "./markdownParser";
-import { FileText, Download } from "lucide-react";
-import { generateExecutivePdf } from "./pdf/generateExecutivePdf";
+import { FileText } from "lucide-react";
 
 type Props = {
   data: CopilotStructuredResponse;
@@ -322,39 +321,6 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       currentPage: currentPageQ1
     };
   }, [tabelaPrincipalQ1, currentPageQ1, itemsPerPage]);
-  
-  // Handler para gerar PDF
-  const handleDownloadPdf = () => {
-    // Prepara dados para o PDF
-    const pdfData = {
-      pergunta: question || dataAny.intent_label || dataAny.intent || 'Consulta DIPAM COPILOT™',
-      resumoExecutivo: parsedMarkdown?.resumoExecutivo,
-      kpis: bigNumberKPIs.map(kpi => ({
-        label: kpi.label,
-        valor: kpi.value,
-      })),
-      principaisAchados: parsedMarkdown?.principaisAchados,
-      implicacoes: parsedMarkdown?.implicacoesComerciais,
-      planoAcao: parsedMarkdown?.planoAcao,
-      alvosPrioritariosLista: parsedMarkdown?.alvosPrioritarios,
-      tabelaTop10: parsedMarkdown?.topAlvos?.map((alvo: any) => ({
-        cliente: alvo.Cliente || alvo.cliente || alvo.item || '—',
-        diasSemCompra: alvo["Dias sem compra"] || alvo.diasSemCompra || alvo.dias || 0,
-        rota: alvo.Rota || alvo.rota || null,
-      })),
-      tabelaPrincipal: tableData.length > 0 ? {
-        colunas: Object.keys(tableData[0]),
-        linhas: tableData.map(row => Object.values(row).map(v => {
-          if (v === null || v === undefined) return null;
-          if (typeof v === 'string' || typeof v === 'number') return v;
-          return String(v);
-        }) as (string | number | null)[]),
-      } : null,
-    };
-    
-    generateExecutivePdf(pdfData);
-  };
-  
   // Ref para scroll ao início da resposta
   const respostaRef = useRef<HTMLDivElement>(null);
   
