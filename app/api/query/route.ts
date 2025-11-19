@@ -45,8 +45,11 @@ type OpenAIChatCompletion = {
   }>;
 };
 
+// Suporta Grok (xAI) e OpenAI
+const GROK_URL = "https://api.x.ai/v1/chat/completions";
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-const MODEL = "gpt-4o-mini";
+const GROK_MODEL = "grok-beta";
+const OPENAI_MODEL = "gpt-4o-mini";
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function jsonResponse<T>(status: number, payload: T) {
@@ -71,21 +74,39 @@ export async function POST(req: Request) {
 
   const { question } = body as { question: string };
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return jsonResponse(500, { ok: false, error: "OpenAI API key is not configured." });
+  // Detecta qual provedor usar (prioridade: Grok > OpenAI)
+  const grokApiKey = process.env.GROK_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  
+  let apiKey: string;
+  let apiUrl: string;
+  let model: string;
+  let provider: string;
+  
+  if (grokApiKey) {
+    apiKey = grokApiKey;
+    apiUrl = GROK_URL;
+    model = GROK_MODEL;
+    provider = "Grok";
+  } else if (openaiApiKey) {
+    apiKey = openaiApiKey;
+    apiUrl = OPENAI_URL;
+    model = OPENAI_MODEL;
+    provider = "OpenAI";
+  } else {
+    return jsonResponse(500, { ok: false, error: "LLM API key is not configured. Set GROK_API_KEY or OPENAI_API_KEY." });
   }
 
   const tools = functions.map((fn) => ({ type: "function", function: fn }));
 
-  const response = await fetch(OPENAI_URL, {
+  const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: model,
       messages: [
         {
           role: "system",
@@ -103,7 +124,7 @@ export async function POST(req: Request) {
   });
 
   if (!response.ok) {
-    return jsonResponse(502, { ok: false, error: "Failed to contact OpenAI." });
+    return jsonResponse(502, { ok: false, error: `Failed to contact ${provider} API.` });
   }
 
   const completion = (await response.json()) as OpenAIChatCompletion;
@@ -112,14 +133,14 @@ export async function POST(req: Request) {
   );
 
   if (!toolCall?.function?.arguments) {
-    return jsonResponse(502, { ok: false, error: "OpenAI did not return function arguments." });
+    return jsonResponse(502, { ok: false, error: `${provider} did not return function arguments.` });
   }
 
   let args: unknown;
   try {
     args = JSON.parse(toolCall.function.arguments);
   } catch {
-    return jsonResponse(502, { ok: false, error: "Invalid JSON from OpenAI function call." });
+    return jsonResponse(502, { ok: false, error: `Invalid JSON from ${provider} function call.` });
   }
 
   const parsedArgs = ParsedQuery.safeParse(args);
