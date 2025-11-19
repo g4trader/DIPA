@@ -92,13 +92,13 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
             <span id="dipam-card-header-badge-confidence" className="rounded-full bg-emerald-500/10 border border-emerald-400/40 px-3 py-1 text-[11px] text-emerald-300">
               {Math.round(confidence * 100)}% confiança
             </span>
-            {/* Botão de download PDF */}
+            {/* Botão de download PDF - mesmo estilo dos badges */}
             <button
               onClick={handleDownloadPdf}
-              className="inline-flex items-center gap-1.5 rounded-full bg-[#0EA5E9] hover:bg-[#0284C7] px-3 py-1.5 text-[11px] font-medium text-white shadow-lg shadow-cyan-500/20 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/80 px-3 py-1 text-[11px] text-slate-300 hover:bg-slate-700/80 transition-colors"
               title="Baixar relatório em PDF"
             >
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-3 h-3" />
               <span>Baixar PDF</span>
             </button>
           </div>
