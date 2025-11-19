@@ -14,7 +14,6 @@ Foco:
 import pytest
 import os
 import requests
-import time
 from typing import Dict, Any, Optional
 from requests.exceptions import (
     ProxyError,
