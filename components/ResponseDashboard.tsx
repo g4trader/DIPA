@@ -359,11 +359,11 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
           <h2 className="text-xl font-semibold text-white">A resposta para sua pergunta é:</h2>
           <div className={`grid grid-cols-1 ${bigNumberKPIs.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-6`}>
             {bigNumberKPIs.map((kpi, idx) => (
-              <div key={idx} id={generateCardId('kpi', idx)}>
+              <div key={idx} id={generateCardId('kpi', idx)} className={idx === 0 ? "sm:col-span-2 lg:col-span-3" : ""}>
                 {idx === 0 ? (
-                  // Primeiro card com 3 ícones customizados (mesmo estilo) - ícone de clientes primeiro
-                  <div id={generateCardId('kpi-card', idx)} className="flex flex-col justify-between rounded-2xl bg-[#0F172A] border border-white/10 px-4 py-5 shadow-lg shadow-black/40 hover:border-white/20 transition-all duration-200">
-                    <div className="flex items-start gap-2 mb-3 flex-wrap">
+                  // Primeiro card com 3 ícones customizados (mesmo estilo) - ícone de clientes primeiro - largura aumentada
+                  <div id={generateCardId('kpi-card', idx)} className="flex flex-col justify-between rounded-2xl bg-[#0F172A] border border-white/10 px-6 py-5 shadow-lg shadow-black/40 hover:border-white/20 transition-all duration-200">
+                    <div className="flex items-start gap-3 mb-3">
                       {/* Ícone de clientes - PRIMEIRO */}
                       <div className="text-blue-400 bg-blue-400/10 rounded-xl p-2.5 border border-blue-400/20 flex flex-col items-center justify-center w-14 h-14 flex-shrink-0">
                         <Users className="w-5 h-5" />
