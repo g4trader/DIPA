@@ -194,9 +194,15 @@ def _format_clientes_sem_compra(dados, intent_spec, filtros, regras_behavior):
             dias = row.get("dias_sem_compra", 0) or 0
             partes.append(f"{dias} dias sem compra")
         
-        if "rota_id" in row:
-            partes.append(f"Rota: {row['rota_id']}")
-        elif "rota" in row:
+        # Formata rota para o formato esperado pelo frontend: "CLIENTE | X dias sem compra | Rota: Y"
+        if "rota_id" in row and row.get("rota_id"):
+            rota_valor = row['rota_id']
+            # Se rota_id for numérico, formata como "ROTA XX"
+            if isinstance(rota_valor, (int, float)):
+                partes.append(f"Rota: ROTA {int(rota_valor)}")
+            else:
+                partes.append(f"Rota: {rota_valor}")
+        elif "rota" in row and row.get("rota"):
             partes.append(f"Rota: {row['rota']}")
         
         if "supervisor" in row:
