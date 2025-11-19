@@ -24,6 +24,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({});
   const [currentPageDetalhamento, setCurrentPageDetalhamento] = useState(0);
   const itemsPerPageDetalhamento = 20; // 20 registros por página
+  // Estado de paginação para seções de tabela_detalhada (uma por seção)
+  const [currentPagesTabelaDetalhada, setCurrentPagesTabelaDetalhada] = useState<Record<number, number>>({});
   
   // Compatibilidade: usa resumo_executivo ou resumoExecutivo
   const resumoExecutivo = data.resumo_executivo || data.resumoExecutivo;
@@ -1194,9 +1196,17 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               );
             }
             
-            // Seção: Tabela Detalhada (genérica)
+            // Seção: Tabela Detalhada (genérica) - COM PAGINAÇÃO
             if (secao.tipo === "tabela_detalhada" && secao.dados && secao.dados.length > 0) {
               const isExpanded = expandedSections[secaoIdx] ?? true;
+              
+              // Calcula paginação para esta seção
+              const currentPage = currentPagesTabelaDetalhada[secaoIdx] || 0;
+              const totalLinhas = secao.dados.length;
+              const totalPages = Math.ceil(totalLinhas / itemsPerPageDetalhamento);
+              const startIdx = currentPage * itemsPerPageDetalhamento;
+              const endIdx = startIdx + itemsPerPageDetalhamento;
+              const dadosPaginados = secao.dados.slice(startIdx, endIdx);
               
               return (
                 <div
@@ -1221,40 +1231,73 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                   </div>
                   
                   {isExpanded && (
-                    <div id={generateTableId('detalhada', secaoIdx)} className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-slate-700">
-                              {Object.keys(secao.dados[0] || {}).map((key, idx) => (
-                              <th
-                                key={idx}
-                                className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide"
-                              >
-                                {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {secao.dados.map((item: any, idx: number) => (
-                            <tr
-                              key={idx}
-                                className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
-                            >
-                              {Object.values(item).map((val: any, cellIdx: number) => (
-                                <td key={cellIdx} className="py-3 px-4 text-slate-300">
-                                  {typeof val === "number"
-                                    ? val.toString() // ❌ Não formata automaticamente números como moeda - mantém ID numérico cru
-                                    : val || "—"}
-                                </td>
+                    <>
+                      <div id={generateTableId('detalhada', secaoIdx)} className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-slate-700">
+                                {Object.keys(secao.dados[0] || {}).map((key, idx) => (
+                                <th
+                                  key={idx}
+                                  className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide"
+                                >
+                                  {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                                </th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {dadosPaginados.map((item: any, idx: number) => (
+                              <tr
+                                key={startIdx + idx}
+                                className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
+                              >
+                                {Object.values(item).map((val: any, cellIdx: number) => (
+                                  <td key={cellIdx} className="py-3 px-4 text-slate-300">
+                                    {typeof val === "number"
+                                      ? val.toString()
+                                      : val || "—"}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      </div>
+                      
+                      {/* Paginação - 20 registros por página */}
+                      {totalLinhas > itemsPerPageDetalhamento && (
+                        <div id={generateCardId(`paginacao-tabela-detalhada-${secaoIdx}`)} className="mt-4 flex items-center justify-between">
+                          <button
+                            id={generateCardId(`btn-pagina-anterior-tabela-${secaoIdx}`)}
+                            onClick={() => setCurrentPagesTabelaDetalhada(prev => ({ ...prev, [secaoIdx]: Math.max(0, (prev[secaoIdx] || 0) - 1) }))}
+                            disabled={currentPage === 0}
+                            className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                          >
+                            Anterior
+                          </button>
+                          <span id={generateCardId(`info-paginacao-tabela-${secaoIdx}`)} className="text-sm text-white/70">
+                            Página {currentPage + 1} de {totalPages} ({totalLinhas} registros - exibindo {startIdx + 1} a {Math.min(endIdx, totalLinhas)})
+                          </span>
+                          <button
+                            id={generateCardId(`btn-pagina-proxima-tabela-${secaoIdx}`)}
+                            onClick={() => setCurrentPagesTabelaDetalhada(prev => ({ ...prev, [secaoIdx]: Math.min(totalPages - 1, (prev[secaoIdx] || 0) + 1) }))}
+                            disabled={currentPage >= totalPages - 1}
+                            className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                          >
+                            Próxima
+                          </button>
+                        </div>
+                      )}
+                      {/* Informação quando há 20 ou menos registros (sem paginação) */}
+                      {totalLinhas > 0 && totalLinhas <= itemsPerPageDetalhamento && (
+                        <div id={generateCardId(`info-total-registros-tabela-${secaoIdx}`)} className="mt-4 text-xs text-white/50 text-center">
+                          Exibindo todos os {totalLinhas} registro{totalLinhas !== 1 ? 's' : ''}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               );
