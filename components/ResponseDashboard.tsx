@@ -404,6 +404,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
             {bigNumberKPIs.map((kpi, idx) => (
               <div key={idx} id={generateCardId('kpi', idx)}>
                 <BigNumberCard
+                  id={generateCardId('kpi-card', idx)}
                   label={kpi.label}
                   value={kpi.value}
                   icon={kpi.icon}
@@ -419,8 +420,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       {/* 2. Resumo Executivo */}
       {parsedMarkdown?.resumoExecutivo && (
         <div id={generateCardId('resumo-executivo')} className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg">
-          <h2 className="text-xl font-semibold mb-4 text-white">Resumo Executivo</h2>
-          <div className="prose prose-invert max-w-none">
+          <h2 id={generateCardId('resumo-executivo-titulo')} className="text-xl font-semibold mb-4 text-white">Resumo Executivo</h2>
+          <div id={generateCardId('resumo-executivo-conteudo')} className="prose prose-invert max-w-none">
             <p className="text-sm opacity-90 leading-relaxed whitespace-pre-line text-white/80">
               {parsedMarkdown.resumoExecutivo}
             </p>
@@ -428,84 +429,52 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         </div>
       )}
       
-      {/* 3. Tabela "Dados Analíticos – Consulta Geral" com paginação de 20 registros (logo após Resumo Executivo) */}
-      {(isQ1 && tabelaClientesPaginada) || (!isQ1 && tabelaAnaliticaPaginada) ? (
+      {/* 3. Tabela "Clientes sem compra" (Q1) - REMOVIDO: "Dados Analíticos - Consulta Geral" (muita informação inútil para Diretor) */}
+      {isQ1 && tabelaClientesPaginada ? (
         <div 
-          id={generateTableId(isQ1 ? 'clientes-sem-compra' : 'dados-analiticos')} 
+          id={generateTableId('clientes-sem-compra')} 
           className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg space-y-4"
         >
-          <h2 className="text-xl font-semibold text-white">
-            {isQ1 ? "Clientes sem compra há mais de 60 dias" : "Dados Analíticos – Consulta Geral"}
+          <h2 id={generateTableId('clientes-sem-compra-titulo')} className="text-xl font-semibold text-white">
+            Clientes sem compra há mais de 60 dias
           </h2>
           <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
-              {isQ1 && tabelaClientesPaginada ? (
-                <>
-                  <DataTable
-                    rows={tabelaClientesPaginada.linhas.map((linha: any[]) => {
-                      const obj: Record<string, any> = {};
-                      tabelaClientesPaginada.colunas.forEach((col: string, idx: number) => {
-                        obj[col] = linha[idx];
-                      });
-                      return obj;
-                    })}
-                    highlightFirstColumn={true}
-                  />
-                  
-                  {/* Paginação Q1 - sempre exibe quando há dados */}
-                  {tabelaClientesPaginada && (
-                    <div className="mt-4 flex items-center justify-between">
-                      <button
-                        onClick={() => setCurrentPageQ1(p => Math.max(0, p - 1))}
-                        disabled={currentPageQ1 === 0}
-                        className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
-                      >
-                        Anterior
-                      </button>
-                      <span className="text-sm text-white/70">
-                        Página {currentPageQ1 + 1} de {tabelaClientesPaginada.totalPages} ({tabelaClientesPaginada.totalLinhas} registros)
-                      </span>
-                      <button
-                        onClick={() => setCurrentPageQ1(p => Math.min(tabelaClientesPaginada.totalPages - 1, p + 1))}
-                        disabled={currentPageQ1 >= tabelaClientesPaginada.totalPages - 1}
-                        className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
-                      >
-                        Próxima
-                      </button>
-                </div>
-                  )}
-                </>
-              ) : tabelaAnaliticaPaginada ? (
-                <>
-                  <DataTable
-                    id={generateTableId('dados-analiticos-data')}
-                    rows={tabelaAnaliticaPaginada.linhas}
-                    highlightFirstColumn={true}
-                  />
-                  
-                  {/* Paginação Tabela Geral - sempre exibe quando há dados */}
-                  {tabelaAnaliticaPaginada && (
-                    <div className="mt-4 flex items-center justify-between">
-                      <button
-                        onClick={() => setCurrentPageGeral(p => Math.max(0, p - 1))}
-                        disabled={currentPageGeral === 0}
-                        className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
-                      >
-                        Anterior
-                      </button>
-                      <span className="text-sm text-white/70">
-                        Página {currentPageGeral + 1} de {tabelaAnaliticaPaginada.totalPages} ({tabelaAnaliticaPaginada.totalLinhas} registros)
-                      </span>
-                      <button
-                        onClick={() => setCurrentPageGeral(p => Math.min(tabelaAnaliticaPaginada.totalPages - 1, p + 1))}
-                        disabled={currentPageGeral >= tabelaAnaliticaPaginada.totalPages - 1}
-                        className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
-                      >
-                        Próxima
-                      </button>
-                  </div>
-                  )}
-                </>
-              ) : null}
+            <DataTable
+              id={generateTableId('clientes-sem-compra-data')}
+              rows={tabelaClientesPaginada.linhas.map((linha: any[]) => {
+                const obj: Record<string, any> = {};
+                tabelaClientesPaginada.colunas.forEach((col: string, idx: number) => {
+                  obj[col] = linha[idx];
+                });
+                return obj;
+              })}
+              highlightFirstColumn={true}
+            />
+            
+            {/* Paginação Q1 - sempre exibe quando há dados */}
+            {tabelaClientesPaginada && (
+              <div id={generateCardId('paginacao-clientes-sem-compra')} className="mt-4 flex items-center justify-between">
+                <button
+                  id={generateCardId('btn-pagina-anterior-clientes')}
+                  onClick={() => setCurrentPageQ1(p => Math.max(0, p - 1))}
+                  disabled={currentPageQ1 === 0}
+                  className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                >
+                  Anterior
+                </button>
+                <span id={generateCardId('info-paginacao-clientes')} className="text-sm text-white/70">
+                  Página {currentPageQ1 + 1} de {tabelaClientesPaginada.totalPages} ({tabelaClientesPaginada.totalLinhas} registros)
+                </span>
+                <button
+                  id={generateCardId('btn-pagina-proxima-clientes')}
+                  onClick={() => setCurrentPageQ1(p => Math.min(tabelaClientesPaginada.totalPages - 1, p + 1))}
+                  disabled={currentPageQ1 >= tabelaClientesPaginada.totalPages - 1}
+                  className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                >
+                  Próxima
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
@@ -541,8 +510,9 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               id={generateCardId('principais-achados')} 
               className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg"
             >
-              <h3 className="text-lg font-medium mb-4 text-white">{isQ1 ? "Síntese Analítica" : "Principais Achados"}</h3>
+              <h3 id={generateCardId('principais-achados-titulo')} className="text-lg font-medium mb-4 text-white">{isQ1 ? "Síntese Analítica" : "Principais Achados"}</h3>
               <InsightsBlock
+                id={generateCardId('principais-achados-conteudo')}
                 title={isQ1 ? "Síntese Analítica" : "Principais Achados"}
                 items={parsedMarkdown.principaisAchados}
                 icon="🔍"
@@ -555,8 +525,9 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               id={generateCardId('implicacoes-comerciais')} 
               className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg"
             >
-              <h3 className="text-lg font-medium mb-4 text-white">{isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}</h3>
+              <h3 id={generateCardId('implicacoes-comerciais-titulo')} className="text-lg font-medium mb-4 text-white">{isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}</h3>
               <InsightsBlock
+                id={generateCardId('implicacoes-comerciais-conteudo')}
                 title={isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}
                 items={parsedMarkdown.implicacoesComerciais}
                 icon="⚠️"
@@ -569,8 +540,9 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               id={generateCardId('plano-acao')} 
               className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg"
             >
-              <h3 className="text-lg font-medium mb-4 text-white">Plano de Ação Imediato</h3>
+              <h3 id={generateCardId('plano-acao-titulo')} className="text-lg font-medium mb-4 text-white">Plano de Ação Imediato</h3>
               <InsightsBlock
+                id={generateCardId('plano-acao-conteudo')}
                 title="Plano de Ação Imediato"
                 items={parsedMarkdown.planoAcao}
                 icon="🚀"
@@ -587,10 +559,10 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
           id={generateCardId('alvos-prioritarios')} 
           className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg space-y-6"
         >
-          <h3 className="text-lg font-medium text-white">Alvos Prioritários (TOP 10)</h3>
-          <ul className="space-y-3">
+          <h3 id={generateCardId('alvos-prioritarios-titulo')} className="text-lg font-medium text-white">Alvos Prioritários (TOP 10)</h3>
+          <ul id={generateCardId('alvos-prioritarios-lista')} className="space-y-3">
             {parsedMarkdown.alvosPrioritarios.map((alvo, idx) => (
-              <li key={idx} className="flex items-start gap-3 text-sm opacity-90 text-white/80">
+              <li key={idx} id={generateCardId('alvo-prioritario', idx)} className="flex items-start gap-3 text-sm opacity-90 text-white/80">
                 <span className="text-purple-400 mt-1 flex-shrink-0">•</span>
                 <span className="flex-1 leading-relaxed">{alvo}</span>
               </li>

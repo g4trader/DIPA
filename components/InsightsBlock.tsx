@@ -5,6 +5,7 @@ type InsightsBlockProps = {
   items: string[];
   icon: React.ReactNode;
   color?: "blue" | "green" | "red" | "yellow" | "orange" | "purple";
+  id?: string;
 };
 
 /**
@@ -18,6 +19,7 @@ export function InsightsBlock({
   items,
   icon,
   color = "blue",
+  id,
 }: InsightsBlockProps) {
   const colorClasses = {
     blue: "text-blue-400 border-blue-400/20 bg-blue-400/10",
@@ -33,7 +35,7 @@ export function InsightsBlock({
   }
 
   return (
-    <div className="flex flex-col justify-start">
+    <div id={id} className="flex flex-col justify-start">
       <ul className="space-y-3 flex-1">
         {items.map((item, idx) => (
           <li key={idx} className="text-white/80 leading-relaxed flex items-start gap-2">

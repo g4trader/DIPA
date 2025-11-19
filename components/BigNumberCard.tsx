@@ -6,6 +6,7 @@ type BigNumberCardProps = {
   icon: React.ReactNode;
   trend?: "up" | "down" | "neutral";
   color?: "blue" | "green" | "red" | "yellow" | "orange";
+  id?: string;
 };
 
 /**
@@ -19,6 +20,7 @@ export default function BigNumberCard({
   icon,
   trend,
   color = "blue",
+  id,
 }: BigNumberCardProps) {
   const colorClasses = {
     blue: "text-blue-400 border-blue-400/20",
@@ -37,7 +39,7 @@ export default function BigNumberCard({
   };
 
   return (
-    <div className="flex flex-col justify-between rounded-2xl bg-[#0F172A] border border-white/10 px-6 py-5 shadow-lg shadow-black/40 hover:border-white/20 transition-all duration-200">
+    <div id={id} className="flex flex-col justify-between rounded-2xl bg-[#0F172A] border border-white/10 px-6 py-5 shadow-lg shadow-black/40 hover:border-white/20 transition-all duration-200">
       <div className="flex items-start gap-4 mb-3">
         <div className={`${colorClasses[color]} ${bgColorClasses[color]} rounded-xl p-3 text-xl border flex-shrink-0`}>
           {icon}

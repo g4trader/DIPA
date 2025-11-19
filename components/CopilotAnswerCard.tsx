@@ -39,32 +39,32 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
       : payload.structured;
 
     return (
-      <div ref={ref} className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-slate-950/95 shadow-2xl overflow-hidden">
+      <div ref={ref} id="dipam-card-resposta-principal" className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-slate-950/95 shadow-2xl overflow-hidden">
         {/* Header do card */}
-        <div className="flex items-center gap-2 px-6 pt-5 pb-4 border-b border-slate-800/70 bg-slate-950/70">
-          <div className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-sky-500/10 border border-sky-500/40 text-sky-300 text-xs font-semibold">
+        <div id="dipam-card-header" className="flex items-center gap-2 px-6 pt-5 pb-4 border-b border-slate-800/70 bg-slate-950/70">
+          <div id="dipam-card-header-icon" className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-sky-500/10 border border-sky-500/40 text-sky-300 text-xs font-semibold">
             ⚡
           </div>
-          <div className="flex flex-col">
-            <span className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+          <div id="dipam-card-header-brand" className="flex flex-col">
+            <span id="dipam-card-header-brand-name" className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
               DIPAM COPILOT™
             </span>
-            <span className="text-xs text-slate-400">Inteligência comercial em tempo real</span>
+            <span id="dipam-card-header-brand-tagline" className="text-xs text-slate-400">Inteligência comercial em tempo real</span>
           </div>
-          <div className="ml-auto inline-flex items-center gap-2">
-            <span className="rounded-full bg-slate-800/80 px-3 py-1 text-[11px] text-slate-300">
+          <div id="dipam-card-header-badges" className="ml-auto inline-flex items-center gap-2">
+            <span id="dipam-card-header-badge-intent" className="rounded-full bg-slate-800/80 px-3 py-1 text-[11px] text-slate-300">
               {intentLabel || intent}
             </span>
-            <span className="rounded-full bg-emerald-500/10 border border-emerald-400/40 px-3 py-1 text-[11px] text-emerald-300">
+            <span id="dipam-card-header-badge-confidence" className="rounded-full bg-emerald-500/10 border border-emerald-400/40 px-3 py-1 text-[11px] text-emerald-300">
               {Math.round(confidence * 100)}% confiança
             </span>
           </div>
         </div>
 
         {/* Conteúdo principal - Dashboard estruturado */}
-        <div className="px-6 pt-4 pb-6">
+        <div id="dipam-card-content" className="px-6 pt-4 pb-6">
           {/* Título (pergunta) */}
-          <h2 className="text-lg md:text-xl font-semibold text-slate-50 mb-6">{question}</h2>
+          <h2 id="dipam-card-question" className="text-lg md:text-xl font-semibold text-slate-50 mb-6">{question}</h2>
 
           {/* Renderiza dashboard estruturado */}
           <ResponseDashboard data={structuredWithMarkdown} question={question} />
