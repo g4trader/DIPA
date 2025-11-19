@@ -7,7 +7,7 @@ import { InsightsBlock } from "./InsightsBlock";
 import { DataTable } from "./DataTable";
 import { ExecutiveSectionCard } from "./ExecutiveSectionCard";
 import { parseMarkdownExecutivo } from "./markdownParser";
-import { FileText, ShoppingCart, ArrowDown, Users } from "lucide-react";
+import { FileText, ShoppingCart, ArrowDown } from "lucide-react";
 
 type Props = {
   data: CopilotStructuredResponse;
