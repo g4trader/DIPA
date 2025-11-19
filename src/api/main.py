@@ -765,10 +765,24 @@ async def health_check_openai():
         )
     
     try:
-        from src.llm_openai_client import get_openai_client, call_llm
+        from src.llm_client import get_llm_config, get_llm_provider
         
-        # Valida configuração
-        client_config = get_openai_client()
+        # Valida configuração (detecta automaticamente Grok ou OpenAI)
+        try:
+            provider = get_llm_provider()
+            client_config = get_llm_config(provider)
+        except Exception as e:
+            logger.error(f"Erro ao obter configuração LLM: {str(e)}")
+            app.state.openai_available = False
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "unavailable",
+                    "message": f"LLM não configurado: {str(e)}",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+        
         if not client_config:
             app.state.openai_available = False
             return JSONResponse(
