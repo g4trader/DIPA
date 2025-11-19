@@ -67,7 +67,7 @@ export const CopilotAnswerCard: React.FC<Props> = ({ payload }) => {
           <h2 className="text-lg md:text-xl font-semibold text-slate-50 mb-6">{question}</h2>
 
           {/* Renderiza dashboard estruturado */}
-          <ResponseDashboard data={structuredWithMarkdown} />
+          <ResponseDashboard data={structuredWithMarkdown} question={question} />
         </div>
       </div>
     );

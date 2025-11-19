@@ -7,17 +7,19 @@ import { InsightsBlock } from "./InsightsBlock";
 import { DataTable } from "./DataTable";
 import { ExecutiveSectionCard } from "./ExecutiveSectionCard";
 import { parseMarkdownExecutivo } from "./markdownParser";
-import { FileText } from "lucide-react";
+import { FileText, Download } from "lucide-react";
+import { generateExecutivePdf } from "./pdf/generateExecutivePdf";
 
 type Props = {
   data: CopilotStructuredResponse;
+  question?: string; // Pergunta original do usuário
 };
 
 /**
  * Componente de Dashboard Estruturado para respostas do DIPAM COPILOT™ (FASE 3 + FASE 5)
  * Renderiza cards visuais modernos baseados em secoes estruturadas com KPIs e insights preditivos
  */
-export const ResponseDashboard: React.FC<Props> = ({ data }) => {
+export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({});
   
@@ -218,17 +220,62 @@ export const ResponseDashboard: React.FC<Props> = ({ data }) => {
   // Type assertion segura para acessar propriedades opcionais
   const dataAny = data as any;
   
+  // Handler para gerar PDF
+  const handleDownloadPdf = () => {
+    // Prepara dados para o PDF
+    const pdfData = {
+      pergunta: question || dataAny.intent_label || dataAny.intent || 'Consulta DIPAM COPILOT™',
+      resumoExecutivo: parsedMarkdown?.resumoExecutivo,
+      kpis: bigNumberKPIs.map(kpi => ({
+        label: kpi.label,
+        valor: kpi.value,
+      })),
+      principaisAchados: parsedMarkdown?.principaisAchados,
+      implicacoes: parsedMarkdown?.implicacoesComerciais,
+      planoAcao: parsedMarkdown?.planoAcao,
+      alvosPrioritariosLista: parsedMarkdown?.alvosPrioritarios,
+      tabelaTop10: parsedMarkdown?.topAlvos?.map((alvo: any) => ({
+        cliente: alvo.Cliente || alvo.cliente || alvo.item || '—',
+        diasSemCompra: alvo["Dias sem compra"] || alvo.diasSemCompra || alvo.dias || 0,
+        rota: alvo.Rota || alvo.rota || null,
+      })),
+      tabelaPrincipal: tableData.length > 0 ? {
+        colunas: Object.keys(tableData[0]),
+        linhas: tableData.map(row => Object.values(row).map(v => {
+          if (v === null || v === undefined) return null;
+          if (typeof v === 'string' || typeof v === 'number') return v;
+          return String(v);
+        }) as (string | number | null)[]),
+      } : null,
+    };
+    
+    generateExecutivePdf(pdfData);
+  };
+  
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6">
-      {/* 1. Título da Consulta (se disponível) */}
-      {dataAny.intent && (
-        <div className="flex items-center gap-3 mb-8">
-          <Target className="w-6 h-6 text-blue-400" />
-          <h1 className="text-2xl font-bold text-white">
-            {dataAny.intent_label || dataAny.intent}
-          </h1>
-        </div>
-      )}
+      {/* Header com título e botão de PDF */}
+      <div className="flex items-center justify-between mb-8 gap-4">
+        {dataAny.intent && (
+          <div className="flex items-center gap-3 flex-1">
+            <Target className="w-6 h-6 text-blue-400" />
+            <h1 className="text-2xl font-bold text-white">
+              {dataAny.intent_label || dataAny.intent}
+            </h1>
+          </div>
+        )}
+        
+        {/* Botão de download PDF */}
+        {(parsedMarkdown?.resumoExecutivo || bigNumberKPIs.length > 0) && (
+          <button
+            onClick={handleDownloadPdf}
+            className="inline-flex items-center gap-2 rounded-full bg-[#0EA5E9] hover:bg-[#0284C7] px-4 py-2 text-sm font-medium text-white shadow-lg shadow-cyan-500/20 transition-colors flex-shrink-0"
+          >
+            <Download className="w-4 h-4" />
+            <span>Baixar PDF</span>
+          </button>
+        )}
+      </div>
       
       {/* 2. Resumo Executivo (PRIMEIRO) */}
       {parsedMarkdown?.resumoExecutivo && (
