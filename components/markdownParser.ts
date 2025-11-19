@@ -40,19 +40,23 @@ export function parseMarkdownExecutivo(markdown: string): ParsedMarkdown {
     const line = lines[i].trim();
 
     // Detecta seção por título (com ou sem markdown headers)
+    // Headings executivos para Q1: "Síntese Analítica", "Riscos Comerciais", "Carteiras Prioritárias"
     if (line.match(/^##?\s*Resumo\s+Executivo/i) || line.match(/^Resumo\s+Executivo$/i)) {
       currentSection = "resumoExecutivo";
       continue;
-    } else if (line.match(/^##?\s*Principais\s+Achados/i) || line.match(/^Principais\s+Achados$/i)) {
+    } else if (line.match(/^##?\s*Principais\s+Achados/i) || line.match(/^Principais\s+Achados$/i) || 
+               line.match(/^##?\s*Síntese\s+Analítica/i) || line.match(/^Síntese\s+Analítica$/i)) {
       currentSection = "principaisAchados";
       continue;
-    } else if (line.match(/^##?\s*Implicações\s+Comerciais/i) || line.match(/^Implicações\s+Comerciais$/i)) {
+    } else if (line.match(/^##?\s*Implicações\s+Comerciais/i) || line.match(/^Implicações\s+Comerciais$/i) ||
+               line.match(/^##?\s*Riscos\s+Comerciais/i) || line.match(/^Riscos\s+Comerciais$/i)) {
       currentSection = "implicacoesComerciais";
       continue;
     } else if (line.match(/^##?\s*Plano\s+de\s+Ação\s+Imediato/i) || line.match(/^Plano\s+de\s+Ação\s+Imediato$/i)) {
       currentSection = "planoAcao";
       continue;
-    } else if (line.match(/^##?\s*Alvos\s+Prioritários/i) || line.match(/^Alvos\s+Prioritários/i)) {
+    } else if (line.match(/^##?\s*Alvos\s+Prioritários/i) || line.match(/^Alvos\s+Prioritários/i) ||
+               line.match(/^##?\s*Carteiras\s+Prioritárias/i) || line.match(/^Carteiras\s+Prioritárias/i)) {
       currentSection = "alvosPrioritarios";
       continue;
     }

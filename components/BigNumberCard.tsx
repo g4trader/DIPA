@@ -44,11 +44,11 @@ export default function BigNumberCard({
         </div>
         <p className="text-sm text-white/70 opacity-70 uppercase tracking-wide pt-1">{label}</p>
       </div>
-      <div className="flex-1 flex items-end">
-        <p className={`mt-2 text-4xl md:text-5xl font-bold tracking-tight text-white ${trend === "up" ? "text-emerald-400" : trend === "down" ? "text-red-400" : ""}`}>
-          {typeof value === "number" ? value.toLocaleString("pt-BR") : value}
-        </p>
-      </div>
+          <div className="flex-1 flex items-end">
+            <p className={`mt-2 text-3xl md:text-4xl font-bold tracking-tight text-white ${trend === "up" ? "text-emerald-400" : trend === "down" ? "text-red-400" : ""}`}>
+              {typeof value === "number" ? value.toLocaleString("pt-BR") : value}
+            </p>
+          </div>
     </div>
   );
 }

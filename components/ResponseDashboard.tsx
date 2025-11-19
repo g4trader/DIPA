@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { TrendingUp, TrendingDown, Minus, Target, Users, AlertCircle, Lightbulb, Package, ChevronDown, Brain, Zap, DollarSign, Percent } from "lucide-react";
 import { CopilotStructuredResponse } from "@/types/agent";
 import { clsx } from "clsx";
@@ -220,6 +220,50 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
   // Type assertion segura para acessar propriedades opcionais
   const dataAny = data as any;
   
+  // Detecta se é Q1 (clientes_sem_compra)
+  const isQ1 = dataAny.intent === "clientes_sem_compra" || dataAny.intent_label?.toLowerCase().includes("clientes sem compra");
+  
+  // Extrai tabela_por_rota do jsonTecnico
+  const tabelaPorRota = dataAny.jsonTecnico?.tabela_por_rota || null;
+  
+  // Prepara dados da tabela principal para Q1
+  const tabelaPrincipalQ1 = useMemo(() => {
+    if (!isQ1) return null;
+    
+    const tabelaPrincipal = dataAny.jsonTecnico?.tabela_principal;
+    if (tabelaPrincipal && Array.isArray(tabelaPrincipal) && tabelaPrincipal.length > 0) {
+      const tabela = tabelaPrincipal[0];
+      if (tabela.colunas && tabela.linhas) {
+        return {
+          colunas: tabela.colunas,
+          linhas: tabela.linhas
+        };
+      }
+    }
+    return null;
+  }, [isQ1, dataAny.jsonTecnico]);
+  
+  // Estado de paginação para tabela de clientes (Q1)
+  const [currentPage, setCurrentPage] = useState(0);
+  const itemsPerPage = 15;
+  
+  // Calcula dados paginados
+  const tabelaClientesPaginada = useMemo(() => {
+    if (!tabelaPrincipalQ1) return null;
+    
+    const start = currentPage * itemsPerPage;
+    const end = start + itemsPerPage;
+    const linhasPagina = tabelaPrincipalQ1.linhas.slice(start, end);
+    
+    return {
+      colunas: tabelaPrincipalQ1.colunas,
+      linhas: linhasPagina,
+      totalLinhas: tabelaPrincipalQ1.linhas.length,
+      totalPages: Math.ceil(tabelaPrincipalQ1.linhas.length / itemsPerPage),
+      currentPage
+    };
+  }, [tabelaPrincipalQ1, currentPage]);
+  
   // Handler para gerar PDF
   const handleDownloadPdf = () => {
     // Prepara dados para o PDF
@@ -252,8 +296,28 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
     generateExecutivePdf(pdfData);
   };
   
+  // Ref para scroll ao início da resposta
+  const respostaRef = useRef<HTMLDivElement>(null);
+  
+  // Scroll ao início quando resposta é renderizada (apenas para Q1)
+  useEffect(() => {
+    if (isQ1 && respostaRef.current) {
+      // Aguarda renderização completa
+      setTimeout(() => {
+        const rect = respostaRef.current?.getBoundingClientRect();
+        if (rect) {
+          const offset = window.scrollY + rect.top - 80; // 80px de margem do topo
+          window.scrollTo({
+            top: offset,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
+    }
+  }, [isQ1, parsedMarkdown?.resumoExecutivo]);
+  
   return (
-    <div className="max-w-[1200px] mx-auto px-4 py-6">
+    <div ref={respostaRef} className="max-w-[1200px] mx-auto px-4 py-6">
       {/* Header com título e botão de PDF */}
       <div className="flex items-center justify-between mb-8 gap-4">
         {dataAny.intent && (
@@ -294,7 +358,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       {/* 3. Big Numbers Cards (KPIs) */}
       {bigNumberKPIs.length > 0 && (
         <div className="mb-10">
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Para Q1: grid-cols-2 fixo se tiver 2 KPIs, senão adapta */}
+          <div className={`mt-6 grid grid-cols-1 ${bigNumberKPIs.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-6`}>
             {bigNumberKPIs.map((kpi, idx) => (
               <BigNumberCard
                 key={idx}
@@ -309,7 +374,73 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         </div>
       )}
       
-      {/* 4. Insights Blocks (sempre empilhados verticalmente) */}
+      {/* 4. Tabela de clientes (Q1) - ANTES dos insights */}
+      {isQ1 && tabelaClientesPaginada && (
+        <div className="mb-10">
+          <DataTable
+            rows={tabelaClientesPaginada.linhas.map((linha: any[]) => {
+              const obj: Record<string, any> = {};
+              tabelaClientesPaginada.colunas.forEach((col: string, idx: number) => {
+                obj[col] = linha[idx];
+              });
+              return obj;
+            })}
+            title="Clientes sem compra há mais de 60 dias"
+            highlightFirstColumn={true}
+          />
+          
+          {/* Paginação */}
+          {tabelaClientesPaginada.totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                disabled={currentPage === 0}
+                className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+              >
+                Anterior
+              </button>
+              <span className="text-sm text-white/70">
+                Página {currentPage + 1} de {tabelaClientesPaginada.totalPages} ({tabelaClientesPaginada.totalLinhas} clientes)
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(tabelaClientesPaginada.totalPages - 1, p + 1))}
+                disabled={currentPage >= tabelaClientesPaginada.totalPages - 1}
+                className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+              >
+                Próxima
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* 4.1. Tabela de vendedores (Q1) */}
+      {isQ1 && tabelaPorRota && Array.isArray(tabelaPorRota) && tabelaPorRota.length > 0 && (
+        <div className="mb-10">
+          <DataTable
+            rows={tabelaPorRota.map((item: any) => ({
+              "Vendedor": item.vendedor_nome || item.vendedor_codigo || "N/A",
+              "Supervisor": item.supervisor_nome || item.supervisor_codigo || "",
+              "Total de clientes sem compra (>60 dias)": item.total_clientes_sem_compra || 0
+            }))}
+            title="Carteiras de vendedores com mais clientes inativos (> 60 dias)"
+            highlightFirstColumn={true}
+          />
+        </div>
+      )}
+      
+      {/* 4.2. Aviso se tabela_por_rota não estiver disponível (Q1) */}
+      {isQ1 && (!tabelaPorRota || (Array.isArray(tabelaPorRota) && tabelaPorRota.length === 0)) && (
+        <div className="mb-10">
+          <div className="rounded-xl border border-white/10 bg-[#0F172A] p-4">
+            <p className="text-sm text-white/60 italic">
+              Ainda não há dados consolidados por vendedor para esta visão.
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {/* 5. Insights Blocks (sempre empilhados verticalmente) */}
       {(parsedMarkdown?.principaisAchados?.length > 0 || 
         parsedMarkdown?.implicacoesComerciais?.length > 0 || 
         parsedMarkdown?.planoAcao?.length > 0) && (
@@ -317,7 +448,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
           <div className="mt-8 flex flex-col gap-6">
             {parsedMarkdown.principaisAchados && parsedMarkdown.principaisAchados.length > 0 && (
               <InsightsBlock
-                title="Principais Achados"
+                title={isQ1 ? "Síntese Analítica" : "Principais Achados"}
                 items={parsedMarkdown.principaisAchados}
                 icon="🔍"
                 color="blue"
@@ -325,7 +456,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
             )}
             {parsedMarkdown.implicacoesComerciais && parsedMarkdown.implicacoesComerciais.length > 0 && (
               <InsightsBlock
-                title="Implicações Comerciais"
+                title={isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}
                 items={parsedMarkdown.implicacoesComerciais}
                 icon="⚠️"
                 color="orange"
