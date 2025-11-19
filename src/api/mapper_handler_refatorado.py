@@ -342,6 +342,22 @@ def _criar_structured_response(
         logger.info(f"[mapper] Texto post_processor extraído: {len(texto_post_processor)} chars")
         logger.debug(f"[mapper] Primeiras 200 chars: {texto_post_processor[:200]}")
     
+    # Cria detalhe_tabela a partir da tabela_principal (para o botão "Ver detalhamento")
+    detalhe_tabela = None
+    if tabela_principal:
+        # Pega a primeira tabela (ou a única tabela)
+        tabela = tabela_principal[0] if isinstance(tabela_principal, list) and len(tabela_principal) > 0 else tabela_principal
+        if isinstance(tabela, dict):
+            colunas = tabela.get("colunas", [])
+            linhas = tabela.get("linhas", [])
+            if colunas and linhas:
+                detalhe_tabela = {
+                    "titulo": f"Dados Analíticos - {intent_label}",
+                    "colunas": colunas,
+                    "linhas": linhas
+                }
+                logger.info(f"[mapper] ✅ detalhe_tabela criada: {len(linhas)} linhas, {len(colunas)} colunas")
+    
     # Monta structured response
     structured = {
         "resumo_executivo": resumo_executivo,
@@ -351,6 +367,7 @@ def _criar_structured_response(
         "clientesCriticos": [],
         "insightsRecomendacoes": insights_recomendacoes,
         "respostaMarkdown": texto_post_processor,  # Texto completo do post_processor (inclui "Alvos Prioritários (TOP 10)")
+        "detalhe_tabela": detalhe_tabela,  # Tabela para botão "Ver detalhamento" com paginação
         "jsonTecnico": {
             "intent_spec": intent_spec.to_dict() if intent_spec and hasattr(intent_spec, 'to_dict') else None,
             "periodo_analisado": periodo_analisado,

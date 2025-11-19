@@ -1426,8 +1426,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                 </div>
                 </div>
                 
-                {/* Paginação - 20 registros por página */}
-                {totalPages > 1 && (
+                {/* Paginação - 20 registros por página - SEMPRE exibe quando há mais de 20 registros */}
+                {totalLinhas > itemsPerPageDetalhamento && (
                   <div id={generateCardId('paginacao-detalhamento')} className="mt-4 flex items-center justify-between">
                     <button
                       id={generateCardId('btn-pagina-anterior-detalhamento')}
@@ -1438,7 +1438,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                       Anterior
                     </button>
                     <span id={generateCardId('info-paginacao-detalhamento')} className="text-sm text-white/70">
-                      Página {currentPageDetalhamento + 1} de {totalPages} ({totalLinhas} registros)
+                      Página {currentPageDetalhamento + 1} de {totalPages} ({totalLinhas} registros - exibindo {startIdx + 1} a {Math.min(endIdx, totalLinhas)})
                     </span>
                     <button
                       id={generateCardId('btn-pagina-proxima-detalhamento')}
@@ -1448,6 +1448,12 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                     >
                       Próxima
                     </button>
+                  </div>
+                )}
+                {/* Informação quando há 20 ou menos registros (sem paginação) */}
+                {totalLinhas > 0 && totalLinhas <= itemsPerPageDetalhamento && (
+                  <div id={generateCardId('info-total-registros')} className="mt-4 text-xs text-white/50 text-center">
+                    Exibindo todos os {totalLinhas} registro{totalLinhas !== 1 ? 's' : ''}
                   </div>
                 )}
               </div>
