@@ -56,28 +56,28 @@ from src.agent.queries_analytics import (
     get_piores_vendedores_por_gap
 )
 
-    # Importa novas funções do queries.py
-    try:
-        from src.dw.queries import (
-            get_clientes_sem_compra_ha_dias,
-            get_clientes_sem_compra_por_rota,
-            get_clientes_queda_faturamento_ano_contra_ano,
-            get_industrias_com_mais_vendedores_fora_meta,
-            get_rotas_positivacao_industria,
-            get_itens_baixa_media_mensal,
-            get_clientes_sem_recompra_sku,
-            get_clientes_segmento_sem_sku_no_periodo,
-            get_clientes_uma_unidade_industria_mes,
-            get_clientes_sem_sku_no_periodo,
-            get_clientes_mix_minimo_nissin_mes,
-            get_rotas_desempenho_mix_minimo_nissin_mes
-        )
-    except ImportError as e:
-        logger.warning(f"[orquestrador_dw] Não foi possível importar queries.py: {e}")
-        # Define funções stub para evitar erros
-        get_clientes_sem_compra_ha_dias = None
-        get_clientes_sem_compra_por_rota = None
-        get_clientes_queda_faturamento_ano_contra_ano = None
+# Importa novas funções do queries.py
+try:
+    from src.dw.queries import (
+        get_clientes_sem_compra_ha_dias,
+        get_clientes_sem_compra_por_rota,
+        get_clientes_queda_faturamento_ano_contra_ano,
+        get_industrias_com_mais_vendedores_fora_meta,
+        get_rotas_positivacao_industria,
+        get_itens_baixa_media_mensal,
+        get_clientes_sem_recompra_sku,
+        get_clientes_segmento_sem_sku_no_periodo,
+        get_clientes_uma_unidade_industria_mes,
+        get_clientes_sem_sku_no_periodo,
+        get_clientes_mix_minimo_nissin_mes,
+        get_rotas_desempenho_mix_minimo_nissin_mes
+    )
+except ImportError as e:
+    logger.warning(f"[orquestrador_dw] Não foi possível importar queries.py: {e}")
+    # Define funções stub para evitar erros
+    get_clientes_sem_compra_ha_dias = None
+    get_clientes_sem_compra_por_rota = None
+    get_clientes_queda_faturamento_ano_contra_ano = None
     get_industrias_com_mais_vendedores_fora_meta = None
     get_rotas_positivacao_industria = None
     get_itens_baixa_media_mensal = None
