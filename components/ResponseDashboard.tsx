@@ -22,6 +22,8 @@ type Props = {
 export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({});
+  const [currentPageDetalhamento, setCurrentPageDetalhamento] = useState(0);
+  const itemsPerPageDetalhamento = 20; // 20 registros por página
   
   // Compatibilidade: usa resumo_executivo ou resumoExecutivo
   const resumoExecutivo = data.resumo_executivo || data.resumoExecutivo;
@@ -1358,59 +1360,99 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         </div>
       )}
 
-      {/* Botão "Ver detalhamento" com tabela completa */}
+      {/* Botão "Ver detalhamento" com tabela completa - COM PAGINAÇÃO */}
       {data.detalhe_tabela && data.detalhe_tabela.linhas && data.detalhe_tabela.linhas.length > 0 && (
         <div id={generateCardId('detalhamento-container')} className="border-t border-slate-800 pt-6 space-y-4">
           <button
-            onClick={() => setShowDetails(!showDetails)}
+            onClick={() => {
+              setShowDetails(!showDetails);
+              // Reset página quando expandir/colapsar
+              if (!showDetails) {
+                setCurrentPageDetalhamento(0);
+              }
+            }}
             className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors font-medium"
           >
             Ver detalhamento completo
             <ChevronDown className={clsx("w-4 h-4 transition-transform", showDetails && "rotate-180")} />
           </button>
-          {showDetails && (
-            <div id={generateCardId('detalhamento-expandido')} className="mt-4 rounded-xl bg-slate-950/80 p-4 shadow-lg">
-              {data.detalhe_tabela.titulo && (
-                <h4 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wide">
-                  {data.detalhe_tabela.titulo}
-                </h4>
-              )}
-              <div id={generateTableId('detalhamento')} className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-700">
-                      {data.detalhe_tabela.colunas.map((col, idx) => (
-                        <th
-                          key={idx}
-                          className="text-left py-2 px-3 text-slate-400 font-semibold uppercase tracking-wide"
-                        >
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.detalhe_tabela.linhas.map((linha, linhaIdx) => (
-                      <tr
-                        key={linhaIdx}
-                          className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
-                      >
-                        {linha.map((celula: any, celulaIdx: number) => (
-                          <td key={celulaIdx} className="py-2 px-3 text-slate-300">
-                            {typeof celula === "number"
-                              ? celula.toString() // ❌ Não formata automaticamente números como moeda - mantém ID numérico cru
-                              : celula || "—"}
-                          </td>
+          {showDetails && (() => {
+            // Calcula paginação: 20 registros por página
+            const totalLinhas = data.detalhe_tabela.linhas.length;
+            const totalPages = Math.ceil(totalLinhas / itemsPerPageDetalhamento);
+            const startIdx = currentPageDetalhamento * itemsPerPageDetalhamento;
+            const endIdx = startIdx + itemsPerPageDetalhamento;
+            const linhasPaginadas = data.detalhe_tabela.linhas.slice(startIdx, endIdx);
+            
+            return (
+              <div id={generateCardId('detalhamento-expandido')} className="mt-4 rounded-xl bg-slate-950/80 p-4 shadow-lg space-y-4">
+                {data.detalhe_tabela.titulo && (
+                  <h4 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wide">
+                    {data.detalhe_tabela.titulo}
+                  </h4>
+                )}
+                <div id={generateTableId('detalhamento')} className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-700">
+                        {data.detalhe_tabela.colunas.map((col, idx) => (
+                          <th
+                            key={idx}
+                            className="text-left py-2 px-3 text-slate-400 font-semibold uppercase tracking-wide"
+                          >
+                            {col}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {linhasPaginadas.map((linha, linhaIdx) => (
+                        <tr
+                          key={startIdx + linhaIdx}
+                            className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
+                        >
+                          {linha.map((celula: any, celulaIdx: number) => (
+                            <td key={celulaIdx} className="py-2 px-3 text-slate-300">
+                              {typeof celula === "number"
+                                ? celula.toString() // ❌ Não formata automaticamente números como moeda - mantém ID numérico cru
+                                : celula || "—"}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                </div>
+                
+                {/* Paginação - 20 registros por página */}
+                {totalPages > 1 && (
+                  <div id={generateCardId('paginacao-detalhamento')} className="mt-4 flex items-center justify-between">
+                    <button
+                      id={generateCardId('btn-pagina-anterior-detalhamento')}
+                      onClick={() => setCurrentPageDetalhamento(p => Math.max(0, p - 1))}
+                      disabled={currentPageDetalhamento === 0}
+                      className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                    >
+                      Anterior
+                    </button>
+                    <span id={generateCardId('info-paginacao-detalhamento')} className="text-sm text-white/70">
+                      Página {currentPageDetalhamento + 1} de {totalPages} ({totalLinhas} registros)
+                    </span>
+                    <button
+                      id={generateCardId('btn-pagina-proxima-detalhamento')}
+                      onClick={() => setCurrentPageDetalhamento(p => Math.min(totalPages - 1, p + 1))}
+                      disabled={currentPageDetalhamento >= totalPages - 1}
+                      className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                )}
               </div>
-              </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 

@@ -160,15 +160,23 @@ def get_clientes_sem_compra_ha_dias(
                 query = query.filter(~Cliente.segmento_venda.in_(segmentos_excluir))
     
     # Filtra por dias sem compra
+    # IMPORTANTE: "mais de 60 dias" significa >= 61 dias (não pode trazer 0 dias)
+    # Se dias = 60, então filtro deve ser >= 61
+    dias_minimo = dias + 1  # "mais de 60 dias" = >= 61 dias
+    
     if config.database.db_type == "sqlite":
         diff_expr = func.julianday(text(f"DATE('{ref_date}')")) - func.julianday(ultima_compra_subq.c.data_ultima_compra)
     else:
         diff_expr = func.extract('day', text(f"DATE('{ref_date}')") - ultima_compra_subq.c.data_ultima_compra)
     
+    # Filtra apenas clientes com >= 61 dias sem compra
+    # IMPORTANTE: Não inclui clientes com 0 dias ou None (só inclui se realmente >= 61 dias)
     query = query.filter(
-        or_(
-            ultima_compra_subq.c.data_ultima_compra.is_(None),
-            diff_expr > dias
+        and_(
+            # Deve ter última compra registrada (não None) para calcular dias corretamente
+            ultima_compra_subq.c.data_ultima_compra.isnot(None),
+            # E a diferença deve ser >= 61 dias
+            diff_expr >= dias_minimo
         )
     )
     
@@ -177,22 +185,28 @@ def get_clientes_sem_compra_ha_dias(
     
     resultados = query.all()
     
-    # Converte para list[dict]
-    return [
-        {
-            "cliente_id": row.cliente_id,
-            "nome": row.nome or "",
-            "segmento": row.segmento or "",
-            "rota_id": row.rota_id or "",
-            "vendedor_nome": row.vendedor_nome or row.vendedor_codigo or row.rota_id or "",
-            "vendedor_codigo": row.vendedor_codigo or row.rota_id or "",
-            "supervisor_nome": row.supervisor_nome or row.supervisor_codigo or "",
-            "supervisor_codigo": row.supervisor_codigo or "",
-            "data_ultima_compra": row.data_ultima_compra.isoformat() if row.data_ultima_compra else None,
-            "dias_sem_compra": int(row.dias_sem_compra) if row.dias_sem_compra else None
-        }
-        for row in resultados
-    ]
+    # Converte para list[dict] e filtra para garantir >= 61 dias
+    # IMPORTANTE: Filtro adicional para garantir que nenhum cliente com 0 dias seja retornado
+    dias_minimo = dias + 1  # "mais de 60 dias" = >= 61 dias
+    clientes_filtrados = []
+    for row in resultados:
+        dias_sem_compra = int(row.dias_sem_compra) if row.dias_sem_compra is not None else None
+        # Só inclui se dias_sem_compra >= 61 (não inclui 0, None ou < 61)
+        if dias_sem_compra is not None and dias_sem_compra >= dias_minimo:
+            clientes_filtrados.append({
+                "cliente_id": row.cliente_id,
+                "nome": row.nome or "",
+                "segmento": row.segmento or "",
+                "rota_id": row.rota_id or "",
+                "vendedor_nome": row.vendedor_nome or row.vendedor_codigo or row.rota_id or "",
+                "vendedor_codigo": row.vendedor_codigo or row.rota_id or "",
+                "supervisor_nome": row.supervisor_nome or row.supervisor_codigo or "",
+                "supervisor_codigo": row.supervisor_codigo or "",
+                "data_ultima_compra": row.data_ultima_compra.isoformat() if row.data_ultima_compra else None,
+                "dias_sem_compra": dias_sem_compra
+            })
+    
+    return clientes_filtrados
 
 
 def get_clientes_sem_compra_por_rota(
