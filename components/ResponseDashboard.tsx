@@ -433,6 +433,117 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         </div>
       )}
       
+      {/* 2.1. Tabela Detalhada (logo após resumo executivo) */}
+      {(() => {
+        // Encontra a primeira seção do tipo tabela_detalhada
+        const tabelaDetalhadaSecao = data.secoes?.find(s => s.tipo === "tabela_detalhada" && s.dados && s.dados.length > 0);
+        if (!tabelaDetalhadaSecao) return null;
+        
+        const secaoIdx = data.secoes?.findIndex(s => s === tabelaDetalhadaSecao) ?? 0;
+        const isExpanded = expandedSections[secaoIdx] ?? true;
+        
+        // Calcula paginação para esta seção
+        const currentPage = currentPagesTabelaDetalhada[secaoIdx] || 0;
+        const totalLinhas = tabelaDetalhadaSecao.dados.length;
+        const totalPages = Math.ceil(totalLinhas / itemsPerPageDetalhamento);
+        const startIdx = currentPage * itemsPerPageDetalhamento;
+        const endIdx = startIdx + itemsPerPageDetalhamento;
+        const dadosPaginados = tabelaDetalhadaSecao.dados.slice(startIdx, endIdx);
+        
+        return (
+          <div
+            id={generateCardId('tabela-detalhada', secaoIdx)}
+            className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-indigo-500/10 p-2 border border-indigo-500/20">
+                  <Package className="w-5 h-5 text-indigo-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-100">{tabelaDetalhadaSecao.titulo}</h3>
+              </div>
+              <button
+                onClick={() => toggleSection(secaoIdx)}
+                className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+              >
+                {isExpanded ? "Recolher" : "Expandir"}
+                <ChevronDown className={clsx("w-3 h-3 transition-transform", isExpanded && "rotate-180")} />
+              </button>
+            </div>
+            
+            {isExpanded && (
+              <>
+                <div id={generateTableId('detalhada', secaoIdx)} className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-700">
+                          {Object.keys(tabelaDetalhadaSecao.dados[0] || {}).map((key, idx) => (
+                          <th
+                            key={idx}
+                            className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide"
+                          >
+                            {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dadosPaginados.map((item: any, idx: number) => (
+                        <tr
+                          key={startIdx + idx}
+                          className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
+                        >
+                          {Object.values(item).map((val: any, cellIdx: number) => (
+                            <td key={cellIdx} className="py-3 px-4 text-slate-300">
+                              {typeof val === "number"
+                                ? val.toString()
+                                : val || "—"}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                </div>
+                
+                {/* Paginação - 20 registros por página */}
+                {totalLinhas > itemsPerPageDetalhamento && (
+                  <div id={generateCardId(`paginacao-tabela-detalhada-${secaoIdx}`)} className="mt-4 flex items-center justify-between">
+                    <button
+                      id={generateCardId(`btn-pagina-anterior-tabela-${secaoIdx}`)}
+                      onClick={() => setCurrentPagesTabelaDetalhada(prev => ({ ...prev, [secaoIdx]: Math.max(0, (prev[secaoIdx] || 0) - 1) }))}
+                      disabled={currentPage === 0}
+                      className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                    >
+                      Anterior
+                    </button>
+                    <span id={generateCardId(`info-paginacao-tabela-${secaoIdx}`)} className="text-sm text-white/70">
+                      Página {currentPage + 1} de {totalPages} ({totalLinhas} registros - exibindo {startIdx + 1} a {Math.min(endIdx, totalLinhas)})
+                    </span>
+                    <button
+                      id={generateCardId(`btn-pagina-proxima-tabela-${secaoIdx}`)}
+                      onClick={() => setCurrentPagesTabelaDetalhada(prev => ({ ...prev, [secaoIdx]: Math.min(totalPages - 1, (prev[secaoIdx] || 0) + 1) }))}
+                      disabled={currentPage >= totalPages - 1}
+                      className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                )}
+                {/* Informação quando há 20 ou menos registros (sem paginação) */}
+                {totalLinhas > 0 && totalLinhas <= itemsPerPageDetalhamento && (
+                  <div id={generateCardId(`info-total-registros-tabela-${secaoIdx}`)} className="mt-4 text-xs text-white/50 text-center">
+                    Exibindo todos os {totalLinhas} registro{totalLinhas !== 1 ? 's' : ''}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })()}
+      
       {/* 3. Tabela "Clientes sem compra" (Q1) - REMOVIDO: "Dados Analíticos - Consulta Geral" (muita informação inútil para Diretor) */}
       {isQ1 && tabelaClientesPaginada ? (
         <div 
@@ -715,11 +826,15 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         </div>
       )}
 
-      {/* Renderiza seções baseado em data.secoes (FASE 3) */}
+      {/* Renderiza seções baseado em data.secoes (FASE 3) - EXCLUINDO tabela_detalhada (já renderizada acima) */}
       {data.secoes && data.secoes.length > 0 && (
         <>
-          {data.secoes.map((secao, secaoIdx) => {
-            const isExpanded = expandedSections[secaoIdx] ?? true; // Por padrão expandido
+          {data.secoes
+            .filter(secao => secao.tipo !== "tabela_detalhada") // Filtra tabela_detalhada (já renderizada após resumo executivo)
+            .map((secao, secaoIdxOriginal) => {
+              // Encontra o índice original da seção para manter o estado de expansão correto
+              const secaoIdx = data.secoes?.findIndex(s => s === secao) ?? secaoIdxOriginal;
+              const isExpanded = expandedSections[secaoIdx] ?? true; // Por padrão expandido
             
             // Seção: Lista de Vendedores
             if (secao.tipo === "lista_vendedores" && secao.dados && secao.dados.length > 0) {
@@ -1196,112 +1311,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               );
             }
             
-            // Seção: Tabela Detalhada (genérica) - COM PAGINAÇÃO
-            if (secao.tipo === "tabela_detalhada" && secao.dados && secao.dados.length > 0) {
-              const isExpanded = expandedSections[secaoIdx] ?? true;
-              
-              // Calcula paginação para esta seção
-              const currentPage = currentPagesTabelaDetalhada[secaoIdx] || 0;
-              const totalLinhas = secao.dados.length;
-              const totalPages = Math.ceil(totalLinhas / itemsPerPageDetalhamento);
-              const startIdx = currentPage * itemsPerPageDetalhamento;
-              const endIdx = startIdx + itemsPerPageDetalhamento;
-              const dadosPaginados = secao.dados.slice(startIdx, endIdx);
-              
-              return (
-                <div
-                  key={secaoIdx}
-                  id={generateCardId('tabela-detalhada', secaoIdx)}
-                  className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-xl bg-indigo-500/10 p-2 border border-indigo-500/20">
-                        <Package className="w-5 h-5 text-indigo-400" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-slate-100">{secao.titulo}</h3>
-                    </div>
-                    <button
-                      onClick={() => toggleSection(secaoIdx)}
-                      className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
-                    >
-                      {isExpanded ? "Recolher" : "Expandir"}
-                      <ChevronDown className={clsx("w-3 h-3 transition-transform", isExpanded && "rotate-180")} />
-                    </button>
-                  </div>
-                  
-                  {isExpanded && (
-                    <>
-                      <div id={generateTableId('detalhada', secaoIdx)} className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b border-slate-700">
-                                {Object.keys(secao.dados[0] || {}).map((key, idx) => (
-                                <th
-                                  key={idx}
-                                  className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide"
-                                >
-                                  {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {dadosPaginados.map((item: any, idx: number) => (
-                              <tr
-                                key={startIdx + idx}
-                                className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
-                              >
-                                {Object.values(item).map((val: any, cellIdx: number) => (
-                                  <td key={cellIdx} className="py-3 px-4 text-slate-300">
-                                    {typeof val === "number"
-                                      ? val.toString()
-                                      : val || "—"}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      </div>
-                      
-                      {/* Paginação - 20 registros por página */}
-                      {totalLinhas > itemsPerPageDetalhamento && (
-                        <div id={generateCardId(`paginacao-tabela-detalhada-${secaoIdx}`)} className="mt-4 flex items-center justify-between">
-                          <button
-                            id={generateCardId(`btn-pagina-anterior-tabela-${secaoIdx}`)}
-                            onClick={() => setCurrentPagesTabelaDetalhada(prev => ({ ...prev, [secaoIdx]: Math.max(0, (prev[secaoIdx] || 0) - 1) }))}
-                            disabled={currentPage === 0}
-                            className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
-                          >
-                            Anterior
-                          </button>
-                          <span id={generateCardId(`info-paginacao-tabela-${secaoIdx}`)} className="text-sm text-white/70">
-                            Página {currentPage + 1} de {totalPages} ({totalLinhas} registros - exibindo {startIdx + 1} a {Math.min(endIdx, totalLinhas)})
-                          </span>
-                          <button
-                            id={generateCardId(`btn-pagina-proxima-tabela-${secaoIdx}`)}
-                            onClick={() => setCurrentPagesTabelaDetalhada(prev => ({ ...prev, [secaoIdx]: Math.min(totalPages - 1, (prev[secaoIdx] || 0) + 1) }))}
-                            disabled={currentPage >= totalPages - 1}
-                            className="px-4 py-2 rounded-lg bg-[#0F172A] border border-white/10 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
-                          >
-                            Próxima
-                          </button>
-                        </div>
-                      )}
-                      {/* Informação quando há 20 ou menos registros (sem paginação) */}
-                      {totalLinhas > 0 && totalLinhas <= itemsPerPageDetalhamento && (
-                        <div id={generateCardId(`info-total-registros-tabela-${secaoIdx}`)} className="mt-4 text-xs text-white/50 text-center">
-                          Exibindo todos os {totalLinhas} registro{totalLinhas !== 1 ? 's' : ''}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              );
-            }
+            // Seção: Tabela Detalhada - REMOVIDA: já renderizada logo após o resumo executivo
             
             // Seção: Texto (alertas, etc.)
             if (secao.tipo === "texto" && secao.dados && secao.dados.length > 0) {
