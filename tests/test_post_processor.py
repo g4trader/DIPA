@@ -43,15 +43,23 @@ def test_processar_resposta_template_negativo():
         dados_dw=dados_dw,
         causas_detector=causas_detector
     )
-    
-    # Verifica estrutura
-    assert "resumo_executivo" in resultado
-    assert "diagnostico_causas" in resultado
-    assert "checklist_problemas" in resultado
-    assert "plano_acao_7_dias" in resultado
-    assert "plano_acao_30_dias" in resultado
-    assert "tendencias_previsao" in resultado
+
+    # Estrutura moderna: texto completo + metadados
+    assert "texto" in resultado
     assert "detalhes_tecnicos" in resultado
+    assert "kpis" in resultado
+
+    texto = resultado["texto"]
+    for secao in [
+        "Resumo Executivo",
+        "Principais Achados",
+        "Implicações Comerciais",
+        "Plano de Ação Imediato"
+    ]:
+        assert secao in texto, f"Seção '{secao}' deve aparecer no texto"
+
+    # Quando existem alvos prioritários o heading aparece no texto –
+    # neste cenário sem dados ele pode estar ausente, então não forçamos a checagem.
 
 
 def test_processar_resposta_template_positivo():
@@ -72,11 +80,17 @@ def test_processar_resposta_template_positivo():
         intent_spec=intent_spec,
         dados_dw=dados_dw
     )
-    
-    # Verifica estrutura
-    assert "resumo_executivo" in resultado
-    assert "oportunidades_crescimento" in resultado
+
+    assert "texto" in resultado
     assert "detalhes_tecnicos" in resultado
+    texto = resultado["texto"]
+    for secao in [
+        "Resumo Executivo",
+        "Principais Achados",
+        "Implicações Comerciais",
+        "Plano de Ação Imediato"
+    ]:
+        assert secao in texto
 
 
 def test_processar_resposta_sem_causas():
@@ -96,8 +110,7 @@ def test_processar_resposta_sem_causas():
         dados_dw=dados_dw,
         causas_detector={}
     )
-    
-    # Verifica que ainda retorna estrutura completa
-    assert "resumo_executivo" in resultado
-    assert "diagnostico_causas" in resultado
+
+    assert "texto" in resultado
+    assert "Resumo Executivo" in resultado["texto"]
 
