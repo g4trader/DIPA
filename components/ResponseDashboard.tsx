@@ -437,8 +437,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                     highlightFirstColumn={true}
                   />
                   
-                  {/* Paginação Q1 */}
-                  {tabelaClientesPaginada.totalPages > 1 && (
+                  {/* Paginação Q1 - sempre exibe quando há dados */}
+                  {tabelaClientesPaginada && (
                     <div className="mt-4 flex items-center justify-between">
                       <button
                         onClick={() => setCurrentPageQ1(p => Math.max(0, p - 1))}
