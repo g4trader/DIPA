@@ -30,9 +30,9 @@ fi
 
 OPENAI_API_KEY="$1"
 
-# Verificar se a chave começa com sk-
-if [[ ! "$OPENAI_API_KEY" =~ ^sk- ]]; then
-    echo "⚠️  AVISO: A chave da API OpenAI geralmente começa com 'sk-'"
+# Verificar formato comum da chave (OpenAI usa sk-, Grok usa gsk_)
+if [[ ! "$OPENAI_API_KEY" =~ ^(sk-|gsk_|xai-) ]]; then
+    echo "⚠️  AVISO: A chave da API costuma começar com 'sk-' (OpenAI) ou 'gsk_'/'xai-' (Grok)."
     echo "   Você tem certeza de que a chave está correta? (s/N)"
     read -r CONFIRM
     if [[ ! "$CONFIRM" =~ ^[Ss]$ ]]; then

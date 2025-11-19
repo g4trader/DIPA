@@ -45,11 +45,11 @@ type OpenAIChatCompletion = {
   }>;
 };
 
-// Suporta Grok (xAI) e OpenAI
-const GROK_URL = "https://api.x.ai/v1/chat/completions";
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-const GROK_MODEL = "grok-beta";
-const OPENAI_MODEL = "gpt-4o-mini";
+const DEFAULT_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_MODEL = "gpt-4o-mini";
+const baseUrl = (process.env.OPENAI_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
+const OPENAI_URL = `${baseUrl}/chat/completions`;
+const MODEL = process.env.OPENAI_MODEL || DEFAULT_MODEL;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function jsonResponse<T>(status: number, payload: T) {
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
   });
 
   if (!response.ok) {
-    return jsonResponse(502, { ok: false, error: `Failed to contact ${provider} API.` });
+    return jsonResponse(502, { ok: false, error: "Failed to contact the LLM provider." });
   }
 
   const completion = (await response.json()) as OpenAIChatCompletion;
@@ -133,14 +133,14 @@ export async function POST(req: Request) {
   );
 
   if (!toolCall?.function?.arguments) {
-    return jsonResponse(502, { ok: false, error: `${provider} did not return function arguments.` });
+    return jsonResponse(502, { ok: false, error: "LLM did not return function arguments." });
   }
 
   let args: unknown;
   try {
     args = JSON.parse(toolCall.function.arguments);
   } catch {
-    return jsonResponse(502, { ok: false, error: `Invalid JSON from ${provider} function call.` });
+    return jsonResponse(502, { ok: false, error: "Invalid JSON from LLM function call." });
   }
 
   const parsedArgs = ParsedQuery.safeParse(args);
