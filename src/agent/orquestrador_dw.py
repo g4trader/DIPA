@@ -56,26 +56,28 @@ from src.agent.queries_analytics import (
     get_piores_vendedores_por_gap
 )
 
-# Importa novas funções do queries.py
-try:
-    from src.dw.queries import (
-        get_clientes_sem_compra_ha_dias,
-        get_clientes_queda_faturamento_ano_contra_ano,
-        get_industrias_com_mais_vendedores_fora_meta,
-        get_rotas_positivacao_industria,
-        get_itens_baixa_media_mensal,
-        get_clientes_sem_recompra_sku,
-        get_clientes_segmento_sem_sku_no_periodo,
-        get_clientes_uma_unidade_industria_mes,
-        get_clientes_sem_sku_no_periodo,
-        get_clientes_mix_minimo_nissin_mes,
-        get_rotas_desempenho_mix_minimo_nissin_mes
-    )
-except ImportError as e:
-    logger.warning(f"[orquestrador_dw] Não foi possível importar queries.py: {e}")
-    # Define funções stub para evitar erros
-    get_clientes_sem_compra_ha_dias = None
-    get_clientes_queda_faturamento_ano_contra_ano = None
+    # Importa novas funções do queries.py
+    try:
+        from src.dw.queries import (
+            get_clientes_sem_compra_ha_dias,
+            get_clientes_sem_compra_por_rota,
+            get_clientes_queda_faturamento_ano_contra_ano,
+            get_industrias_com_mais_vendedores_fora_meta,
+            get_rotas_positivacao_industria,
+            get_itens_baixa_media_mensal,
+            get_clientes_sem_recompra_sku,
+            get_clientes_segmento_sem_sku_no_periodo,
+            get_clientes_uma_unidade_industria_mes,
+            get_clientes_sem_sku_no_periodo,
+            get_clientes_mix_minimo_nissin_mes,
+            get_rotas_desempenho_mix_minimo_nissin_mes
+        )
+    except ImportError as e:
+        logger.warning(f"[orquestrador_dw] Não foi possível importar queries.py: {e}")
+        # Define funções stub para evitar erros
+        get_clientes_sem_compra_ha_dias = None
+        get_clientes_sem_compra_por_rota = None
+        get_clientes_queda_faturamento_ano_contra_ano = None
     get_industrias_com_mais_vendedores_fora_meta = None
     get_rotas_positivacao_industria = None
     get_itens_baixa_media_mensal = None
@@ -788,6 +790,34 @@ def executar_intent_spec(
                 except Exception as e:
                     logger.error(f"[orquestrador_dw] Erro ao gerar análise de causas: {e}")
     
+    # PASSO 6.7: Para clientes_sem_compra, adiciona tabela agregada por rota
+    tabela_por_rota = None
+    if intent_spec.tipo == "clientes_sem_compra" and status == "ok" and dados_normalizados:
+        try:
+            if get_clientes_sem_compra_por_rota:
+                # Extrai parâmetros da query original
+                dias = intent_spec.filtros.get("dias", 60)
+                data_referencia = intent_spec.periodo_fim or intent_spec.periodo_inicio
+                filtros_behavior = {}
+                if regras_aplicadas:
+                    if "excluir_pastas" in str(regras_aplicadas) or "excluir_carteiras" in intent_spec.filtros:
+                        filtros_behavior["excluir_pastas"] = intent_spec.filtros.get("excluir_carteiras", [])
+                    if "excluir_rotas" in intent_spec.filtros:
+                        filtros_behavior["excluir_rotas"] = intent_spec.filtros.get("excluir_rotas", [])
+                    if "excluir_segmentos" in intent_spec.filtros:
+                        filtros_behavior["excluir_segmentos"] = intent_spec.filtros.get("excluir_segmentos", [])
+                
+                tabela_por_rota = get_clientes_sem_compra_por_rota(
+                    session=session,
+                    dias=dias,
+                    data_referencia=data_referencia,
+                    filtros_behavior=filtros_behavior if filtros_behavior else None
+                )
+                logger.info(f"[orquestrador_dw] Tabela por rota gerada: {len(tabela_por_rota)} vendedores")
+        except Exception as e:
+            logger.warning(f"[orquestrador_dw] Erro ao gerar tabela por rota: {e}")
+            tabela_por_rota = None
+    
     # PASSO 7: Envelopa resposta
     # Prepara detalhes_tecnicos com regras aplicadas
     detalhes_tecnicos = {
@@ -806,6 +836,7 @@ def executar_intent_spec(
             "fim": intent_spec.periodo_fim
         },
         "dados": dados_normalizados,
+        "tabela_por_rota": tabela_por_rota,  # Tabela agregada por rota (apenas para clientes_sem_compra)
         "regras_aplicadas": regras_aplicadas,  # Mantido para compatibilidade
         "analise_causas": analise_causas,  # Análise de causas quando meta não batida (legado)
         "causas_detector": causas_detector,  # Causas detectadas pelo novo módulo

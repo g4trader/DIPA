@@ -140,6 +140,7 @@ def processar_pergunta_com_dw(
             "tem_dados": resultado_orquestrador.get("status") == "ok" and len(resultado_orquestrador.get("dados", [])) > 0,
             "analise_causas": resultado_orquestrador.get("analise_causas", {}),
             "causas_detector": resultado_orquestrador.get("causas_detector", {}),
+            "tabela_por_rota": resultado_orquestrador.get("tabela_por_rota"),  # Tabela agregada por rota (Q1)
             "meta_total": resultado_orquestrador.get("dados", [{}])[0].get("meta_total", 0) if resultado_orquestrador.get("dados") else 0,
             "realizado_total": resultado_orquestrador.get("dados", [{}])[0].get("realizado_total", 0) if resultado_orquestrador.get("dados") else 0,
             "gap_total": resultado_orquestrador.get("dados", [{}])[0].get("gap_total", 0) if resultado_orquestrador.get("dados") else 0,
@@ -232,6 +233,26 @@ def processar_pergunta_com_dw(
         if texto_post_processor:
             resposta_executiva["texto_completo_post_processor"] = texto_post_processor
             logger.info(f"[processar_pergunta_com_dw] Texto completo preservado: {len(texto_post_processor)} chars")
+        
+        # Para Q1 (clientes_sem_compra), monta tabela_principal com estrutura correta
+        if intent_spec.tipo == "clientes_sem_compra" and dados_dw.get("dados"):
+            dados_clientes = dados_dw.get("dados", [])
+            if dados_clientes and isinstance(dados_clientes, list) and len(dados_clientes) > 0:
+                # Monta tabela_principal com colunas: Cliente ID, Nome, Dias sem Compra, Vendedor, Supervisor
+                resposta_executiva["tabela_principal"] = [{
+                    "colunas": ["Cliente ID", "Nome", "Dias sem Compra", "Vendedor", "Supervisor"],
+                    "linhas": [
+                        [
+                            cliente.get("cliente_id", ""),
+                            cliente.get("nome", ""),
+                            cliente.get("dias_sem_compra", 0) or 0,
+                            cliente.get("vendedor_nome", cliente.get("vendedor_codigo", cliente.get("rota_id", ""))),
+                            cliente.get("supervisor_nome", cliente.get("supervisor_codigo", ""))
+                        ]
+                        for cliente in dados_clientes
+                    ]
+                }]
+                logger.info(f"[processar_pergunta_com_dw] Tabela principal montada para Q1: {len(dados_clientes)} clientes")
     
     except Exception as e:
         logger.error(f"[processar_pergunta_com_dw] Erro ao processar resposta: {e}")

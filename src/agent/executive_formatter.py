@@ -113,13 +113,18 @@ def _format_clientes_sem_compra(dados, intent_spec, filtros, regras_behavior):
     # TOP 10 clientes mais críticos
     top_10 = dados_ordenados[:10] if len(dados_ordenados) > 10 else dados_ordenados
     
-    # Calcula métricas
+    # Calcula métricas (SEM inventar média de dias - apenas dados reais)
     total_clientes = len(dados)
     dias_min = filtros.get("dias", 60)
     
-    # Tenta calcular média de dias sem compra
-    dias_sem_compra_list = [d.get("dias_sem_compra") for d in dados if isinstance(d, dict) and d.get("dias_sem_compra")]
-    media_dias = sum(dias_sem_compra_list) / len(dias_sem_compra_list) if dias_sem_compra_list else None
+    # Conta vendedores distintos (para KPI)
+    vendedores_distintos = set()
+    for d in dados:
+        if isinstance(d, dict):
+            vendedor_key = d.get("vendedor_codigo") or d.get("rota_id") or ""
+            if vendedor_key:
+                vendedores_distintos.add(vendedor_key)
+    total_vendedores_afetados = len(vendedores_distintos)
     
     # Tenta identificar rotas mais afetadas
     rotas_afetadas = {}
@@ -131,38 +136,38 @@ def _format_clientes_sem_compra(dados, intent_spec, filtros, regras_behavior):
     rotas_top = sorted(rotas_afetadas.items(), key=lambda x: x[1], reverse=True)[:3] if rotas_afetadas else []
     
     # Detecta cenário crítico (muitos clientes sem compra)
-    is_critico = total_clientes >= 100 or (media_dias and media_dias > 90)
+    is_critico = total_clientes >= 100
     
-    # Constrói resumo executivo (2-3 frases, direto, com números)
+    # Constrói resumo executivo (2-3 frases, direto, com números - SEM média de dias)
     resumo_parts = [
-        f"Foram identificados {total_clientes} clientes ativos sem compras há mais de {dias_min} dias."
+        f"Foram identificados {total_clientes} clientes ativos que não compram há mais de {dias_min} dias."
     ]
-    if media_dias:
-        resumo_parts.append(f"A média de dias sem compra é de {media_dias:.0f} dias.")
     if rotas_top:
         rotas_str = ", ".join([f"{r[0]}" for r in rotas_top])
         resumo_parts.append(f"As rotas mais afetadas são: {rotas_str} ({rotas_top[0][1]} clientes cada).")
+    if total_vendedores_afetados > 0:
+        resumo_parts.append(f"{total_vendedores_afetados} vendedores possuem clientes inativos nesta condição.")
     
     resumo = " ".join(resumo_parts)
     
-    # Principais Achados (3-5 bullets concretos)
+    # Síntese Analítica (3-5 bullets concretos - tom executivo)
     achados = [
         f"Os {min(10, total_clientes)} clientes mais críticos concentram-se principalmente em rotas específicas."
     ]
     if rotas_top:
         pct_rota = (rotas_top[0][1] * 100.0 / total_clientes) if total_clientes > 0 else 0
         achados.append(f"Rota {rotas_top[0][0]} concentra {pct_rota:.0f}% dos clientes sem compra ({rotas_top[0][1]} clientes).")
-    if media_dias and media_dias > 100:
-        achados.append(f"Média de {media_dias:.0f} dias sem compra indica carteira muito fria, com risco alto de churn.")
     if total_clientes > 500:
-        achados.append(f"Volume crítico de {total_clientes} clientes sem compra representa risco significativo de receita.")
+        achados.append(f"Volume crítico de {total_clientes} clientes sem compra representa risco significativo de receita recorrente.")
+    if total_vendedores_afetados > 50:
+        achados.append(f"A situação afeta {total_vendedores_afetados} vendedores, indicando problema estrutural na gestão de carteira.")
     achados.append("Alguns clientes estratégicos podem estar sendo atendidos de forma reativa, e não proativa.")
     
-    # Implicações Comerciais (risco de receita, perda de share, etc.)
+    # Riscos Comerciais (risco de receita, perda de share, etc.)
     implicacoes = [
         f"Risco de perda definitiva de {total_clientes} clientes para concorrentes, impactando receita recorrente."
     ]
-    if media_dias and media_dias > 90:
+    if total_clientes > 200:
         implicacoes.append("Queda de share em regiões onde a Dipam já tinha presença consolidada.")
     implicacoes.append("Necessidade de ações imediatas de reativação com foco em carteira fria.")
     if rotas_top:
@@ -170,7 +175,7 @@ def _format_clientes_sem_compra(dados, intent_spec, filtros, regras_behavior):
     
     # Plano de Ação Imediato (formato imperativo, acionável)
     plano = [
-        f"Priorizar contato imediato com os {min(10, total_clientes)} clientes com maior tempo sem compra (acima de {max(100, int(media_dias)) if media_dias else 100} dias)."
+        f"Priorizar contato imediato com os {min(10, total_clientes)} clientes com maior tempo sem compra."
     ]
     if rotas_top:
         plano.append(f"Agendar blitz de vendas nas rotas {', '.join([r[0] for r in rotas_top[:3]])} nos próximos 7 dias.")

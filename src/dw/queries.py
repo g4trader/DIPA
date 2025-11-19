@@ -125,16 +125,23 @@ def get_clientes_sem_compra_ha_dias(
     # Conforme Q1 em ENGINEERING_QUERIES.md:
     # - FROM dim_cliente c LEFT JOIN ultima_compra u ON u.cliente_id = c.cliente_id
     # - WHERE c.ativo = 1
+    # - JOIN com Vendedor e Supervisor para trazer nomes
     query = (
         session.query(
             Cliente.id.label('cliente_id'),
             Cliente.nome,
             Cliente.segmento_venda.label('segmento'),  # Equivalente a c.segmento do blueprint
             Cliente.rota_rca.label('rota_id'),
+            Vendedor.nome.label('vendedor_nome'),
+            Vendedor.codigo.label('vendedor_codigo'),
+            Supervisor.nome.label('supervisor_nome'),
+            Supervisor.codigo.label('supervisor_codigo'),
             ultima_compra_subq.c.data_ultima_compra,
             dias_sem_compra_expr.label('dias_sem_compra')
         )
         .outerjoin(ultima_compra_subq, Cliente.id == ultima_compra_subq.c.cliente_id)
+        .outerjoin(Vendedor, Cliente.rota_rca == Vendedor.codigo)
+        .outerjoin(Supervisor, Cliente.supervisor_id == Supervisor.id)
         .filter(Cliente.ativo == True)  # c.ativo = 1 conforme blueprint
     )
     
@@ -165,8 +172,8 @@ def get_clientes_sem_compra_ha_dias(
         )
     )
     
-    # Ordena por dias sem compra (maior primeiro)
-    query = query.order_by(desc('dias_sem_compra'))
+    # Ordena por dias sem compra (crescente - menor primeiro, conforme pedido)
+    query = query.order_by(asc('dias_sem_compra'))
     
     resultados = query.all()
     
@@ -177,11 +184,70 @@ def get_clientes_sem_compra_ha_dias(
             "nome": row.nome or "",
             "segmento": row.segmento or "",
             "rota_id": row.rota_id or "",
+            "vendedor_nome": row.vendedor_nome or row.vendedor_codigo or row.rota_id or "",
+            "vendedor_codigo": row.vendedor_codigo or row.rota_id or "",
+            "supervisor_nome": row.supervisor_nome or row.supervisor_codigo or "",
+            "supervisor_codigo": row.supervisor_codigo or "",
             "data_ultima_compra": row.data_ultima_compra.isoformat() if row.data_ultima_compra else None,
             "dias_sem_compra": int(row.dias_sem_compra) if row.dias_sem_compra else None
         }
         for row in resultados
     ]
+
+
+def get_clientes_sem_compra_por_rota(
+    session: Session,
+    dias: int = 60,
+    data_referencia: Optional[str] = None,
+    filtros_behavior: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Retorna agregação de clientes sem compra por rota/vendedor.
+    
+    Args:
+        session: Sessão SQLAlchemy
+        dias: Número de dias sem compra (padrão: 60)
+        data_referencia: Data de referência (YYYY-MM-DD) ou None para hoje
+        filtros_behavior: Filtros adicionais do Behavior Memory
+        
+    Returns:
+        Lista de dicts com:
+        - vendedor_nome
+        - vendedor_codigo
+        - supervisor_nome
+        - supervisor_codigo
+        - total_clientes_sem_compra
+    """
+    # Usa a query principal para obter os dados
+    clientes_sem_compra = get_clientes_sem_compra_ha_dias(
+        session=session,
+        dias=dias,
+        data_referencia=data_referencia,
+        filtros_behavior=filtros_behavior
+    )
+    
+    # Agrega por vendedor
+    agregacao_por_rota = {}
+    for cliente in clientes_sem_compra:
+        vendedor_key = cliente.get("vendedor_codigo") or cliente.get("rota_id") or "N/A"
+        supervisor_nome = cliente.get("supervisor_nome") or cliente.get("supervisor_codigo") or ""
+        
+        if vendedor_key not in agregacao_por_rota:
+            agregacao_por_rota[vendedor_key] = {
+                "vendedor_nome": cliente.get("vendedor_nome") or cliente.get("vendedor_codigo") or cliente.get("rota_id") or "N/A",
+                "vendedor_codigo": cliente.get("vendedor_codigo") or cliente.get("rota_id") or "N/A",
+                "supervisor_nome": supervisor_nome,
+                "supervisor_codigo": cliente.get("supervisor_codigo") or "",
+                "total_clientes_sem_compra": 0
+            }
+        
+        agregacao_por_rota[vendedor_key]["total_clientes_sem_compra"] += 1
+    
+    # Converte para lista e ordena por total decrescente
+    resultados = list(agregacao_por_rota.values())
+    resultados.sort(key=lambda x: x["total_clientes_sem_compra"], reverse=True)
+    
+    return resultados
 
 
 # ============================================================================

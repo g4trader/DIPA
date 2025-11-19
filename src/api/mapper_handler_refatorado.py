@@ -151,6 +151,26 @@ def _criar_structured_response(
     intent_spec = resposta.get("intent_spec")
     dados_dw = resposta.get("dados_dw", {})
     regras_aplicadas = dados_dw.get("regras_aplicadas") if isinstance(dados_dw, dict) else None
+    tabela_por_rota = dados_dw.get("tabela_por_rota") if isinstance(dados_dw, dict) else None
+    
+    # Para Q1 (clientes_sem_compra), monta tabela_principal com colunas corretas
+    if intent == "clientes_sem_compra" and dados_dw.get("dados"):
+        dados_clientes = dados_dw.get("dados", [])
+        if dados_clientes and isinstance(dados_clientes, list) and len(dados_clientes) > 0:
+            # Monta tabela_principal com colunas: Cliente ID, Nome, Dias sem Compra, Vendedor, Supervisor
+            tabela_principal = [{
+                "colunas": ["Cliente ID", "Nome", "Dias sem Compra", "Vendedor", "Supervisor"],
+                "linhas": [
+                    [
+                        cliente.get("cliente_id", ""),
+                        cliente.get("nome", ""),
+                        cliente.get("dias_sem_compra", 0) or 0,
+                        cliente.get("vendedor_nome", cliente.get("vendedor_codigo", cliente.get("rota_id", ""))),
+                        cliente.get("supervisor_nome", cliente.get("supervisor_codigo", ""))
+                    ]
+                    for cliente in dados_clientes
+                ]
+            }]
     
     # Extrai KPIs e seções da tabela_principal
     kpis = []
@@ -249,6 +269,21 @@ def _criar_structured_response(
                     "dados": _convert_table_to_dict_list(colunas, linhas)
                 })
     
+    # Para Q1 (clientes_sem_compra), extrai KPIs do post_processor
+    resposta_estruturada = resposta.get("resposta_estruturada", {})
+    if intent == "clientes_sem_compra" and isinstance(resposta_estruturada, dict):
+        kpis_post_processor = resposta_estruturada.get("kpis", [])
+        if kpis_post_processor:
+            # Converte formato do post_processor para formato do structured
+            kpis = [
+                {
+                    "label": kpi.get("label", ""),
+                    "value": str(kpi.get("valor", 0)),
+                    "color": "neutral"
+                }
+                for kpi in kpis_post_processor
+            ]
+    
     # Se não há KPIs mas há dados do DW, tenta extrair de dados_dw
     if not kpis and dados_dw.get("dados"):
         kpis_dw = _extrair_kpis_de_dados_dw(dados_dw.get("dados"), intent, periodo_analisado)
@@ -320,7 +355,8 @@ def _criar_structured_response(
             "periodo_analisado": periodo_analisado,
             "regras_aplicadas": regras_aplicadas,
             "tem_dados": resposta.get("tem_dados", False),
-            "tabela_principal": tabela_principal
+            "tabela_principal": tabela_principal,
+            "tabela_por_rota": tabela_por_rota  # Tabela agregada por rota (Q1)
         }
     }
     

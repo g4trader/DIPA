@@ -53,26 +53,50 @@ def post_processar_resposta(resposta_dw, intent_spec, regras_aplicadas, regras_b
         regras_behavior=regras_behavior or []
     )
     
+    # Determina headings baseado no tipo de intent
+    intent_tipo = None
+    if hasattr(intent_spec, 'tipo'):
+        intent_tipo = intent_spec.tipo
+    elif isinstance(intent_spec, dict):
+        intent_tipo = intent_spec.get("tipo", "outros")
+    
+    # Para clientes_sem_compra, usa headings executivos específicos
+    if intent_tipo == "clientes_sem_compra":
+        heading_achados = "Síntese Analítica"
+        heading_implicacoes = "Riscos Comerciais"
+        heading_plano = "Plano de Ação Imediato"
+        heading_top_alvos = "Carteiras Prioritárias (TOP 10)"
+    else:
+        # Headings padrão para outros tipos
+        heading_achados = "Principais Achados"
+        heading_implicacoes = "Implicações Comerciais"
+        heading_plano = "Plano de Ação Imediato"
+        heading_top_alvos = "Alvos Prioritários (TOP 10)"
+    
     # Construi o texto final da resposta
     texto_final = (
         "Resumo Executivo\n"
         + resultado_exec["resumo"] + "\n\n"
-        + "Principais Achados\n"
+        + heading_achados + "\n"
         + "\n".join(f"- {a}" for a in resultado_exec["achados"]) + "\n\n"
-        + "Implicações Comerciais\n"
+        + heading_implicacoes + "\n"
         + "\n".join(f"- {i}" for i in resultado_exec["implicacoes"]) + "\n\n"
-        + "Plano de Ação Imediato\n"
+        + heading_plano + "\n"
         + "\n".join(f"- {p}" for p in resultado_exec["plano"])
     )
     
     # Adiciona bloco de Alvos Prioritários (TOP 10) se houver dados
     top_alvos = resultado_exec.get("top_alvos", [])
     if top_alvos:
-        texto_final += "\n\nAlvos Prioritários (TOP 10)\n"
+        texto_final += f"\n\n{heading_top_alvos}\n"
         texto_final += "\n".join(f"- {linha}" for linha in top_alvos)
+    
+    # Extrai KPIs se disponíveis
+    kpis = resultado_exec.get("kpis", [])
     
     return {
         "texto": texto_final,
+        "kpis": kpis,
         "detalhes_tecnicos": resposta_dw.get("detalhes_tecnicos", {}) if isinstance(resposta_dw, dict) else {}
     }
 
