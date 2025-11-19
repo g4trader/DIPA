@@ -7,7 +7,7 @@ import { InsightsBlock } from "./InsightsBlock";
 import { DataTable } from "./DataTable";
 import { ExecutiveSectionCard } from "./ExecutiveSectionCard";
 import { parseMarkdownExecutivo } from "./markdownParser";
-import { FileText, ShoppingCart, ArrowDown } from "lucide-react";
+import { FileText, ShoppingCart, ArrowDown, Users } from "lucide-react";
 
 type Props = {
   data: CopilotStructuredResponse;
@@ -361,19 +361,24 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
             {bigNumberKPIs.map((kpi, idx) => (
               <div key={idx} id={generateCardId('kpi', idx)}>
                 {idx === 0 ? (
-                  // Primeiro card com ícones customizados
+                  // Primeiro card com 3 ícones customizados (mesmo estilo)
                   <div id={generateCardId('kpi-card', idx)} className="flex flex-col justify-between rounded-2xl bg-[#0F172A] border border-white/10 px-6 py-5 shadow-lg shadow-black/40 hover:border-white/20 transition-all duration-200">
-                    <div className="flex items-start gap-4 mb-3">
-                      <div className="flex items-center gap-2">
-                        {/* Ícone de carrinho vermelho com seta para baixo */}
-                        <div className="text-red-400 bg-red-400/10 rounded-xl p-3 text-xl border border-red-400/20 flex items-center gap-1 flex-shrink-0">
+                    <div className="flex items-start gap-3 mb-3">
+                      {/* Ícone de carrinho vermelho com seta para baixo */}
+                      <div className="text-red-400 bg-red-400/10 rounded-xl p-3 border border-red-400/20 flex flex-col items-center justify-center w-16 h-16 flex-shrink-0">
+                        <div className="flex items-center gap-1">
                           <ShoppingCart className="w-5 h-5" />
                           <ArrowDown className="w-4 h-4" />
                         </div>
-                        {/* Ícone com número 60 */}
-                        <div className="text-white bg-slate-700/50 rounded-xl p-3 text-xl border border-white/20 flex items-center justify-center min-w-[3rem] flex-shrink-0">
-                          <span className="text-2xl font-bold">60</span>
-                        </div>
+                      </div>
+                      {/* Ícone com número 60 e texto "dias" */}
+                      <div className="text-white bg-slate-700/50 rounded-xl p-3 border border-white/20 flex flex-col items-center justify-center w-16 h-16 flex-shrink-0">
+                        <span className="text-2xl font-bold">60</span>
+                        <span className="text-[10px] text-white/70 uppercase tracking-wide mt-0.5">dias</span>
+                      </div>
+                      {/* Ícone de clientes */}
+                      <div className="text-blue-400 bg-blue-400/10 rounded-xl p-3 border border-blue-400/20 flex flex-col items-center justify-center w-16 h-16 flex-shrink-0">
+                        <Users className="w-5 h-5" />
                       </div>
                     </div>
                     <div className="flex-1 flex items-end">
