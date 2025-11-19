@@ -7,7 +7,7 @@ import { InsightsBlock } from "./InsightsBlock";
 import { DataTable } from "./DataTable";
 import { ExecutiveSectionCard } from "./ExecutiveSectionCard";
 import { parseMarkdownExecutivo } from "./markdownParser";
-import { FileText } from "lucide-react";
+import { FileText, ShoppingCart, ArrowDown } from "lucide-react";
 
 type Props = {
   data: CopilotStructuredResponse;
@@ -356,18 +356,42 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       {/* 1. BigNumber com título "Total de Clientes" (PRIMEIRO) */}
       {bigNumberKPIs.length > 0 && (
         <div id={generateCardId('kpis-container')} className="space-y-4">
-          <h2 className="text-xl font-semibold text-white">Total de Clientes</h2>
+          <h2 className="text-xl font-semibold text-white">A resposta para sua pergunta é:</h2>
           <div className={`grid grid-cols-1 ${bigNumberKPIs.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-6`}>
             {bigNumberKPIs.map((kpi, idx) => (
               <div key={idx} id={generateCardId('kpi', idx)}>
-                <BigNumberCard
-                  id={generateCardId('kpi-card', idx)}
-                  label={kpi.label}
-                  value={kpi.value}
-                  icon={kpi.icon}
-                  trend={kpi.trend}
-                  color={kpi.color}
-                />
+                {idx === 0 ? (
+                  // Primeiro card com ícones customizados
+                  <div id={generateCardId('kpi-card', idx)} className="flex flex-col justify-between rounded-2xl bg-[#0F172A] border border-white/10 px-6 py-5 shadow-lg shadow-black/40 hover:border-white/20 transition-all duration-200">
+                    <div className="flex items-start gap-4 mb-3">
+                      <div className="flex items-center gap-2">
+                        {/* Ícone de carrinho vermelho com seta para baixo */}
+                        <div className="text-red-400 bg-red-400/10 rounded-xl p-3 text-xl border border-red-400/20 flex items-center gap-1 flex-shrink-0">
+                          <ShoppingCart className="w-5 h-5" />
+                          <ArrowDown className="w-4 h-4" />
+                        </div>
+                        {/* Ícone com número 60 */}
+                        <div className="text-white bg-slate-700/50 rounded-xl p-3 text-xl border border-white/20 flex items-center justify-center min-w-[3rem] flex-shrink-0">
+                          <span className="text-2xl font-bold">60</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex-1 flex items-end">
+                      <p className="mt-2 text-3xl md:text-4xl font-bold tracking-tight text-white">
+                        {typeof kpi.value === "number" ? kpi.value.toLocaleString("pt-BR") : kpi.value}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <BigNumberCard
+                    id={generateCardId('kpi-card', idx)}
+                    label={kpi.label}
+                    value={kpi.value}
+                    icon={kpi.icon}
+                    trend={kpi.trend}
+                    color={kpi.color}
+                  />
+                )}
               </div>
             ))}
           </div>
