@@ -106,10 +106,7 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
 
         {/* Conteúdo principal - Dashboard estruturado */}
         <div id="dipam-card-content" className="px-6 pt-4 pb-6">
-          {/* Título (pergunta) */}
-          <h2 id="dipam-card-question" className="text-lg md:text-xl font-semibold text-slate-50 mb-6">{question}</h2>
-
-          {/* Renderiza dashboard estruturado */}
+          {/* Renderiza dashboard estruturado (pergunta removida - já aparece no chat) */}
           <ResponseDashboard data={structuredWithMarkdown} question={question} />
         </div>
       </div>
