@@ -92,12 +92,41 @@
 3. **Narrativas Genéricas**: Q8 e Q13 podem precisar de narrativas específicas
 4. **Rotas no TOP 10**: Problema conhecido - rotas aparecem como "—"
 
+## Correções Implementadas (2025-11-19)
+
+### 1. Mapeamento de Intents
+- ✅ Adicionado mapeamento para `vendas_baixas` com dimensão `produto` (Q5)
+- ✅ Adicionado mapeamento para `positivacao` com dimensão `cliente` (Q9-Q11)
+- ✅ Todas as queries DW estão mapeadas no orquestrador
+
+### 2. Tratamento de Erro
+- ✅ Orquestrador nunca retorna 500 - sempre retorna estrutura válida com `status: "erro_interno"`
+- ✅ Handler refatorado tem try/except em todos os pontos críticos
+- ✅ Endpoint `/ask` tem tratamento de erro adequado
+
+### 3. Formato de Rotas no TOP 10
+- ✅ Corrigido formato de rotas no `executive_formatter` para exibir "ROTA XX" quando numérico
+- ✅ Formato compatível com parser do frontend: "CLIENTE | X dias sem compra | Rota: Y"
+
+### 4. Narrativas Executivas
+- ✅ Todas as narrativas específicas estão implementadas:
+  - `_format_clientes_sem_compra` (Q1)
+  - `_format_queda_faturamento` (Q2)
+  - `_format_meta_departamento` (Q3)
+  - `_format_positivacao` (Q4, Q9-Q11)
+  - `_format_vendas_baixas` (Q5)
+  - `_format_recompra` (Q6)
+  - `_format_clientes_sem_item` (Q7, Q8)
+  - `_format_mix_nissin` (Q12, Q13)
+  - `_format_mix` (fallback para Q5 se detectado como "mix")
+
 ## Próximos Passos
 
 1. ✅ Criar documento de status (este arquivo)
-2. ⏳ Rodar diagnóstico completo com CLI de aceitação
-3. ⏳ Corrigir tratamento de erro em todas as queries
-4. ⏳ Adicionar narrativas específicas onde necessário
-5. ⏳ Corrigir problema de rotas no TOP 10
-6. ⏳ Validar todas as 13 perguntas
+2. ✅ Corrigir tratamento de erro em todas as queries
+3. ✅ Adicionar narrativas específicas onde necessário
+4. ✅ Corrigir problema de rotas no TOP 10
+5. ⏳ Rodar diagnóstico completo com CLI de aceitação (próximo passo)
+6. ⏳ Validar todas as 13 perguntas em produção
+7. ⏳ Deploy e validação final
 
