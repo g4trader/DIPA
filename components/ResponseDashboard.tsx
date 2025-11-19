@@ -385,26 +385,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         )}
       </div>
       
-      {/* 1. BigNumber com título "Total de Clientes" (PRIMEIRO) */}
-      {bigNumberKPIs.length > 0 && (
-        <div className="mb-10">
-          <h2 className="text-xl font-semibold mb-3 text-white">Total de Clientes</h2>
-          <div className={`grid grid-cols-1 ${bigNumberKPIs.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-6`}>
-            {bigNumberKPIs.map((kpi, idx) => (
-              <BigNumberCard
-                key={idx}
-                label={kpi.label}
-                value={kpi.value}
-                icon={kpi.icon}
-                trend={kpi.trend}
-                color={kpi.color}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-      
-      {/* 2. Resumo Executivo */}
+      {/* 1. Resumo Executivo */}
       {parsedMarkdown?.resumoExecutivo && (
         <div className="mb-10">
           <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
@@ -416,7 +397,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         </div>
       )}
       
-      {/* 3. Tabela "Dados Analíticos – Consulta Geral" com paginação de 20 registros */}
+      {/* 2. Tabela "Dados Analíticos – Consulta Geral" com paginação de 20 registros (logo após Resumo Executivo) */}
       {(isQ1 && tabelaClientesPaginada) || (!isQ1 && tabelaAnaliticaPaginada) ? (
         <div className="mb-10">
           <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
@@ -495,6 +476,25 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
           </div>
         </div>
       ) : null}
+      
+      {/* 3. BigNumber com título "Total de Clientes" */}
+      {bigNumberKPIs.length > 0 && (
+        <div className="mb-10">
+          <h2 className="text-xl font-semibold mb-3 text-white">Total de Clientes</h2>
+          <div className={`grid grid-cols-1 ${bigNumberKPIs.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-6`}>
+            {bigNumberKPIs.map((kpi, idx) => (
+              <BigNumberCard
+                key={idx}
+                label={kpi.label}
+                value={kpi.value}
+                icon={kpi.icon}
+                trend={kpi.trend}
+                color={kpi.color}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       
       {/* 3.1. Tabela de vendedores (Q1) - apenas se houver dados */}
       {isQ1 && tabelaPorRota && Array.isArray(tabelaPorRota) && tabelaPorRota.length > 0 && (
