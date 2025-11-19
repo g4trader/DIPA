@@ -15,19 +15,24 @@ import { CopilotStructuredResponse } from "@/types/agent";
  * 
  * IMPORTANTE: 
  * - Em produção, a variável DEVE estar configurada no Vercel
- * - Em desenvolvimento local, usa localhost:8000 como fallback
+ * - Fallback padrão: URL oficial do Cloud Run (trivihair)
  * - Remove barras no final para evitar URLs duplicadas (ex: ...run.app//ask)
  * - URL oficial: https://dipam-ai-backend-642830139828.us-central1.run.app
+ * 
+ * ⚠️ NUNCA usar a URL antiga: https://dipam-ai-backend-6arhlm3mha-uc.a.run.app
  */
-const BACKEND_URL =
+const BASE_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||
-  process.env.NEXT_PUBLIC_DIPAM_API_URL ||
-  // Fallback apenas em desenvolvimento (não em produção)
-  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://dipam-ai-backend-642830139828.us-central1.run.app");
+  "https://dipam-ai-backend-642830139828.us-central1.run.app";
 
 // Remove barra extra no final, se houver
-const cleanedUrl = BACKEND_URL.replace(/\/+$/, "");
+const cleanedUrl = BASE_URL.replace(/\/+$/, "");
+
+// Debug apenas em desenvolvimento
+if (process.env.NODE_ENV === "development") {
+  console.log("🔧 BACKEND_URL:", cleanedUrl);
+}
 
 // Validação: em produção, a URL DEVE estar configurada
 if (!cleanedUrl && process.env.NODE_ENV === "production") {
