@@ -339,8 +339,6 @@ def _criar_structured_response(
     
     # Log para debug
     if texto_post_processor:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info(f"[mapper] Texto post_processor extraído: {len(texto_post_processor)} chars")
         logger.debug(f"[mapper] Primeiras 200 chars: {texto_post_processor[:200]}")
     
