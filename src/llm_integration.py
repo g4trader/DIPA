@@ -11,7 +11,10 @@ import logging
 from typing import Dict, Any, List, Tuple, Optional
 import json
 
-from src.llm_openai_client import call_llm as call_openai_llm, OpenAIError
+from src.llm_client import call_llm, LLMError
+# Mantém compatibilidade com código existente
+call_openai_llm = call_llm
+OpenAIError = LLMError
 
 logger = logging.getLogger(__name__)
 

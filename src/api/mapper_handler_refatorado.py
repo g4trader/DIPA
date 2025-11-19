@@ -5,10 +5,13 @@ Este módulo converte a resposta do novo fluxo (processar_pergunta_com_dw)
 para o formato esperado pelo frontend (AskResponse).
 """
 
+import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from src.agent.intent_spec import IntentSpec
+
+logger = logging.getLogger(__name__)
 
 
 def map_handler_refatorado_to_ask_response(
@@ -336,8 +339,6 @@ def _criar_structured_response(
     
     # Log para debug
     if texto_post_processor:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info(f"[mapper] Texto post_processor extraído: {len(texto_post_processor)} chars")
         logger.debug(f"[mapper] Primeiras 200 chars: {texto_post_processor[:200]}")
     

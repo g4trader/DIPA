@@ -28,6 +28,17 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
   // Prioridade: respostaMarkdown completo se disponível
   const respostaMarkdown = data.respostaMarkdown;
   
+  // Helper para gerar IDs únicos e consistentes para cards e tabelas
+  const generateCardId = (type: string, index?: number) => {
+    const baseId = `dipam-card-${type}`;
+    return index !== undefined ? `${baseId}-${index}` : baseId;
+  };
+  
+  const generateTableId = (type: string, index?: number) => {
+    const baseId = `dipam-table-${type}`;
+    return index !== undefined ? `${baseId}-${index}` : baseId;
+  };
+  
   // Extrai KPIs das seções, insights preditivos e data.kpis
   const kpis = useMemo(() => {
     const kpisList: Array<{ label: string; value: string | number; icon: React.ReactNode; color: string; trend?: "up" | "down" | "neutral"; variation?: string }> = [];
@@ -361,9 +372,9 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
   }, [isQ1, parsedMarkdown?.resumoExecutivo]);
   
   return (
-    <div ref={respostaRef} className="max-w-[1200px] mx-auto px-4 py-6">
+    <div ref={respostaRef} className="max-w-[1200px] mx-auto px-4 py-6 space-y-8">
       {/* Header com título e botão de PDF */}
-      <div className="flex items-center justify-between mb-8 gap-4">
+      <div id={generateCardId('header')} className="flex items-center justify-between mb-8 gap-4">
         {dataAny.intent && (
           <div className="flex items-center gap-3 flex-1">
             <Target className="w-6 h-6 text-blue-400" />
@@ -387,18 +398,19 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       
       {/* 1. BigNumber com título "Total de Clientes" (PRIMEIRO) */}
       {bigNumberKPIs.length > 0 && (
-        <div className="mb-10">
-          <h2 className="text-xl font-semibold mb-3 text-white">Total de Clientes</h2>
+        <div id={generateCardId('kpis-container')} className="space-y-4">
+          <h2 className="text-xl font-semibold text-white">Total de Clientes</h2>
           <div className={`grid grid-cols-1 ${bigNumberKPIs.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-6`}>
             {bigNumberKPIs.map((kpi, idx) => (
-              <BigNumberCard
-                key={idx}
-                label={kpi.label}
-                value={kpi.value}
-                icon={kpi.icon}
-                trend={kpi.trend}
-                color={kpi.color}
-              />
+              <div key={idx} id={generateCardId('kpi', idx)}>
+                <BigNumberCard
+                  label={kpi.label}
+                  value={kpi.value}
+                  icon={kpi.icon}
+                  trend={kpi.trend}
+                  color={kpi.color}
+                />
+              </div>
             ))}
           </div>
         </div>
@@ -406,9 +418,9 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       
       {/* 2. Resumo Executivo */}
       {parsedMarkdown?.resumoExecutivo && (
-        <div className="mb-10">
-          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
-            <h2 className="text-xl font-semibold mb-3 text-white">Resumo Executivo</h2>
+        <div id={generateCardId('resumo-executivo')} className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg">
+          <h2 className="text-xl font-semibold mb-4 text-white">Resumo Executivo</h2>
+          <div className="prose prose-invert max-w-none">
             <p className="text-sm opacity-90 leading-relaxed whitespace-pre-line text-white/80">
               {parsedMarkdown.resumoExecutivo}
             </p>
@@ -418,12 +430,14 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       
       {/* 3. Tabela "Dados Analíticos – Consulta Geral" com paginação de 20 registros (logo após Resumo Executivo) */}
       {(isQ1 && tabelaClientesPaginada) || (!isQ1 && tabelaAnaliticaPaginada) ? (
-        <div className="mb-10">
-          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
-            <h2 className="text-xl font-semibold mb-3 text-white">
-              {isQ1 ? "Clientes sem compra há mais de 60 dias" : "Dados Analíticos – Consulta Geral"}
-            </h2>
-            <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div 
+          id={generateTableId(isQ1 ? 'clientes-sem-compra' : 'dados-analiticos')} 
+          className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg space-y-4"
+        >
+          <h2 className="text-xl font-semibold text-white">
+            {isQ1 ? "Clientes sem compra há mais de 60 dias" : "Dados Analíticos – Consulta Geral"}
+          </h2>
+          <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
               {isQ1 && tabelaClientesPaginada ? (
                 <>
                   <DataTable
@@ -457,12 +471,13 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                       >
                         Próxima
                       </button>
-                    </div>
+                </div>
                   )}
                 </>
               ) : tabelaAnaliticaPaginada ? (
                 <>
                   <DataTable
+                    id={generateTableId('dados-analiticos-data')}
                     rows={tabelaAnaliticaPaginada.linhas}
                     highlightFirstColumn={true}
                   />
@@ -487,30 +502,31 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                       >
                         Próxima
                       </button>
-                    </div>
+                  </div>
                   )}
                 </>
               ) : null}
-            </div>
           </div>
         </div>
       ) : null}
       
       {/* 3.1. Tabela de vendedores (Q1) - apenas se houver dados */}
       {isQ1 && tabelaPorRota && Array.isArray(tabelaPorRota) && tabelaPorRota.length > 0 && (
-        <div className="mb-10">
-          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
-            <h3 className="text-lg font-medium mb-2 mt-6 text-white">Carteiras de vendedores com mais clientes inativos (&gt; 60 dias)</h3>
-            <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
-              <DataTable
-                rows={tabelaPorRota.map((item: any) => ({
-                  "Vendedor": item.vendedor_nome || item.vendedor_codigo || "N/A",
-                  "Supervisor": item.supervisor_nome || item.supervisor_codigo || "",
-                  "Total de clientes sem compra (>60 dias)": item.total_clientes_sem_compra || 0
-                }))}
-                highlightFirstColumn={true}
-              />
-            </div>
+        <div 
+          id={generateTableId('vendedores-clientes-inativos')} 
+          className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg space-y-4"
+        >
+          <h3 className="text-lg font-medium text-white">Carteiras de vendedores com mais clientes inativos (&gt; 60 dias)</h3>
+          <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+            <DataTable
+              id={generateTableId('vendedores-clientes-inativos-data')}
+              rows={tabelaPorRota.map((item: any) => ({
+                "Vendedor": item.vendedor_nome || item.vendedor_codigo || "N/A",
+                "Supervisor": item.supervisor_nome || item.supervisor_codigo || "",
+                "Total de clientes sem compra (>60 dias)": item.total_clientes_sem_compra || 0
+              }))}
+              highlightFirstColumn={true}
+            />
           </div>
         </div>
       )}
@@ -519,78 +535,89 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       {(parsedMarkdown?.principaisAchados?.length > 0 || 
         parsedMarkdown?.implicacoesComerciais?.length > 0 || 
         parsedMarkdown?.planoAcao?.length > 0) && (
-        <div className="mb-10">
-          <div className="flex flex-col gap-6">
-            {parsedMarkdown.principaisAchados && parsedMarkdown.principaisAchados.length > 0 && (
-              <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
-                <h3 className="text-lg font-medium mb-2 mt-6 text-white">{isQ1 ? "Síntese Analítica" : "Principais Achados"}</h3>
-                <InsightsBlock
-                  title={isQ1 ? "Síntese Analítica" : "Principais Achados"}
-                  items={parsedMarkdown.principaisAchados}
-                  icon="🔍"
-                  color="blue"
-                />
-              </div>
-            )}
-            {parsedMarkdown.implicacoesComerciais && parsedMarkdown.implicacoesComerciais.length > 0 && (
-              <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
-                <h3 className="text-lg font-medium mb-2 mt-6 text-white">{isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}</h3>
-                <InsightsBlock
-                  title={isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}
-                  items={parsedMarkdown.implicacoesComerciais}
-                  icon="⚠️"
-                  color="orange"
-                />
-              </div>
-            )}
-            {parsedMarkdown.planoAcao && parsedMarkdown.planoAcao.length > 0 && (
-              <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
-                <h3 className="text-lg font-medium mb-2 mt-6 text-white">Plano de Ação Imediato</h3>
-                <InsightsBlock
-                  title="Plano de Ação Imediato"
-                  items={parsedMarkdown.planoAcao}
-                  icon="🚀"
-                  color="green"
-                />
-              </div>
-            )}
-          </div>
+        <div id={generateCardId('insights-container')} className="space-y-6">
+          {parsedMarkdown.principaisAchados && parsedMarkdown.principaisAchados.length > 0 && (
+            <div 
+              id={generateCardId('principais-achados')} 
+              className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg"
+            >
+              <h3 className="text-lg font-medium mb-4 text-white">{isQ1 ? "Síntese Analítica" : "Principais Achados"}</h3>
+              <InsightsBlock
+                title={isQ1 ? "Síntese Analítica" : "Principais Achados"}
+                items={parsedMarkdown.principaisAchados}
+                icon="🔍"
+                color="blue"
+              />
+            </div>
+          )}
+          {parsedMarkdown.implicacoesComerciais && parsedMarkdown.implicacoesComerciais.length > 0 && (
+            <div 
+              id={generateCardId('implicacoes-comerciais')} 
+              className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg"
+            >
+              <h3 className="text-lg font-medium mb-4 text-white">{isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}</h3>
+              <InsightsBlock
+                title={isQ1 ? "Riscos Comerciais" : "Implicações Comerciais"}
+                items={parsedMarkdown.implicacoesComerciais}
+                icon="⚠️"
+                color="orange"
+              />
+            </div>
+          )}
+          {parsedMarkdown.planoAcao && parsedMarkdown.planoAcao.length > 0 && (
+            <div 
+              id={generateCardId('plano-acao')} 
+              className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg"
+            >
+              <h3 className="text-lg font-medium mb-4 text-white">Plano de Ação Imediato</h3>
+              <InsightsBlock
+                title="Plano de Ação Imediato"
+                items={parsedMarkdown.planoAcao}
+                icon="🚀"
+                color="green"
+              />
+            </div>
+          )}
         </div>
       )}
       
       {/* 5. Alvos Prioritários (lista E tabela se disponível) */}
       {parsedMarkdown?.alvosPrioritarios && parsedMarkdown.alvosPrioritarios.length > 0 && (
-        <div className="mb-10">
-          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
-            <h3 className="text-lg font-medium mb-2 mt-6 text-white">Alvos Prioritários (TOP 10)</h3>
-            <ul className="space-y-2">
-              {parsedMarkdown.alvosPrioritarios.map((alvo, idx) => (
-                <li key={idx} className="flex items-start gap-2 text-sm opacity-90 text-white/80">
-                  <span className="text-purple-400 mt-1 flex-shrink-0">•</span>
-                  <span className="flex-1">{alvo}</span>
-                </li>
-              ))}
-            </ul>
-            
-            {/* Tabela de alvos se disponível - Top 10 sem paginação */}
-            {parsedMarkdown.topAlvos && parsedMarkdown.topAlvos.length > 0 && (
-              <div className="mt-6 overflow-x-auto max-h-[70vh] overflow-y-auto">
-                <DataTable
-                  rows={parsedMarkdown.topAlvos}
-                  title="Top 10"
-                  highlightFirstColumn={true}
-                />
-              </div>
-            )}
-          </div>
+        <div 
+          id={generateCardId('alvos-prioritarios')} 
+          className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg space-y-6"
+        >
+          <h3 className="text-lg font-medium text-white">Alvos Prioritários (TOP 10)</h3>
+          <ul className="space-y-3">
+            {parsedMarkdown.alvosPrioritarios.map((alvo, idx) => (
+              <li key={idx} className="flex items-start gap-3 text-sm opacity-90 text-white/80">
+                <span className="text-purple-400 mt-1 flex-shrink-0">•</span>
+                <span className="flex-1 leading-relaxed">{alvo}</span>
+              </li>
+            ))}
+          </ul>
+          
+          {/* Tabela de alvos se disponível - Top 10 sem paginação */}
+          {parsedMarkdown.topAlvos && parsedMarkdown.topAlvos.length > 0 && (
+            <div className="mt-6">
+              <DataTable
+                id={generateTableId('top-10-alvos')}
+                rows={parsedMarkdown.topAlvos}
+                title="Top 10"
+                highlightFirstColumn={true}
+              />
+            </div>
+          )}
         </div>
       )}
       
       {/* Fallback: Markdown completo se não foi parseado (apenas se não houver nenhum outro conteúdo) */}
       {respostaMarkdown && !parsedMarkdown && !bigNumberKPIs.length && !tableData.length && (
-        <div className="mb-10">
-          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
-            <h2 className="text-xl font-semibold mb-3 text-white">Resposta Completa</h2>
+        <div 
+          id={generateCardId('resposta-completa')} 
+          className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg"
+        >
+          <h2 className="text-xl font-semibold mb-4 text-white">Resposta Completa</h2>
             <div className="prose prose-invert max-w-none whitespace-pre-line space-y-6">
               <div className="text-sm leading-relaxed text-white/80">
                 {respostaMarkdown.split("\n").map((line, idx) => {
@@ -615,7 +642,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                       <div key={idx} className="flex items-start gap-2 mb-2">
                         <span className="text-blue-400 mt-1">•</span>
                         <span>{text}</span>
-                      </div>
+            </div>
                     );
                   }
                   // Renderiza parágrafos
@@ -630,29 +657,32 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                 })}
               </div>
             </div>
-          </div>
         </div>
       )}
       
       {/* Fallback: Resumo Executivo simples se não houver markdown */}
       {!respostaMarkdown && resumoExecutivo && !parsedMarkdown && (
-        <div className="mb-10">
-          <div className="bg-[#0f172a] p-6 rounded-xl border border-white/10">
-            <h2 className="text-xl font-semibold mb-3 text-white">Resumo Executivo</h2>
+        <div 
+          id={generateCardId('resumo-executivo-fallback')} 
+          className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg"
+        >
+          <h2 className="text-xl font-semibold mb-4 text-white">Resumo Executivo</h2>
             <div className="text-sm leading-relaxed text-white/80 whitespace-pre-line">
-              {resumoExecutivo.split("\n\n").map((para, idx) => (
-                <p key={idx} className="mb-3 last:mb-0">
-                  {para.trim()}
-                </p>
+                {resumoExecutivo.split("\n\n").map((para, idx) => (
+                  <p key={idx} className="mb-3 last:mb-0">
+                    {para.trim()}
+                  </p>
               ))}
             </div>
-          </div>
         </div>
       )}
       
       {/* 6. Insights e Recomendações (se houver) */}
       {data.insights_preditivos && (
-        <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-purple-900/10 p-6 shadow-xl">
+        <div 
+          id={generateCardId('insights-preditivos')} 
+          className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-purple-900/10 p-6 shadow-xl"
+        >
           <div className="flex items-center gap-3 mb-4">
             <div className="rounded-xl bg-purple-500/20 p-2 border border-purple-500/40">
               <Brain className="w-5 h-5 text-purple-400" />
@@ -720,6 +750,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               return (
                 <div
                   key={secaoIdx}
+                  id={generateCardId('lista-vendedores', secaoIdx)}
                   className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
                 >
                   <div className="flex items-center justify-between mb-4">
@@ -846,6 +877,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               return (
                 <div
                   key={secaoIdx}
+                  id={generateCardId('lista-clientes', secaoIdx)}
                   className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
                 >
                   <div className="flex items-center justify-between mb-4">
@@ -865,7 +897,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                   </div>
                   
                   {isExpanded && (
-                    <div className="overflow-x-auto">
+                    <div id={generateTableId('clientes', secaoIdx)} className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-slate-700">
@@ -963,6 +995,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               return (
                 <div
                   key={secaoIdx}
+                  id={generateCardId('tabela-metas', secaoIdx)}
                   className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
                 >
                   <div className="flex items-center justify-between mb-4">
@@ -982,7 +1015,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                   </div>
                   
                   {isExpanded && (
-                    <div className="overflow-x-auto">
+                    <div id={generateTableId('metas', secaoIdx)} className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-slate-700">
@@ -1074,6 +1107,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               return (
                 <div
                   key={secaoIdx}
+                  id={generateCardId('lista-produtos', secaoIdx)}
                   className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
                 >
                   <div className="flex items-center gap-3 mb-4">
@@ -1082,7 +1116,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                     </div>
                     <h3 className="text-lg font-semibold text-slate-100">{secao.titulo}</h3>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div id={generateTableId('produtos', secaoIdx)} className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-slate-700">
@@ -1154,6 +1188,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               return (
                 <div
                   key={secaoIdx}
+                  id={generateCardId('lista-recomendacoes', secaoIdx)}
                   className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
                 >
                   <div className="flex items-center gap-3 mb-4">
@@ -1192,6 +1227,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               return (
                 <div
                   key={secaoIdx}
+                  id={generateCardId('tabela-detalhada', secaoIdx)}
                   className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
                 >
                   <div className="flex items-center justify-between mb-4">
@@ -1211,27 +1247,27 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                   </div>
                   
                   {isExpanded && (
-                    <div className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
+                    <div id={generateTableId('detalhada', secaoIdx)} className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-slate-700">
                               {Object.keys(secao.dados[0] || {}).map((key, idx) => (
-                                <th
-                                  key={idx}
-                                  className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide"
-                                >
-                                  {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {secao.dados.map((item: any, idx: number) => (
-                              <tr
+                              <th
                                 key={idx}
-                                className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
+                                className="text-left py-3 px-4 text-slate-400 font-semibold text-xs uppercase tracking-wide"
                               >
+                                {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {secao.dados.map((item: any, idx: number) => (
+                            <tr
+                              key={idx}
+                                className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
+                            >
                               {Object.values(item).map((val: any, cellIdx: number) => (
                                 <td key={cellIdx} className="py-3 px-4 text-slate-300">
                                   {typeof val === "number"
@@ -1255,6 +1291,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               return (
                 <div
                   key={secaoIdx}
+                  id={generateCardId('texto', secaoIdx)}
                   className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
                 >
                   <h3 className="text-lg font-semibold text-slate-100 mb-4">{secao.titulo}</h3>
@@ -1276,7 +1313,10 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
 
       {/* Tabela de Oportunidades (se houver insights preditivos) */}
       {data.insights_preditivos?.oportunidades && data.insights_preditivos.oportunidades.top_clientes && data.insights_preditivos.oportunidades.top_clientes.length > 0 && (
-        <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 p-6 shadow-xl">
+        <div 
+          id={generateCardId('oportunidades')} 
+          className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 p-6 shadow-xl"
+        >
           <div className="flex items-center gap-3 mb-4">
             <div className="rounded-xl bg-emerald-500/20 p-2 border border-emerald-500/40">
               <TrendingUp className="w-5 h-5 text-emerald-400" />
@@ -1290,7 +1330,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
             </span>
           </div>
           
-          <div className="overflow-x-auto">
+          <div id={generateTableId('oportunidades')} className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-700">
@@ -1348,42 +1388,42 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
 
       {/* Botão "Ver detalhamento" com tabela completa */}
       {data.detalhe_tabela && data.detalhe_tabela.linhas && data.detalhe_tabela.linhas.length > 0 && (
-        <div className="border-t border-slate-800 pt-4">
+        <div id={generateCardId('detalhamento-container')} className="border-t border-slate-800 pt-6 space-y-4">
           <button
             onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+            className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors font-medium"
           >
             Ver detalhamento completo
-            <ChevronDown className={clsx("w-3 h-3 transition-transform", showDetails && "rotate-180")} />
+            <ChevronDown className={clsx("w-4 h-4 transition-transform", showDetails && "rotate-180")} />
           </button>
           {showDetails && (
-            <div className="mt-4 rounded-xl bg-slate-950/80 p-4">
+            <div id={generateCardId('detalhamento-expandido')} className="mt-4 rounded-xl bg-slate-950/80 p-4 shadow-lg">
               {data.detalhe_tabela.titulo && (
-                <h4 className="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wide">
+                <h4 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wide">
                   {data.detalhe_tabela.titulo}
                 </h4>
               )}
-              <div className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
+              <div id={generateTableId('detalhamento')} className="w-full bg-[#0B0F17] rounded-xl border border-[#1D2532] overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-700">
-                        {data.detalhe_tabela.colunas.map((col, idx) => (
-                          <th
-                            key={idx}
-                            className="text-left py-2 px-3 text-slate-400 font-semibold uppercase tracking-wide"
-                          >
-                            {col}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.detalhe_tabela.linhas.map((linha, linhaIdx) => (
-                        <tr
-                          key={linhaIdx}
-                          className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      {data.detalhe_tabela.colunas.map((col, idx) => (
+                        <th
+                          key={idx}
+                          className="text-left py-2 px-3 text-slate-400 font-semibold uppercase tracking-wide"
                         >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.detalhe_tabela.linhas.map((linha, linhaIdx) => (
+                      <tr
+                        key={linhaIdx}
+                          className="border-b border-slate-800/50 hover:bg-[#151B26] transition-all"
+                      >
                         {linha.map((celula: any, celulaIdx: number) => (
                           <td key={celulaIdx} className="py-2 px-3 text-slate-300">
                             {typeof celula === "number"
@@ -1404,7 +1444,11 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
 
       {/* Contexto de debug (sempre colapsado por padrão) */}
       {data.contexto_debug && (
-        <details className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4" open={false}>
+        <details 
+          id={generateCardId('contexto-debug')} 
+          className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4" 
+          open={false}
+        >
           <summary className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer font-medium flex items-center gap-2">
             <span>⚙️</span>
             Ver contexto técnico (debug)
@@ -1445,7 +1489,10 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
 
       {/* KPIs do formato antigo (se disponível e não foram extraídos das seções) */}
       {data.kpis && data.kpis.length > 0 && kpis.length === 0 && (
-        <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl">
+        <div 
+          id={generateCardId('kpis-legacy')} 
+          className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
+        >
           <div className="flex items-center gap-3 mb-4">
             <div className="rounded-xl bg-emerald-500/10 p-2 border border-emerald-500/20">
               <TrendingUp className="w-5 h-5 text-emerald-400" />
@@ -1456,6 +1503,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
             {data.kpis.map((kpi: any, idx: number) => (
               <div
                 key={idx}
+                id={generateCardId('kpi-legacy', idx)}
                 className="rounded-xl border border-slate-800 bg-slate-900/80 p-5 hover:bg-slate-900 transition-colors"
               >
                 <div className="flex items-start justify-between mb-2">
@@ -1568,14 +1616,17 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
 
       {/* Card 3: Ranking de Vendedores */}
       {data.rankingVendedores && data.rankingVendedores.length > 0 && (
-        <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl">
+        <div 
+          id={generateCardId('ranking-vendedores')} 
+          className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
+        >
           <div className="flex items-center gap-3 mb-4">
             <div className="rounded-xl bg-amber-500/10 p-2 border border-amber-500/20">
               <Users className="w-5 h-5 text-amber-400" />
             </div>
             <h3 className="text-lg font-semibold text-slate-100">Ranking de Vendedores</h3>
           </div>
-          <div className="overflow-x-auto">
+          <div id={generateTableId('ranking-vendedores')} className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-700">
@@ -1661,14 +1712,17 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
 
       {/* Card 4: Clientes Críticos */}
       {data.clientesCriticos && data.clientesCriticos.length > 0 && (
-        <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl">
+        <div 
+          id={generateCardId('clientes-criticos')} 
+          className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
+        >
           <div className="flex items-center gap-3 mb-4">
             <div className="rounded-xl bg-orange-500/10 p-2 border border-orange-500/20">
               <AlertCircle className="w-5 h-5 text-orange-400" />
             </div>
             <h3 className="text-lg font-semibold text-slate-100">Clientes Críticos</h3>
           </div>
-          <div className="overflow-x-auto">
+          <div id={generateTableId('clientes-criticos')} className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-700">
@@ -1746,7 +1800,10 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
 
       {/* Card 5: Insights e Recomendações - Só renderiza se não for apenas mensagem de erro */}
       {deveMostrarInsights && data.insightsRecomendacoes && data.insightsRecomendacoes.length > 0 && (
-        <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl">
+        <div 
+          id={generateCardId('insights-recomendacoes')} 
+          className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-6 shadow-xl"
+        >
           <div className="flex items-center gap-3 mb-4">
             <div className="rounded-xl bg-purple-500/10 p-2 border border-purple-500/20">
               <Lightbulb className="w-5 h-5 text-purple-400" />

@@ -74,21 +74,39 @@ export async function POST(req: Request) {
 
   const { question } = body as { question: string };
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return jsonResponse(500, { ok: false, error: "OpenAI API key is not configured." });
+  // Detecta qual provedor usar (prioridade: Grok > OpenAI)
+  const grokApiKey = process.env.GROK_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  
+  let apiKey: string;
+  let apiUrl: string;
+  let model: string;
+  let provider: string;
+  
+  if (grokApiKey) {
+    apiKey = grokApiKey;
+    apiUrl = GROK_URL;
+    model = GROK_MODEL;
+    provider = "Grok";
+  } else if (openaiApiKey) {
+    apiKey = openaiApiKey;
+    apiUrl = OPENAI_URL;
+    model = OPENAI_MODEL;
+    provider = "OpenAI";
+  } else {
+    return jsonResponse(500, { ok: false, error: "LLM API key is not configured. Set GROK_API_KEY or OPENAI_API_KEY." });
   }
 
   const tools = functions.map((fn) => ({ type: "function", function: fn }));
 
-  const response = await fetch(OPENAI_URL, {
+  const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: model,
       messages: [
         {
           role: "system",

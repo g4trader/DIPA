@@ -15,7 +15,8 @@ export function DataTable({
   rows,
   title,
   highlightFirstColumn = true,
-}: DataTableProps) {
+  id,
+}: DataTableProps & { id?: string }) {
   if (!rows || rows.length === 0) {
     return null;
   }
@@ -32,7 +33,7 @@ export function DataTable({
   }
 
   return (
-    <div className="bg-[#0F172A] border border-white/5 rounded-xl overflow-hidden shadow-lg">
+    <div id={id} className="bg-[#0F172A] border border-white/5 rounded-xl overflow-hidden shadow-lg">
       {title && (
         <div className="px-6 py-4 border-b border-white/5">
           <h3 className="text-white font-semibold text-xl mb-0">{title}</h3>

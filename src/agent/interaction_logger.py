@@ -13,7 +13,16 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from src.dw.models import InteracaoAgent, InteracaoEmbedding
-from src.llm_openai_client import get_openai_client
+from src.llm_client import get_llm_config, get_llm_provider
+# Função de compatibilidade
+def get_openai_client():
+    provider = get_llm_provider()
+    config = get_llm_config(provider)
+    return {
+        "api_key": config["api_key"],
+        "base_url": config["base_url"],
+        "model": config["model"]
+    }
 import requests
 import json
 

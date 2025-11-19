@@ -18,7 +18,10 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 from calendar import monthrange
 
-from src.llm_openai_client import call_llm as call_openai_llm, OpenAIError
+from src.llm_client import call_llm, LLMError
+# Mantém compatibilidade com código existente
+call_openai_llm = call_llm
+OpenAIError = LLMError
 from src.agent.intent_spec import IntentSpec
 
 logger = logging.getLogger(__name__)
