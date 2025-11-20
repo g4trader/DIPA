@@ -1570,7 +1570,7 @@ async def migrate_vendedor_id():
         
         # 2. Cria vendedores a partir das rotas dos clientes
         # ✅ CORREÇÃO: Usar distinct() corretamente
-        from sqlalchemy import distinct, func
+        from sqlalchemy import distinct, func, or_
         
         # Debug: verifica quantos clientes ativos existem
         total_clientes_ativos = session.query(func.count(Cliente.id)).filter(Cliente.ativo == True).scalar()
