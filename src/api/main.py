@@ -1502,6 +1502,122 @@ async def preview_vendedor(
         raise HTTPException(status_code=500, detail=f"Erro ao buscar dados: {str(e)}")
 
 
+@app.post("/admin/migrate/vendedor-id")
+async def migrate_vendedor_id():
+    """
+    Endpoint para executar migração: adicionar coluna vendedor_id e popular vendedores.
+    
+    Este endpoint:
+    1. Adiciona coluna vendedor_id na tabela clientes (se não existir)
+    2. Cria vendedores a partir das rotas dos clientes
+    3. Popula vendedor_id nos clientes baseado em rota_rca
+    
+    IMPORTANTE: Este endpoint deve ser protegido em produção.
+    """
+    try:
+        from sqlalchemy import text, distinct
+        from sqlalchemy.exc import OperationalError, ProgrammingError
+        from src.dw.models import Cliente, Vendedor
+        from src.load_to_db import get_or_create_vendedor
+        
+        engine = get_db_engine()
+        session = get_db_session()
+        
+        results = {
+            "coluna_criada": False,
+            "vendedores_criados": 0,
+            "clientes_atualizados": 0,
+            "erros": []
+        }
+        
+        try:
+            # 1. Verifica se coluna existe
+            session.query(Cliente.vendedor_id).limit(1).all()
+            logger.info("Coluna vendedor_id já existe")
+        except (OperationalError, ProgrammingError, AttributeError):
+            # Cria coluna
+            db_url = str(engine.url)
+            if 'sqlite' in db_url:
+                session.execute(text("ALTER TABLE clientes ADD COLUMN vendedor_id INTEGER"))
+                session.execute(text("CREATE INDEX IF NOT EXISTS ix_clientes_vendedor_id ON clientes(vendedor_id)"))
+            else:
+                session.execute(text("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS vendedor_id INTEGER"))
+                session.execute(text("CREATE INDEX IF NOT EXISTS ix_clientes_vendedor_id ON clientes(vendedor_id)"))
+                try:
+                    session.execute(text("ALTER TABLE clientes ADD CONSTRAINT fk_clientes_vendedor_id FOREIGN KEY (vendedor_id) REFERENCES vendedores(id)"))
+                except:
+                    pass  # Constraint pode já existir
+            
+            session.commit()
+            results["coluna_criada"] = True
+            logger.info("Coluna vendedor_id criada")
+        
+        # 2. Cria vendedores
+        rotas_distintas = session.query(distinct(Cliente.rota_rca)).filter(
+            Cliente.ativo == True,
+            Cliente.rota_rca.isnot(None),
+            Cliente.rota_rca != ''
+        ).all()
+        
+        for (rota,) in rotas_distintas:
+            if not rota or rota.strip() == '':
+                continue
+            
+            rota = rota.strip()
+            vendedor = session.query(Vendedor).filter(Vendedor.codigo == rota).first()
+            
+            if not vendedor:
+                cliente_exemplo = session.query(Cliente).filter(
+                    Cliente.rota_rca == rota,
+                    Cliente.ativo == True
+                ).first()
+                
+                if cliente_exemplo:
+                    nome_vendedor = cliente_exemplo.nome_rca if cliente_exemplo.nome_rca else rota
+                    supervisor_id = cliente_exemplo.supervisor_id
+                    
+                    vendedor = get_or_create_vendedor(
+                        session,
+                        nome=nome_vendedor,
+                        codigo=rota,
+                        supervisor_id=supervisor_id,
+                        rota_rca=rota
+                    )
+                    results["vendedores_criados"] += 1
+        
+        session.commit()
+        
+        # 3. Popula vendedor_id
+        clientes_sem_vendedor = session.query(Cliente).filter(
+            Cliente.ativo == True,
+            Cliente.rota_rca.isnot(None),
+            Cliente.rota_rca != '',
+            Cliente.vendedor_id.is_(None)
+        ).all()
+        
+        for cliente in clientes_sem_vendedor:
+            if cliente.rota_rca:
+                vendedor = session.query(Vendedor).filter(Vendedor.codigo == cliente.rota_rca).first()
+                if vendedor:
+                    cliente.vendedor_id = vendedor.id
+                    results["clientes_atualizados"] += 1
+        
+        session.commit()
+        session.close()
+        
+        return {
+            "sucesso": True,
+            "mensagem": "Migração executada com sucesso",
+            "resultados": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Erro na migração: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro na migração: {str(e)}")
+
+
 @app.get("/ml/status", response_model=Dict[str, Any])
 async def ml_status():
     """
