@@ -1553,11 +1553,11 @@ async def migrate_vendedor_id():
             logger.info("Coluna vendedor_id criada")
         
         # 2. Cria vendedores
-        rotas_distintas = session.query(distinct(Cliente.rota_rca)).filter(
+        rotas_distintas = session.query(Cliente.rota_rca).filter(
             Cliente.ativo == True,
             Cliente.rota_rca.isnot(None),
             Cliente.rota_rca != ''
-        ).all()
+        ).distinct().all()
         
         for (rota,) in rotas_distintas:
             if not rota or rota.strip() == '':
