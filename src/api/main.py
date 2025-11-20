@@ -1518,10 +1518,14 @@ async def migrate_vendedor_id():
         from sqlalchemy import text, distinct
         from sqlalchemy.exc import OperationalError, ProgrammingError
         from src.dw.models import Cliente, Vendedor
+        from src.dw.connection import SessionLocal
         from src.load_to_db import get_or_create_vendedor
         
         engine = get_db_engine()
-        session = get_db_session()
+        # ✅ CORREÇÃO: SessionLocal() retorna sessão diretamente, não generator
+        if SessionLocal is None:
+            init_db()
+        session = SessionLocal()
         
         results = {
             "coluna_criada": False,
@@ -1615,7 +1619,6 @@ async def migrate_vendedor_id():
                     results["clientes_atualizados"] += 1
         
         session.commit()
-        session.close()
         
         return {
             "sucesso": True,
@@ -1624,10 +1627,13 @@ async def migrate_vendedor_id():
         }
         
     except Exception as e:
+        session.rollback()
         logger.error(f"Erro na migração: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro na migração: {str(e)}")
+    finally:
+        session.close()
 
 
 @app.get("/ml/status", response_model=Dict[str, Any])
