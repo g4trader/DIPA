@@ -1534,23 +1534,35 @@ async def migrate_vendedor_id():
             # 1. Verifica se coluna existe
             session.query(Cliente.vendedor_id).limit(1).all()
             logger.info("Coluna vendedor_id já existe")
-        except (OperationalError, ProgrammingError, AttributeError):
+        except (OperationalError, ProgrammingError, AttributeError) as e:
             # Cria coluna
             db_url = str(engine.url)
-            if 'sqlite' in db_url:
-                session.execute(text("ALTER TABLE clientes ADD COLUMN vendedor_id INTEGER"))
-                session.execute(text("CREATE INDEX IF NOT EXISTS ix_clientes_vendedor_id ON clientes(vendedor_id)"))
-            else:
-                session.execute(text("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS vendedor_id INTEGER"))
-                session.execute(text("CREATE INDEX IF NOT EXISTS ix_clientes_vendedor_id ON clientes(vendedor_id)"))
+            try:
+                if 'sqlite' in db_url:
+                    with engine.connect() as conn:
+                        conn.execute(text("ALTER TABLE clientes ADD COLUMN vendedor_id INTEGER"))
+                        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_clientes_vendedor_id ON clientes(vendedor_id)"))
+                        conn.commit()
+                else:
+                    with engine.connect() as conn:
+                        conn.execute(text("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS vendedor_id INTEGER"))
+                        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_clientes_vendedor_id ON clientes(vendedor_id)"))
+                        try:
+                            conn.execute(text("ALTER TABLE clientes ADD CONSTRAINT fk_clientes_vendedor_id FOREIGN KEY (vendedor_id) REFERENCES vendedores(id)"))
+                        except:
+                            pass  # Constraint pode já existir
+                        conn.commit()
+                
+                results["coluna_criada"] = True
+                logger.info("Coluna vendedor_id criada")
+            except Exception as create_error:
+                logger.warning(f"Erro ao criar coluna (pode já existir): {str(create_error)}")
+                # Tenta novamente verificar se existe
                 try:
-                    session.execute(text("ALTER TABLE clientes ADD CONSTRAINT fk_clientes_vendedor_id FOREIGN KEY (vendedor_id) REFERENCES vendedores(id)"))
+                    session.query(Cliente.vendedor_id).limit(1).all()
+                    logger.info("Coluna vendedor_id existe após tentativa de criação")
                 except:
-                    pass  # Constraint pode já existir
-            
-            session.commit()
-            results["coluna_criada"] = True
-            logger.info("Coluna vendedor_id criada")
+                    raise create_error
         
         # 2. Cria vendedores
         rotas_distintas = session.query(Cliente.rota_rca).filter(
