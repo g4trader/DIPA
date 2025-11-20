@@ -1569,13 +1569,19 @@ async def migrate_vendedor_id():
                     raise create_error
         
         # 2. Cria vendedores a partir das rotas dos clientes
-        rotas_distintas = session.query(Cliente.rota_rca).filter(
+        # ✅ CORREÇÃO: Usar distinct() corretamente
+        from sqlalchemy import distinct
+        rotas_distintas = session.query(distinct(Cliente.rota_rca)).filter(
             Cliente.ativo == True,
             Cliente.rota_rca.isnot(None),
             Cliente.rota_rca != ''
-        ).distinct().all()
+        ).all()
         
         logger.info(f"Encontradas {len(rotas_distintas)} rotas distintas")
+        
+        # Log de exemplo de rotas
+        if rotas_distintas:
+            logger.info(f"Exemplo de rotas: {[r[0] for r in rotas_distintas[:5]]}")
         
         for (rota,) in rotas_distintas:
             if not rota or str(rota).strip() == '':
