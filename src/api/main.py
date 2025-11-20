@@ -1568,21 +1568,26 @@ async def migrate_vendedor_id():
                 except:
                     raise create_error
         
-        # 2. Cria vendedores
+        # 2. Cria vendedores a partir das rotas dos clientes
         rotas_distintas = session.query(Cliente.rota_rca).filter(
             Cliente.ativo == True,
             Cliente.rota_rca.isnot(None),
             Cliente.rota_rca != ''
         ).distinct().all()
         
+        logger.info(f"Encontradas {len(rotas_distintas)} rotas distintas")
+        
         for (rota,) in rotas_distintas:
-            if not rota or rota.strip() == '':
+            if not rota or str(rota).strip() == '':
                 continue
             
-            rota = rota.strip()
+            rota = str(rota).strip()
+            
+            # Verifica se já existe vendedor com esse código
             vendedor = session.query(Vendedor).filter(Vendedor.codigo == rota).first()
             
             if not vendedor:
+                # Busca informações do primeiro cliente com essa rota
                 cliente_exemplo = session.query(Cliente).filter(
                     Cliente.rota_rca == rota,
                     Cliente.ativo == True
@@ -1592,14 +1597,45 @@ async def migrate_vendedor_id():
                     nome_vendedor = cliente_exemplo.nome_rca if cliente_exemplo.nome_rca else rota
                     supervisor_id = cliente_exemplo.supervisor_id
                     
+                    # ✅ CORREÇÃO: Cria vendedor usando rota como código
                     vendedor = get_or_create_vendedor(
                         session,
                         nome=nome_vendedor,
-                        codigo=rota,
+                        codigo=rota,  # ✅ Usa rota como código (chave de JOIN)
                         supervisor_id=supervisor_id,
                         rota_rca=rota
                     )
                     results["vendedores_criados"] += 1
+                    logger.info(f"Vendedor criado: codigo={rota}, nome={nome_vendedor}")
+                else:
+                    logger.warning(f"Cliente não encontrado para rota: {rota}")
+            else:
+                # Atualiza vendedor existente se necessário
+                updated = False
+                if not vendedor.nome:
+                    cliente_exemplo = session.query(Cliente).filter(
+                        Cliente.rota_rca == rota,
+                        Cliente.ativo == True,
+                        Cliente.nome_rca.isnot(None),
+                        Cliente.nome_rca != ''
+                    ).first()
+                    if cliente_exemplo and cliente_exemplo.nome_rca:
+                        vendedor.nome = cliente_exemplo.nome_rca
+                        updated = True
+                
+                if not vendedor.supervisor_id:
+                    cliente_exemplo = session.query(Cliente).filter(
+                        Cliente.rota_rca == rota,
+                        Cliente.ativo == True,
+                        Cliente.supervisor_id.isnot(None)
+                    ).first()
+                    if cliente_exemplo and cliente_exemplo.supervisor_id:
+                        vendedor.supervisor_id = cliente_exemplo.supervisor_id
+                        updated = True
+                
+                if updated:
+                    session.flush()
+                    logger.info(f"Vendedor atualizado: codigo={rota}")
         
         session.commit()
         
