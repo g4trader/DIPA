@@ -1570,7 +1570,17 @@ async def migrate_vendedor_id():
         
         # 2. Cria vendedores a partir das rotas dos clientes
         # ✅ CORREÇÃO: Usar distinct() corretamente
-        from sqlalchemy import distinct
+        from sqlalchemy import distinct, func
+        
+        # Debug: verifica quantos clientes ativos existem
+        total_clientes_ativos = session.query(func.count(Cliente.id)).filter(Cliente.ativo == True).scalar()
+        clientes_com_rota = session.query(func.count(Cliente.id)).filter(
+            Cliente.ativo == True,
+            Cliente.rota_rca.isnot(None),
+            Cliente.rota_rca != ''
+        ).scalar()
+        logger.info(f"Total clientes ativos: {total_clientes_ativos}, com rota_rca: {clientes_com_rota}")
+        
         rotas_distintas = session.query(distinct(Cliente.rota_rca)).filter(
             Cliente.ativo == True,
             Cliente.rota_rca.isnot(None),
@@ -1582,6 +1592,13 @@ async def migrate_vendedor_id():
         # Log de exemplo de rotas
         if rotas_distintas:
             logger.info(f"Exemplo de rotas: {[r[0] for r in rotas_distintas[:5]]}")
+        else:
+            # Se não há rotas, verifica se há clientes sem rota_rca
+            clientes_sem_rota = session.query(func.count(Cliente.id)).filter(
+                Cliente.ativo == True,
+                or_(Cliente.rota_rca.is_(None), Cliente.rota_rca == '')
+            ).scalar()
+            logger.warning(f"Nenhuma rota encontrada. Clientes ativos sem rota_rca: {clientes_sem_rota}")
         
         for (rota,) in rotas_distintas:
             if not rota or str(rota).strip() == '':
