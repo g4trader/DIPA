@@ -191,8 +191,10 @@ def load_clientes_to_db(df: pd.DataFrame, batch_size: int = 1000) -> int:
                     'segmento_venda': str(row.get('segmento_venda', '')) if pd.notna(row.get('segmento_venda')) else None,
                     'grupo_economico': str(row.get('grupo_economico', '')) if pd.notna(row.get('grupo_economico')) else None,
                     'supervisor_responsavel': str(row.get('supervisor_responsavel', '')) if pd.notna(row.get('supervisor_responsavel')) else None,
-                    'nome_rca': str(row.get('nome_rca', '')) if pd.notna(row.get('nome_rca')) else None,
-                    'rota_rca': str(row.get('rota_rca', '')) if pd.notna(row.get('rota_rca')) else None,
+                    # ✅ CORREÇÃO: Mapeia 'Nome RCA' do CSV para 'rota_rca' do modelo
+                    # O CSV tem 'Nome RCA' que contém valores como "ROTA 304", "ROTA 74 VD", etc.
+                    'nome_rca': str(row.get('Nome RCA', row.get('nome_rca', ''))) if pd.notna(row.get('Nome RCA', row.get('nome_rca'))) else None,
+                    'rota_rca': str(row.get('Nome RCA', row.get('rota_rca', ''))) if pd.notna(row.get('Nome RCA', row.get('rota_rca'))) else None,
                     'pasta': str(row.get('pasta', '')) if pd.notna(row.get('pasta')) else None,
                     'consumidor_final': bool(row.get('consumidor_final', False)),
                     'bloqueado': bool(row.get('bloqueio', row.get('bloqueado', False))),
