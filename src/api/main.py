@@ -1797,6 +1797,112 @@ async def reload_clientes():
         raise HTTPException(status_code=500, detail=f"Erro no endpoint de recarregamento: {str(e)}")
 
 
+@app.post("/admin/reload/clientes-from-vendas")
+async def reload_clientes_from_vendas():
+    """
+    Endpoint alternativo: atualiza rota_rca dos clientes a partir das vendas.
+    
+    Este endpoint:
+    1. Busca todas as vendas
+    2. Para cada venda, pega o cliente e a rota_rca da venda
+    3. Atualiza o cliente com a rota_rca se estiver vazio
+    4. Cria vendedores a partir das rotas encontradas
+    
+    Útil quando o CSV não está acessível mas há vendas no banco.
+    """
+    try:
+        from src.dw.connection import SessionLocal
+        from src.dw.models import Cliente, Venda, Vendedor
+        from src.load_to_db import get_or_create_vendedor
+        from sqlalchemy import func, distinct
+        from sqlalchemy.orm import aliased
+        
+        if SessionLocal is None:
+            init_db()
+        
+        session = SessionLocal()
+        
+        try:
+            # 1. Busca todas as vendas com cliente e rota_rca
+            vendas_com_rota = session.query(
+                Venda.cliente_id,
+                Venda.rota_rca
+            ).filter(
+                Venda.cliente_id.isnot(None),
+                Venda.rota_rca.isnot(None),
+                Venda.rota_rca != ''
+            ).distinct().all()
+            
+            logger.info(f"Encontradas {len(vendas_com_rota)} vendas com rota_rca")
+            
+            # 2. Atualiza clientes com rota_rca das vendas
+            clientes_atualizados = 0
+            rotas_processadas = set()
+            
+            for cliente_id, rota_rca in vendas_com_rota:
+                if not rota_rca or str(rota_rca).strip() == '':
+                    continue
+                
+                rota_rca = str(rota_rca).strip()
+                rotas_processadas.add(rota_rca)
+                
+                # Busca cliente
+                cliente = session.query(Cliente).filter(Cliente.id == cliente_id).first()
+                if cliente and (not cliente.rota_rca or cliente.rota_rca == ''):
+                    cliente.rota_rca = rota_rca
+                    session.add(cliente)
+                    clientes_atualizados += 1
+            
+            session.commit()
+            logger.info(f"Atualizados {clientes_atualizados} clientes com rota_rca")
+            
+            # 3. Cria vendedores a partir das rotas
+            vendedores_criados = 0
+            for rota_rca in rotas_processadas:
+                vendedor = session.query(Vendedor).filter(Vendedor.codigo == rota_rca).first()
+                if not vendedor:
+                    vendedor = get_or_create_vendedor(
+                        session,
+                        nome=rota_rca,  # Usa rota como nome se não houver outro
+                        codigo=rota_rca
+                    )
+                    session.add(vendedor)
+                    vendedores_criados += 1
+            
+            session.commit()
+            logger.info(f"Criados {vendedores_criados} vendedores")
+            
+            # 4. Executa migração para popular vendedor_id
+            from src.api.main import migrate_vendedor_id
+            try:
+                migrate_result = await migrate_vendedor_id()
+                logger.info(f"Migração executada: {migrate_result}")
+            except Exception as migrate_error:
+                logger.warning(f"Erro na migração (pode já ter sido executada): {migrate_error}")
+            
+            return JSONResponse(status_code=200, content={
+                "sucesso": True,
+                "mensagem": "Clientes atualizados a partir das vendas",
+                "resultados": {
+                    "vendas_processadas": len(vendas_com_rota),
+                    "clientes_atualizados": clientes_atualizados,
+                    "rotas_encontradas": len(rotas_processadas),
+                    "vendedores_criados": vendedores_criados
+                }
+            })
+        
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Erro ao atualizar clientes: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Erro ao atualizar clientes: {str(e)}")
+        finally:
+            session.close()
+    
+    except Exception as e:
+        logger.error(f"Erro no endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro no endpoint: {str(e)}")
+
+
 @app.get("/admin/diagnostico/vendedor-supervisor")
 async def diagnostico_vendedor_supervisor():
     """
