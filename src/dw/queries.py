@@ -152,23 +152,9 @@ def get_clientes_sem_compra_ha_dias(
             dias_sem_compra_expr.label('dias_sem_compra')
         )
         .outerjoin(ultima_compra_subq, Cliente.id == ultima_compra_subq.c.cliente_id)
-        # ✅ CORREÇÃO: JOIN com Vendedor - usa rota_rca (vendedor_id pode não existir ainda)
-        # Verifica se coluna vendedor_id existe antes de usar
-        try:
-            # Tenta usar vendedor_id se existir
-            has_vendedor_id = hasattr(Cliente, 'vendedor_id')
-            if has_vendedor_id:
-                join_condition = or_(
-                    Cliente.vendedor_id == Vendedor.id,  # Se houver FK direta
-                    Cliente.rota_rca == Vendedor.codigo   # Fallback: JOIN por rota_rca
-                )
-            else:
-                join_condition = Cliente.rota_rca == Vendedor.codigo
-        except:
-            # Se não conseguir verificar, usa apenas rota_rca
-            join_condition = Cliente.rota_rca == Vendedor.codigo
-        
-        query = query.outerjoin(Vendedor, join_condition)
+        # ✅ CORREÇÃO: JOIN com Vendedor usando apenas rota_rca
+        # Nota: vendedor_id pode não existir no banco ainda, então usamos apenas rota_rca
+        .outerjoin(Vendedor, Cliente.rota_rca == Vendedor.codigo)
         # Supervisor do Cliente (prioridade)
         .outerjoin(Supervisor, Cliente.supervisor_id == Supervisor.id)
         # Supervisor do Vendedor (fallback se Cliente não tiver supervisor)
