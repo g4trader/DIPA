@@ -1797,6 +1797,88 @@ async def reload_clientes():
         raise HTTPException(status_code=500, detail=f"Erro no endpoint de recarregamento: {str(e)}")
 
 
+@app.get("/admin/diagnostico/vendedor-supervisor")
+async def diagnostico_vendedor_supervisor():
+    """
+    Endpoint de diagnóstico para verificar estado dos dados de vendedor e supervisor.
+    """
+    try:
+        from src.dw.connection import SessionLocal
+        from src.dw.models import Cliente, Vendedor, Supervisor
+        from src.dw.queries import get_clientes_sem_compra_ha_dias
+        from sqlalchemy import func, distinct
+        
+        if SessionLocal is None:
+            init_db()
+        
+        session = SessionLocal()
+        
+        try:
+            # 1. Estatísticas de clientes
+            total_clientes = session.query(func.count(Cliente.id)).scalar()
+            clientes_ativos = session.query(func.count(Cliente.id)).filter(Cliente.ativo == True).scalar()
+            clientes_com_rota = session.query(func.count(Cliente.id)).filter(
+                Cliente.ativo == True,
+                Cliente.rota_rca.isnot(None),
+                Cliente.rota_rca != ''
+            ).scalar()
+            clientes_com_vendedor_id = session.query(func.count(Cliente.id)).filter(
+                Cliente.ativo == True,
+                Cliente.vendedor_id.isnot(None)
+            ).scalar()
+            
+            # 2. Estatísticas de vendedores
+            total_vendedores = session.query(func.count(Vendedor.id)).scalar()
+            vendedores_ativos = session.query(func.count(Vendedor.id)).filter(Vendedor.ativo == True).scalar()
+            
+            # 3. Rotas distintas
+            rotas_distintas = session.query(distinct(Cliente.rota_rca)).filter(
+                Cliente.ativo == True,
+                Cliente.rota_rca.isnot(None),
+                Cliente.rota_rca != ''
+            ).all()
+            
+            # 4. Teste da query
+            resultados_query = get_clientes_sem_compra_ha_dias(session, dias=60)
+            com_vendedor = sum(1 for r in resultados_query if r.get('vendedor_nome') or r.get('vendedor_codigo'))
+            com_supervisor = sum(1 for r in resultados_query if r.get('supervisor_nome') or r.get('supervisor_codigo'))
+            
+            # 5. Exemplo de resultado
+            exemplo = resultados_query[0] if resultados_query else None
+            
+            diagnostico = {
+                "clientes": {
+                    "total": total_clientes,
+                    "ativos": clientes_ativos,
+                    "com_rota_rca": clientes_com_rota,
+                    "com_vendedor_id": clientes_com_vendedor_id
+                },
+                "vendedores": {
+                    "total": total_vendedores,
+                    "ativos": vendedores_ativos
+                },
+                "rotas": {
+                    "distintas": len(rotas_distintas),
+                    "exemplos": [r[0] for r in rotas_distintas[:5]]
+                },
+                "query_teste": {
+                    "total_resultados": len(resultados_query),
+                    "com_vendedor": com_vendedor,
+                    "com_supervisor": com_supervisor,
+                    "exemplo": exemplo
+                }
+            }
+            
+            return JSONResponse(status_code=200, content=diagnostico)
+        
+        finally:
+            session.close()
+    
+    except Exception as e:
+        logger.error(f"Erro no diagnóstico: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro no diagnóstico: {str(e)}")
+
+
 @app.get("/ml/status", response_model=Dict[str, Any])
 async def ml_status():
     """
