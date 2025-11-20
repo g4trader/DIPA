@@ -1889,7 +1889,7 @@ async def reload_clientes_from_vendas():
                 "sucesso": True,
                 "mensagem": "Clientes atualizados a partir das vendas",
                 "resultados": {
-                    "vendas_processadas": len(vendas_com_rota),
+                    "vendas_processadas": len(vendas_com_dados),
                     "clientes_atualizados": clientes_atualizados,
                     "rotas_encontradas": len(rotas_processadas),
                     "vendedores_criados": vendedores_criados
