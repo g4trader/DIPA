@@ -1823,30 +1823,35 @@ async def reload_clientes_from_vendas():
         session = SessionLocal()
         
         try:
-            # 1. Busca todas as vendas com cliente e rota_rca
-            vendas_com_rota = session.query(
+            # 1. Busca todas as vendas com cliente e vendedor
+            # A rota_rca vem do vendedor (Vendedor.codigo) ou do cliente
+            vendas_com_dados = session.query(
                 Venda.cliente_id,
-                Venda.rota_rca
+                Venda.vendedor_id
             ).filter(
                 Venda.cliente_id.isnot(None),
-                Venda.rota_rca.isnot(None),
-                Venda.rota_rca != ''
+                Venda.vendedor_id.isnot(None)
             ).distinct().all()
             
-            logger.info(f"Encontradas {len(vendas_com_rota)} vendas com rota_rca")
+            logger.info(f"Encontradas {len(vendas_com_dados)} vendas com cliente e vendedor")
             
-            # 2. Atualiza clientes com rota_rca das vendas
+            # 2. Atualiza clientes com rota_rca do vendedor
             clientes_atualizados = 0
             rotas_processadas = set()
             
-            for cliente_id, rota_rca in vendas_com_rota:
-                if not rota_rca or str(rota_rca).strip() == '':
+            for cliente_id, vendedor_id in vendas_com_dados:
+                # Busca vendedor para pegar o código (que é a rota_rca)
+                vendedor = session.query(Vendedor).filter(Vendedor.id == vendedor_id).first()
+                if not vendedor or not vendedor.codigo:
                     continue
                 
-                rota_rca = str(rota_rca).strip()
+                rota_rca = str(vendedor.codigo).strip()
+                if not rota_rca:
+                    continue
+                
                 rotas_processadas.add(rota_rca)
                 
-                # Busca cliente
+                # Busca cliente e atualiza rota_rca se estiver vazio
                 cliente = session.query(Cliente).filter(Cliente.id == cliente_id).first()
                 if cliente and (not cliente.rota_rca or cliente.rota_rca == ''):
                     cliente.rota_rca = rota_rca
