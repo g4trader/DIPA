@@ -1803,8 +1803,8 @@ async def reload_clientes_from_vendas():
     Endpoint alternativo: atualiza rota_rca dos clientes a partir das vendas.
     
     Este endpoint:
-    1. Busca todas as vendas
-    2. Para cada venda, pega o cliente e a rota_rca da venda
+    1. Busca todas as vendas com vendedor
+    2. Para cada venda, pega o cliente e o código do vendedor (que é a rota_rca)
     3. Atualiza o cliente com a rota_rca se estiver vazio
     4. Cria vendedores a partir das rotas encontradas
     
@@ -1814,8 +1814,8 @@ async def reload_clientes_from_vendas():
         from src.dw.connection import SessionLocal
         from src.dw.models import Cliente, Venda, Vendedor
         from src.load_to_db import get_or_create_vendedor
-        from sqlalchemy import func, distinct
-        from sqlalchemy.orm import aliased
+        
+        logger.info("Iniciando atualização de clientes a partir de vendas...")
         
         if SessionLocal is None:
             init_db()
