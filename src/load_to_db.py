@@ -114,8 +114,7 @@ def get_or_create_vendedor(
             vendedor.nome = nome
         if supervisor_id and not vendedor.supervisor_id:
             vendedor.supervisor_id = supervisor_id
-        if nome_rca and not vendedor.nome_rca:
-            vendedor.nome_rca = nome_rca
+        # ✅ CORREÇÃO: nome_rca e rota_rca foram removidos do modelo
         session.flush()
     
     return vendedor
