@@ -210,6 +210,12 @@ def get_clientes_sem_compra_ha_dias(
     
     resultados = query.all()
     
+    # Log para debug
+    logger.info(f"[get_clientes_sem_compra_ha_dias] Query retornou {len(resultados)} resultados")
+    if resultados:
+        primeiro = resultados[0]
+        logger.debug(f"[get_clientes_sem_compra_ha_dias] Primeiro resultado: rota_rca={primeiro.rota_id}, vendedor_nome={primeiro.vendedor_nome}, vendedor_codigo={primeiro.vendedor_codigo}, supervisor_nome={primeiro.supervisor_nome}")
+    
     # Converte para list[dict] e filtra para garantir >= 61 dias
     # IMPORTANTE: Filtro adicional para garantir que nenhum cliente com 0 dias seja retornado
     dias_minimo = dias + 1  # "mais de 60 dias" = >= 61 dias
@@ -218,18 +224,26 @@ def get_clientes_sem_compra_ha_dias(
         dias_sem_compra = int(row.dias_sem_compra) if row.dias_sem_compra is not None else None
         # Só inclui se dias_sem_compra >= 61 (não inclui 0, None ou < 61)
         if dias_sem_compra is not None and dias_sem_compra >= dias_minimo:
+            # ✅ CORREÇÃO: Melhorar fallback para vendedor e supervisor
+            vendedor_nome = row.vendedor_nome if row.vendedor_nome else (row.vendedor_codigo if row.vendedor_codigo else (row.rota_id if row.rota_id else ""))
+            vendedor_codigo = row.vendedor_codigo if row.vendedor_codigo else (row.rota_id if row.rota_id else "")
+            supervisor_nome = row.supervisor_nome if row.supervisor_nome else (row.supervisor_codigo if row.supervisor_codigo else "")
+            supervisor_codigo = row.supervisor_codigo if row.supervisor_codigo else ""
+            
             clientes_filtrados.append({
                 "cliente_id": row.cliente_id,
                 "nome": row.nome or "",
                 "segmento": row.segmento or "",
                 "rota_id": row.rota_id or "",
-                "vendedor_nome": row.vendedor_nome or row.vendedor_codigo or row.rota_id or "",
-                "vendedor_codigo": row.vendedor_codigo or row.rota_id or "",
-                "supervisor_nome": row.supervisor_nome or row.supervisor_codigo or "",
-                "supervisor_codigo": row.supervisor_codigo or "",
+                "vendedor_nome": vendedor_nome,
+                "vendedor_codigo": vendedor_codigo,
+                "supervisor_nome": supervisor_nome,
+                "supervisor_codigo": supervisor_codigo,
                 "data_ultima_compra": row.data_ultima_compra.isoformat() if row.data_ultima_compra else None,
                 "dias_sem_compra": dias_sem_compra
             })
+    
+    logger.info(f"[get_clientes_sem_compra_ha_dias] Retornando {len(clientes_filtrados)} clientes filtrados (>= {dias_minimo} dias)")
     
     return clientes_filtrados
 
