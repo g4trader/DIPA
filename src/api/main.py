@@ -1602,8 +1602,7 @@ async def migrate_vendedor_id():
                         session,
                         nome=nome_vendedor,
                         codigo=rota,  # ✅ Usa rota como código (chave de JOIN)
-                        supervisor_id=supervisor_id,
-                        rota_rca=rota
+                        supervisor_id=supervisor_id
                     )
                     results["vendedores_criados"] += 1
                     logger.info(f"Vendedor criado: codigo={rota}, nome={nome_vendedor}")

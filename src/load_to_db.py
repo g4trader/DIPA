@@ -68,36 +68,27 @@ def get_or_create_supervisor(
 def get_or_create_vendedor(
     session: Session,
     nome: str,
-    codigo: Optional[str] = None,
+    codigo: str,  # ✅ CORREÇÃO: codigo agora é obrigatório (deve ser rota_rca)
     supervisor_id: Optional[int] = None,
-    nome_rca: Optional[str] = None,
-    rota_rca: Optional[str] = None
+    # ✅ CORREÇÃO: nome_rca e rota_rca removidos (não são mais campos do modelo)
 ) -> Vendedor:
     """
     Obtém ou cria um vendedor.
     
     Args:
         session: Sessão SQLAlchemy
-        nome: Nome do vendedor
-        codigo: Código do vendedor (ex.: "ROTA 77")
+        nome: Nome do vendedor (pode ser None)
+        codigo: Código do vendedor (obrigatório, deve ser rota_rca para JOIN funcionar)
         supervisor_id: ID do supervisor
-        nome_rca: Nome do RCA
-        rota_rca: Rota do RCA
         
     Returns:
         Vendedor: Vendedor encontrado ou criado
     """
-    # ✅ CORREÇÃO: Prioriza rota_rca como código (chave de JOIN com Cliente)
-    # Se rota_rca fornecida, usa como código (garante JOIN correto)
-    if rota_rca:
-        codigo_final = str(rota_rca).strip()
-    elif codigo:
-        codigo_final = str(codigo).strip()
-    elif nome:
-        # Fallback: gera código baseado no nome (apenas se não houver rota)
-        codigo_final = nome.upper().replace(' ', '_')[:50]
-    else:
-        raise ValueError("É necessário fornecer codigo, rota_rca ou nome para criar vendedor")
+    # ✅ CORREÇÃO: codigo agora é obrigatório e deve ser a rota_rca
+    if not codigo:
+        raise ValueError("codigo é obrigatório (deve ser rota_rca para JOIN funcionar)")
+    
+    codigo_final = str(codigo).strip()
     
     # Busca vendedor existente pelo código
     vendedor = session.query(Vendedor).filter(
@@ -107,12 +98,11 @@ def get_or_create_vendedor(
     if not vendedor:
         # Cria novo vendedor
         # ✅ CORREÇÃO: codigo deve ser rota_rca para JOIN funcionar
+        # ✅ CORREÇÃO: nome_rca e rota_rca foram removidos do modelo, apenas codigo e nome
         vendedor = Vendedor(
             codigo=codigo_final,  # Usa rota_rca como código (chave de JOIN)
-            nome=nome,  # Nome pode ser None se criado apenas pela rota
+            nome=nome if nome else None,  # Nome pode ser None se criado apenas pela rota
             supervisor_id=supervisor_id,
-            nome_rca=nome_rca,
-            rota_rca=rota_rca if rota_rca else codigo_final,
             ativo=True
         )
         session.add(vendedor)
@@ -237,9 +227,7 @@ def load_clientes_to_db(df: pd.DataFrame, batch_size: int = 1000) -> int:
                             session,
                             nome=cliente_data.get('nome_rca') or rota_rca,  # Usa nome_rca se disponível, senão usa rota
                             codigo=rota_rca,  # ✅ CORREÇÃO: usa rota_rca como código (chave de JOIN)
-                            supervisor_id=supervisor_id,
-                            nome_rca=cliente_data.get('nome_rca'),
-                            rota_rca=rota_rca
+                            supervisor_id=supervisor_id
                         )
                         cliente_data['vendedor_id'] = vendedor.id
                         vendedor_id = vendedor.id
@@ -335,8 +323,7 @@ def load_vendas_to_db(df: pd.DataFrame, batch_size: int = 1000) -> int:
                         session,
                         nome=vendedor_nome or rota_rca_cliente,  # Nome do vendedor ou rota como fallback
                         codigo=rota_rca_cliente,  # ✅ CORREÇÃO: usa rota_rca como código
-                        supervisor_id=supervisor_id,
-                        rota_rca=rota_rca_cliente
+                        supervisor_id=supervisor_id
                     )
                 elif vendedor_nome:
                     # Fallback: se não houver rota_rca, cria com nome (mas não ideal)
