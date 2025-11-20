@@ -167,9 +167,9 @@ def load_clientes_to_db(df: pd.DataFrame, batch_size: int = 1000) -> int:
         # Mapeia colunas do DataFrame para o modelo
         for idx, row in df.iterrows():
             try:
-                # Gera código único
-                codigo = str(row.get('codigo', row.get('id_cliente', '')))
-                if not codigo or codigo == 'nan':
+                # ✅ CORREÇÃO: Mapeia 'Código' do CSV (com maiúscula) para codigo
+                codigo = str(row.get('Código', row.get('codigo', row.get('id_cliente', ''))))
+                if not codigo or codigo == 'nan' or codigo == 'None':
                     logger.warning(f"Cliente sem código na linha {idx}, pulando...")
                     continue
                 
@@ -181,11 +181,16 @@ def load_clientes_to_db(df: pd.DataFrame, batch_size: int = 1000) -> int:
                 # Prepara dados
                 cliente_data = {
                     'codigo': codigo,
-                    'cnpj_cpf': str(row.get('cnpj_cpf', '')) if pd.notna(row.get('cnpj_cpf')) else None,
-                    'fantasia': str(row.get('fantasia', '')) if pd.notna(row.get('fantasia')) else None,
-                    'nome': str(row.get('cliente', row.get('nome', ''))),
-                    'estado': str(row.get('estado', ''))[:2] if pd.notna(row.get('estado')) else None,
-                    'municipio': str(row.get('municipio', row.get('cidade', ''))) if pd.notna(row.get('municipio', row.get('cidade'))) else None,
+                    # ✅ CORREÇÃO: Mapeia 'CNPJ/CPF' do CSV
+                    'cnpj_cpf': str(row.get('CNPJ/CPF', row.get('cnpj_cpf', ''))) if pd.notna(row.get('CNPJ/CPF', row.get('cnpj_cpf'))) else None,
+                    # ✅ CORREÇÃO: Mapeia 'Fantasia' do CSV
+                    'fantasia': str(row.get('Fantasia', row.get('fantasia', ''))) if pd.notna(row.get('Fantasia', row.get('fantasia'))) else None,
+                    # ✅ CORREÇÃO: Mapeia 'Cliente' do CSV para nome
+                    'nome': str(row.get('Cliente', row.get('cliente', row.get('nome', '')))),
+                    # ✅ CORREÇÃO: Mapeia 'Estado' do CSV
+                    'estado': str(row.get('Estado', row.get('estado', '')))[:2] if pd.notna(row.get('Estado', row.get('estado'))) else None,
+                    # ✅ CORREÇÃO: Mapeia 'Município' do CSV
+                    'municipio': str(row.get('Município', row.get('municipio', row.get('cidade', '')))) if pd.notna(row.get('Município', row.get('municipio', row.get('cidade')))) else None,
                     'regiao_administrativa': str(row.get('regiao_administrativa', '')) if pd.notna(row.get('regiao_administrativa')) else None,
                     'local_venda': str(row.get('local_venda', '')) if pd.notna(row.get('local_venda')) else None,
                     'segmento_venda': str(row.get('segmento_venda', '')) if pd.notna(row.get('segmento_venda')) else None,

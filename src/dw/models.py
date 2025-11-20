@@ -82,8 +82,7 @@ class Vendedor(Base):
     id = Column(Integer, primary_key=True, index=True)
     codigo = Column(String(50), unique=True, nullable=False, index=True)  # Ex.: "ROTA 77" - DEVE corresponder a Cliente.rota_rca
     nome = Column(String(255), nullable=True)  # Nome do vendedor (pode ser None se criado apenas pela rota)
-    nome_rca = Column(String(255), nullable=True)  # Nome do RCA
-    rota_rca = Column(String(100), nullable=True)  # Rota do RCA
+    # ✅ CORREÇÃO: nome_rca e rota_rca removidos, pois 'codigo' agora representa a rota/RCA
     supervisor_id = Column(Integer, ForeignKey("supervisores.id"), nullable=True, index=True)
     ativo = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
