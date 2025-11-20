@@ -1822,10 +1822,15 @@ async def diagnostico_vendedor_supervisor():
                 Cliente.rota_rca.isnot(None),
                 Cliente.rota_rca != ''
             ).scalar()
-            clientes_com_vendedor_id = session.query(func.count(Cliente.id)).filter(
-                Cliente.ativo == True,
-                Cliente.vendedor_id.isnot(None)
-            ).scalar()
+            # Verifica se coluna vendedor_id existe
+            try:
+                clientes_com_vendedor_id = session.query(func.count(Cliente.id)).filter(
+                    Cliente.ativo == True,
+                    Cliente.vendedor_id.isnot(None)
+                ).scalar()
+            except Exception:
+                # Coluna pode não existir ainda
+                clientes_com_vendedor_id = 0
             
             # 2. Estatísticas de vendedores
             total_vendedores = session.query(func.count(Vendedor.id)).scalar()
