@@ -1694,6 +1694,109 @@ async def migrate_vendedor_id():
         session.close()
 
 
+@app.post("/admin/reload/clientes")
+async def reload_clientes():
+    """
+    Endpoint para recarregar clientes do CSV em produção.
+    
+    Este endpoint:
+    1. Carrega o CSV de clientes do GCS ou caminho configurado
+    2. Recarrega no banco usando load_clientes_to_db (com mapeamento corrigido)
+    3. Retorna estatísticas do recarregamento
+    
+    IMPORTANTE: Este endpoint deve ser protegido em produção.
+    """
+    try:
+        from src.data.ingestion import load_csv
+        from src.load_to_db import load_clientes_to_db
+        from src.dw.connection import SessionLocal
+        from src.dw.models import Cliente
+        from sqlalchemy import func
+        import os
+        
+        if SessionLocal is None:
+            init_db()
+        
+        session = SessionLocal()
+        
+        try:
+            # Verifica estado antes
+            clientes_antes = session.query(func.count(Cliente.id)).filter(Cliente.ativo == True).scalar()
+            clientes_com_rota_antes = session.query(func.count(Cliente.id)).filter(
+                Cliente.ativo == True,
+                Cliente.rota_rca.isnot(None),
+                Cliente.rota_rca != ''
+            ).scalar()
+            
+            # Tenta carregar CSV do caminho configurado ou GCS
+            csv_path = os.getenv("CLIENTES_CSV_PATH", "data_raw/Clientes ativos.xls - Clientes ativos.csv")
+            
+            # Se estiver em produção e o arquivo estiver no GCS
+            if os.getenv("ENV") == "production" and not os.path.exists(csv_path):
+                # Tenta baixar do GCS se configurado
+                gcs_uri = os.getenv("CLIENTES_CSV_GCS_URI")
+                if gcs_uri:
+                    try:
+                        from google.cloud import storage
+                        import tempfile
+                        client = storage.Client()
+                        bucket_name, blob_name = gcs_uri.replace("gs://", "").split("/", 1)
+                        bucket = client.bucket(bucket_name)
+                        blob = bucket.blob(blob_name)
+                        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+                        blob.download_to_filename(temp_file.name)
+                        csv_path = temp_file.name
+                        logger.info(f"CSV baixado do GCS: {gcs_uri}")
+                    except Exception as gcs_error:
+                        logger.warning(f"Erro ao baixar do GCS: {gcs_error}. Tentando caminho local.")
+            
+            if not os.path.exists(csv_path):
+                raise HTTPException(status_code=404, detail=f"Arquivo CSV não encontrado: {csv_path}")
+            
+            logger.info(f"Carregando CSV: {csv_path}")
+            df = load_csv(csv_path)
+            logger.info(f"CSV carregado: {len(df)} linhas")
+            
+            # Recarrega clientes
+            registros_processados = load_clientes_to_db(df, batch_size=1000)
+            
+            # Verifica estado depois
+            clientes_depois = session.query(func.count(Cliente.id)).filter(Cliente.ativo == True).scalar()
+            clientes_com_rota_depois = session.query(func.count(Cliente.id)).filter(
+                Cliente.ativo == True,
+                Cliente.rota_rca.isnot(None),
+                Cliente.rota_rca != ''
+            ).scalar()
+            
+            results = {
+                "clientes_antes": clientes_antes,
+                "clientes_com_rota_antes": clientes_com_rota_antes,
+                "clientes_depois": clientes_depois,
+                "clientes_com_rota_depois": clientes_com_rota_depois,
+                "clientes_atualizados_com_rota": clientes_com_rota_depois - clientes_com_rota_antes,
+                "registros_processados": registros_processados
+            }
+            
+            logger.info(f"Recarregamento concluído: {results}")
+            
+            return JSONResponse(status_code=200, content={
+                "sucesso": True,
+                "mensagem": "Clientes recarregados com sucesso",
+                "resultados": results
+            })
+        
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Erro ao recarregar clientes: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Erro ao recarregar clientes: {str(e)}")
+        finally:
+            session.close()
+    
+    except Exception as e:
+        logger.error(f"Erro no endpoint de recarregamento: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro no endpoint de recarregamento: {str(e)}")
+
+
 @app.get("/ml/status", response_model=Dict[str, Any])
 async def ml_status():
     """
