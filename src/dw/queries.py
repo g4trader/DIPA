@@ -126,6 +126,11 @@ def get_clientes_sem_compra_ha_dias(
     # - FROM dim_cliente c LEFT JOIN ultima_compra u ON u.cliente_id = c.cliente_id
     # - WHERE c.ativo = 1
     # - JOIN com Vendedor e Supervisor para trazer nomes
+    # ✅ CORREÇÃO: JOIN melhorado - usa vendedor_id se disponível, senão usa rota_rca
+    # ✅ CORREÇÃO: Supervisor pode vir do Cliente ou do Vendedor (prioriza do Cliente)
+    from sqlalchemy.orm import aliased
+    SupervisorViaVendedor = aliased(Supervisor, name='supervisor_via_vendedor')
+    
     query = (
         session.query(
             Cliente.id.label('cliente_id'),
@@ -134,14 +139,34 @@ def get_clientes_sem_compra_ha_dias(
             Cliente.rota_rca.label('rota_id'),
             Vendedor.nome.label('vendedor_nome'),
             Vendedor.codigo.label('vendedor_codigo'),
-            Supervisor.nome.label('supervisor_nome'),
-            Supervisor.codigo.label('supervisor_codigo'),
+            # Supervisor pode vir do Cliente ou do Vendedor (prioriza do Cliente)
+            func.coalesce(
+                Supervisor.nome,
+                SupervisorViaVendedor.nome
+            ).label('supervisor_nome'),
+            func.coalesce(
+                Supervisor.codigo,
+                SupervisorViaVendedor.codigo
+            ).label('supervisor_codigo'),
             ultima_compra_subq.c.data_ultima_compra,
             dias_sem_compra_expr.label('dias_sem_compra')
         )
         .outerjoin(ultima_compra_subq, Cliente.id == ultima_compra_subq.c.cliente_id)
-        .outerjoin(Vendedor, Cliente.rota_rca == Vendedor.codigo)
+        # ✅ CORREÇÃO: JOIN com Vendedor - prioriza vendedor_id, fallback para rota_rca
+        .outerjoin(
+            Vendedor,
+            or_(
+                Cliente.vendedor_id == Vendedor.id,  # Se houver FK direta
+                Cliente.rota_rca == Vendedor.codigo   # Fallback: JOIN por rota_rca
+            )
+        )
+        # Supervisor do Cliente (prioridade)
         .outerjoin(Supervisor, Cliente.supervisor_id == Supervisor.id)
+        # Supervisor do Vendedor (fallback se Cliente não tiver supervisor)
+        .outerjoin(
+            SupervisorViaVendedor,
+            Vendedor.supervisor_id == SupervisorViaVendedor.id
+        )
         .filter(Cliente.ativo == True)  # c.ativo = 1 conforme blueprint
     )
     

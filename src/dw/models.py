@@ -80,8 +80,8 @@ class Vendedor(Base):
     __tablename__ = "vendedores"
     
     id = Column(Integer, primary_key=True, index=True)
-    codigo = Column(String(50), unique=True, nullable=False, index=True)  # Ex.: "ROTA 77"
-    nome = Column(String(255), nullable=False)
+    codigo = Column(String(50), unique=True, nullable=False, index=True)  # Ex.: "ROTA 77" - DEVE corresponder a Cliente.rota_rca
+    nome = Column(String(255), nullable=True)  # Nome do vendedor (pode ser None se criado apenas pela rota)
     nome_rca = Column(String(255), nullable=True)  # Nome do RCA
     rota_rca = Column(String(100), nullable=True)  # Rota do RCA
     supervisor_id = Column(Integer, ForeignKey("supervisores.id"), nullable=True, index=True)
@@ -126,8 +126,9 @@ class Cliente(Base):
     grupo_economico = Column(String(100), nullable=True)
     supervisor_id = Column(Integer, ForeignKey("supervisores.id"), nullable=True, index=True)
     supervisor_responsavel = Column(String(255), nullable=True)
+    vendedor_id = Column(Integer, ForeignKey("vendedores.id"), nullable=True, index=True)  # FK opcional para vendedor
     nome_rca = Column(String(255), nullable=True)
-    rota_rca = Column(String(100), nullable=True)
+    rota_rca = Column(String(100), nullable=True, index=True)  # Índice para melhorar JOIN
     pasta = Column(String(100), nullable=True)
     consumidor_final = Column(Boolean, default=False, nullable=False)
     bloqueado = Column(Boolean, default=False, nullable=False)
@@ -147,6 +148,7 @@ class Cliente(Base):
     vendas = relationship("Venda", back_populates="cliente")
     churn_risk = relationship("ChurnRisk", back_populates="cliente", uselist=False)
     supervisor = relationship("Supervisor", back_populates="clientes")
+    vendedor = relationship("Vendedor", foreign_keys=[vendedor_id])
     
     def __repr__(self):
         return f"<Cliente(id={self.id}, codigo='{self.codigo}', nome='{self.nome}')>"

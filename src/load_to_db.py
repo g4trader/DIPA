@@ -87,28 +87,46 @@ def get_or_create_vendedor(
     Returns:
         Vendedor: Vendedor encontrado ou criado
     """
-    # Usa código fornecido ou gera baseado no nome
-    if not codigo:
-        codigo = nome.upper().replace(' ', '_')[:50]
+    # ✅ CORREÇÃO: Prioriza rota_rca como código (chave de JOIN com Cliente)
+    # Se rota_rca fornecida, usa como código (garante JOIN correto)
+    if rota_rca:
+        codigo_final = str(rota_rca).strip()
+    elif codigo:
+        codigo_final = str(codigo).strip()
+    elif nome:
+        # Fallback: gera código baseado no nome (apenas se não houver rota)
+        codigo_final = nome.upper().replace(' ', '_')[:50]
+    else:
+        raise ValueError("É necessário fornecer codigo, rota_rca ou nome para criar vendedor")
     
-    # Busca vendedor existente
+    # Busca vendedor existente pelo código
     vendedor = session.query(Vendedor).filter(
-        Vendedor.codigo == codigo
+        Vendedor.codigo == codigo_final
     ).first()
     
     if not vendedor:
         # Cria novo vendedor
+        # ✅ CORREÇÃO: codigo deve ser rota_rca para JOIN funcionar
         vendedor = Vendedor(
-            codigo=codigo,
-            nome=nome,
+            codigo=codigo_final,  # Usa rota_rca como código (chave de JOIN)
+            nome=nome,  # Nome pode ser None se criado apenas pela rota
             supervisor_id=supervisor_id,
             nome_rca=nome_rca,
-            rota_rca=rota_rca,
+            rota_rca=rota_rca if rota_rca else codigo_final,
             ativo=True
         )
         session.add(vendedor)
         session.flush()
-        logger.debug(f"Vendedor criado: {nome}")
+        logger.debug(f"Vendedor criado: codigo={codigo_final}, nome={nome}")
+    else:
+        # Atualiza vendedor existente se houver informações novas
+        if nome and not vendedor.nome:
+            vendedor.nome = nome
+        if supervisor_id and not vendedor.supervisor_id:
+            vendedor.supervisor_id = supervisor_id
+        if nome_rca and not vendedor.nome_rca:
+            vendedor.nome_rca = nome_rca
+        session.flush()
     
     return vendedor
 
@@ -199,6 +217,7 @@ def load_clientes_to_db(df: pd.DataFrame, batch_size: int = 1000) -> int:
                     cliente_data['data_cadastro'] = row.get(data_cadastro_cols[0])
                 
                 # Supervisor ID (busca ou cria)
+                supervisor_id = None
                 if cliente_data['supervisor_responsavel']:
                     supervisor = get_or_create_supervisor(
                         session,
@@ -206,6 +225,24 @@ def load_clientes_to_db(df: pd.DataFrame, batch_size: int = 1000) -> int:
                         pasta=cliente_data.get('pasta')
                     )
                     cliente_data['supervisor_id'] = supervisor.id
+                    supervisor_id = supervisor.id
+                
+                # Vendedor ID (cria vendedor a partir da rota_rca se existir)
+                vendedor_id = None
+                if cliente_data.get('rota_rca'):
+                    rota_rca = str(cliente_data['rota_rca']).strip()
+                    if rota_rca:
+                        # Cria ou busca vendedor usando rota_rca como código
+                        vendedor = get_or_create_vendedor(
+                            session,
+                            nome=cliente_data.get('nome_rca') or rota_rca,  # Usa nome_rca se disponível, senão usa rota
+                            codigo=rota_rca,  # ✅ CORREÇÃO: usa rota_rca como código (chave de JOIN)
+                            supervisor_id=supervisor_id,
+                            nome_rca=cliente_data.get('nome_rca'),
+                            rota_rca=rota_rca
+                        )
+                        cliente_data['vendedor_id'] = vendedor.id
+                        vendedor_id = vendedor.id
                 
                 if cliente:
                     # Atualiza cliente existente
@@ -279,11 +316,10 @@ def load_vendas_to_db(df: pd.DataFrame, batch_size: int = 1000) -> int:
                     logger.warning(f"Cliente não encontrado: {codigo_cliente}, pulando venda...")
                     continue
                 
-                # Busca ou cria vendedor
-                vendedor_nome = str(row.get('vendedor', ''))
-                if not vendedor_nome or vendedor_nome == 'nan':
-                    logger.warning(f"Venda sem vendedor na linha {idx}, pulando...")
-                    continue
+                # ✅ CORREÇÃO: Busca ou cria vendedor usando rota_rca do cliente como código
+                # Prioriza rota_rca do cliente para garantir JOIN correto
+                rota_rca_cliente = cliente.rota_rca if cliente.rota_rca else None
+                vendedor_nome = str(row.get('vendedor', '')) if pd.notna(row.get('vendedor')) else None
                 
                 supervisor_nome = str(row.get('supervisor', '')) if pd.notna(row.get('supervisor')) else None
                 supervisor_id = None
@@ -292,12 +328,28 @@ def load_vendas_to_db(df: pd.DataFrame, batch_size: int = 1000) -> int:
                     supervisor = get_or_create_supervisor(session, supervisor_nome)
                     supervisor_id = supervisor.id
                 
-                vendedor = get_or_create_vendedor(
-                    session,
-                    vendedor_nome,
-                    codigo=vendedor_nome,
-                    supervisor_id=supervisor_id
-                )
+                # ✅ CORREÇÃO: Usa rota_rca como código (chave de JOIN), não o nome
+                if rota_rca_cliente:
+                    # Se cliente tem rota_rca, usa como código do vendedor
+                    vendedor = get_or_create_vendedor(
+                        session,
+                        nome=vendedor_nome or rota_rca_cliente,  # Nome do vendedor ou rota como fallback
+                        codigo=rota_rca_cliente,  # ✅ CORREÇÃO: usa rota_rca como código
+                        supervisor_id=supervisor_id,
+                        rota_rca=rota_rca_cliente
+                    )
+                elif vendedor_nome:
+                    # Fallback: se não houver rota_rca, cria com nome (mas não ideal)
+                    logger.warning(f"Cliente {codigo_cliente} sem rota_rca, criando vendedor com nome: {vendedor_nome}")
+                    vendedor = get_or_create_vendedor(
+                        session,
+                        nome=vendedor_nome,
+                        codigo=vendedor_nome,  # Fallback menos ideal
+                        supervisor_id=supervisor_id
+                    )
+                else:
+                    logger.warning(f"Venda sem vendedor e cliente sem rota_rca na linha {idx}, pulando...")
+                    continue
                 
                 # Data da venda
                 data_venda = row.get('data_venda')
