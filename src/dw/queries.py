@@ -209,6 +209,10 @@ def get_clientes_sem_compra_ha_dias(
     
     # Filtra apenas clientes com >= 61 dias sem compra
     # IMPORTANTE: Não inclui clientes com 0 dias ou None (só inclui se realmente >= 61 dias)
+    # ✅ CORREÇÃO CRÍTICA: O filtro deve garantir que:
+    # 1. Cliente tem última compra registrada (não None)
+    # 2. A diferença de dias é >= 61
+    # 3. Cliente está ativo (já filtrado acima)
     base_query = base_query.filter(
         and_(
             # Deve ter última compra registrada (não None) para calcular dias corretamente
@@ -217,6 +221,16 @@ def get_clientes_sem_compra_ha_dias(
             diff_expr >= dias_minimo
         )
     )
+    
+    # ✅ LOG CRÍTICO: Conta registros na CTE base antes do GROUP BY
+    # Isso ajuda a identificar se o problema está na CTE base ou no GROUP BY
+    try:
+        count_base = session.query(func.count(func.distinct(base_query.subquery().c.cliente_id))).scalar()
+        logger.info(
+            f"[get_clientes_sem_compra_ha_dias] CTE base (antes GROUP BY): {count_base} clientes únicos"
+        )
+    except Exception as e:
+        logger.warning(f"[get_clientes_sem_compra_ha_dias] Não foi possível contar CTE base: {e}")
     
     # ✅ CORREÇÃO CRÍTICA: Agrupa por cliente_id e agrega múltiplos vendedores/supervisores
     # Em vez de ROW_NUMBER(), usa GROUP BY com GROUP_CONCAT/STRING_AGG
