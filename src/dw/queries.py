@@ -235,6 +235,29 @@ def get_clientes_sem_compra_ha_dias(
     # ✅ CORREÇÃO CRÍTICA: Agrupa por cliente_id e agrega múltiplos vendedores/supervisores
     # Em vez de ROW_NUMBER(), usa GROUP BY com GROUP_CONCAT/STRING_AGG
     # Isso garante 1 linha por cliente, com todos os vendedores/supervisores agregados
+    
+    # ✅ LOG CRÍTICO: Conta registros na query base ANTES de criar CTE
+    # Isso identifica se há duplicatas antes do GROUP BY
+    try:
+        # Executa query base sem GROUP BY para contar registros brutos
+        count_query_base = session.query(func.count()).select_from(base_query.subquery()).scalar()
+        count_clientes_unicos_base = session.query(func.count(func.distinct(Cliente.id))).filter(
+            Cliente.ativo == True
+        ).join(
+            ultima_compra_subq, Cliente.id == ultima_compra_subq.c.cliente_id
+        ).filter(
+            and_(
+                ultima_compra_subq.c.data_ultima_compra.isnot(None),
+                diff_expr >= dias_minimo
+            )
+        ).scalar()
+        logger.info(
+            f"[get_clientes_sem_compra_ha_dias] Query base (antes CTE): {count_query_base} registros brutos, "
+            f"{count_clientes_unicos_base} clientes únicos"
+        )
+    except Exception as e:
+        logger.warning(f"[get_clientes_sem_compra_ha_dias] Não foi possível contar query base: {e}")
+    
     base_cte = base_query.cte(name='base_clientes')
     
     # Agrega múltiplos vendedores e supervisores por cliente
