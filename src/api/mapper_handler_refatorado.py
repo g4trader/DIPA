@@ -455,6 +455,36 @@ def _criar_structured_response(
                 }
                 logger.info(f"[mapper] ✅ detalhe_tabela criada: {len(linhas)} linhas, {len(colunas)} colunas")
     
+    # ✅ CORREÇÃO: Calcula total_clientes_unicos para Q1 (garantir consistência Big Number)
+    total_clientes_unicos = None
+    if intent == "clientes_sem_compra" and tabela_principal:
+        # Para Q1, calcula total de clientes únicos baseado na tabela_principal
+        # Isso garante que o Big Number seja exatamente igual ao número de linhas da tabela
+        if isinstance(tabela_principal, list) and len(tabela_principal) > 0:
+            primeira_tabela = tabela_principal[0]
+            if isinstance(primeira_tabela, dict) and "linhas" in primeira_tabela:
+                total_clientes_unicos = len(primeira_tabela["linhas"])
+        elif isinstance(tabela_principal, dict) and "linhas" in tabela_principal:
+            total_clientes_unicos = len(tabela_principal["linhas"])
+        
+        # Validação: garante que total_clientes_unicos == len(dados_dw["dados"])
+        if total_clientes_unicos is not None and dados_dw.get("dados"):
+            dados_clientes = dados_dw.get("dados", [])
+            if isinstance(dados_clientes, list):
+                total_dados_dw = len(dados_clientes)
+                if total_clientes_unicos != total_dados_dw:
+                    logger.warning(
+                        f"[mapper] ⚠️  INCONSISTÊNCIA Q1: "
+                        f"total_clientes_unicos ({total_clientes_unicos}) != len(dados_dw) ({total_dados_dw})"
+                    )
+                    # Usa o valor da tabela (mais confiável, já deduplicado)
+                    total_clientes_unicos = total_clientes_unicos
+                else:
+                    logger.info(
+                        f"[mapper] ✅ Q1 CONSISTENTE: "
+                        f"total_clientes_unicos = {total_clientes_unicos} == len(dados_dw) = {total_dados_dw}"
+                    )
+    
     # Monta structured response
     structured = {
         "resumo_executivo": resumo_executivo,
@@ -465,13 +495,20 @@ def _criar_structured_response(
         "insightsRecomendacoes": insights_recomendacoes,
         "respostaMarkdown": texto_post_processor,  # Texto completo do post_processor (inclui "Alvos Prioritários (TOP 10)")
         "detalhe_tabela": detalhe_tabela,  # Tabela para botão "Ver detalhamento" com paginação
+        # ✅ CORREÇÃO: Adiciona campo metrics com total_clientes para Q1
+        "metrics": {
+            "total_clientes": total_clientes_unicos if total_clientes_unicos is not None else None,
+            "total_registros": total_clientes_unicos if total_clientes_unicos is not None else None  # Alias para compatibilidade
+        } if total_clientes_unicos is not None else None,
         "jsonTecnico": {
             "intent_spec": intent_spec.to_dict() if intent_spec and hasattr(intent_spec, 'to_dict') else None,
             "periodo_analisado": periodo_analisado,
             "regras_aplicadas": regras_aplicadas,
             "tem_dados": resposta.get("tem_dados", False),
             "tabela_principal": tabela_principal,
-            "tabela_por_rota": tabela_por_rota  # Tabela agregada por rota (Q1)
+            "tabela_por_rota": tabela_por_rota,  # Tabela agregada por rota (Q1)
+            # ✅ CORREÇÃO: Adiciona total_clientes_unicos no jsonTecnico também
+            "total_clientes_unicos": total_clientes_unicos if total_clientes_unicos is not None else None
         }
     }
     

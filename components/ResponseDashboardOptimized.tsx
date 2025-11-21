@@ -67,16 +67,41 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
   }, [data]);
 
   // Calcula total de clientes para Big Number
+  // ✅ CORREÇÃO: Prioriza metrics.total_clientes (fonte oficial do backend)
+  // Depois usa tabelaPrincipal.rows.length (deve ser igual)
+  // Fallback para detalhe_tabela
   const totalClientes = useMemo(() => {
+    const dataAny = data as any;
+    
+    // 1. Prioridade: metrics.total_clientes (campo explícito do backend)
+    if (dataAny.metrics?.total_clientes !== undefined && dataAny.metrics?.total_clientes !== null) {
+      const totalMetrics = dataAny.metrics.total_clientes;
+      // Validação: garante que metrics.total_clientes == tabelaPrincipal.rows.length
+      if (tabelaPrincipal && tabelaPrincipal.rows.length !== totalMetrics) {
+        console.warn(
+          `⚠️  INCONSISTÊNCIA DETECTADA: metrics.total_clientes (${totalMetrics}) != tabelaPrincipal.rows.length (${tabelaPrincipal.rows.length})`
+        );
+        // Usa o valor da tabela (mais confiável, já deduplicado)
+        return tabelaPrincipal.rows.length;
+      }
+      return totalMetrics;
+    }
+    
+    // 2. Fallback: tabelaPrincipal.rows.length (deve ser igual ao metrics)
     if (tabelaPrincipal) {
       return tabelaPrincipal.rows.length;
     }
     
-    // Fallback: tenta extrair de outras fontes
-    const dataAny = data as any;
+    // 3. Fallback: detalhe_tabela
     const detalheTabela = data.detalhe_tabela || dataAny.detalheTabela;
     if (detalheTabela?.linhas) {
       return detalheTabela.linhas.length;
+    }
+    
+    // 4. Fallback: jsonTecnico.total_clientes_unicos
+    const jsonTecnico = dataAny.jsonTecnico || dataAny.structured?.jsonTecnico;
+    if (jsonTecnico?.total_clientes_unicos !== undefined && jsonTecnico?.total_clientes_unicos !== null) {
+      return jsonTecnico.total_clientes_unicos;
     }
     
     return 0;
