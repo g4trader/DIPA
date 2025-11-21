@@ -303,6 +303,13 @@ def get_clientes_sem_compra_ha_dias(
     # IMPORTANTE: Filtro adicional para garantir que nenhum cliente com 0 dias seja retornado
     dias_minimo = dias + 1  # "mais de 60 dias" = >= 61 dias
     clientes_filtrados = []
+    
+    # ✅ LOG CRÍTICO: Antes de filtrar
+    logger.info(
+        f"[get_clientes_sem_compra_ha_dias] Antes de filtrar: {len(resultados)} registros, "
+        f"dias_minimo={dias_minimo}"
+    )
+    
     for row in resultados:
         dias_sem_compra = int(row.dias_sem_compra) if row.dias_sem_compra is not None else None
         # Só inclui se dias_sem_compra >= 61 (não inclui 0, None ou < 61)
