@@ -703,9 +703,24 @@ def executar_intent_spec(
             # ✅ CORREÇÃO CRÍTICA Q1: Para Q1, bypassa cache para garantir resultado correto
             if intent_spec.tipo == "clientes_sem_compra":
                 kwargs["bypass_cache"] = True
-                logger.info("[Q1_ORQ] Bypassando cache para garantir resultado correto")
+                logger.info(
+                    f"[Q1_ORQ] Bypassando cache para garantir resultado correto. "
+                    f"Função: {funcao_dw.__name__ if funcao_dw else 'None'}, "
+                    f"kwargs: {kwargs}"
+                )
             
             resultado = funcao_dw(session, **kwargs)
+            
+            # ✅ LOG CRÍTICO: Para Q1, loga tipo e tamanho do resultado
+            if intent_spec.tipo == "clientes_sem_compra":
+                logger.info(
+                    f"[Q1_ORQ] Função DW retornou: tipo={type(resultado)}, "
+                    f"tamanho={len(resultado) if isinstance(resultado, (list, dict)) else 'N/A'}"
+                )
+                if isinstance(resultado, dict):
+                    logger.warning(
+                        f"[Q1_ORQ] ⚠️  Resultado é dict, não lista! Chaves: {list(resultado.keys())[:10]}"
+                    )
             
             # ✅ LOG CRÍTICO: Para Q1, loga quantidade de registros retornados pela função DW
             if intent_spec.tipo == "clientes_sem_compra":
