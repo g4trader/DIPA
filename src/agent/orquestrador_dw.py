@@ -844,15 +844,49 @@ def executar_intent_spec(
     
     # ✅ VALIDAÇÃO FINAL CRÍTICA Q1: Garante que cardinalidade não mudou
     if intent_spec.tipo == "clientes_sem_compra":
-        if isinstance(resultado, list) and len(resultado) != len(dados_normalizados):
+        # Para Q1, resultado DEVE ser uma lista
+        if isinstance(resultado, list):
+            # Se normalização alterou cardinalidade, usa resultado original
+            if len(resultado) != len(dados_normalizados):
+                logger.error(
+                    f"[Q1_ORQ] ❌ ERRO CRÍTICO: Normalização alterou cardinalidade! "
+                    f"Resultado original: {len(resultado)}, Após normalização: {len(dados_normalizados)}"
+                )
+                # CORREÇÃO: Usa resultado original se normalização alterou cardinalidade
+                dados_normalizados = resultado
+                logger.warning(
+                    f"[Q1_ORQ] ✅ CORRIGIDO: Usando resultado original ({len(dados_normalizados)} registros)"
+                )
+            # Validação adicional: garante que não há duplicatas
+            cliente_ids_final = [r.get("cliente_id") for r in dados_normalizados if isinstance(r, dict)]
+            clientes_unicos_final = len(set(cliente_ids_final))
+            if len(cliente_ids_final) != clientes_unicos_final:
+                logger.error(
+                    f"[Q1_ORQ] ❌ ERRO: Duplicatas detectadas após normalização! "
+                    f"{len(cliente_ids_final)} registros vs {clientes_unicos_final} clientes únicos"
+                )
+                # Remove duplicatas mantendo a primeira ocorrência
+                visto = set()
+                dados_normalizados_limpos = []
+                for r in dados_normalizados:
+                    if isinstance(r, dict):
+                        cliente_id = r.get("cliente_id")
+                        if cliente_id not in visto:
+                            visto.add(cliente_id)
+                            dados_normalizados_limpos.append(r)
+                dados_normalizados = dados_normalizados_limpos
+                logger.warning(
+                    f"[Q1_ORQ] ✅ Duplicatas removidas: {len(cliente_ids_final)} -> {len(dados_normalizados)}"
+                )
+        else:
+            # Se resultado não for lista, algo está errado
             logger.error(
-                f"[Q1_ORQ] ❌ ERRO CRÍTICO: Normalização alterou cardinalidade! "
-                f"Resultado original: {len(resultado)}, Após normalização: {len(dados_normalizados)}"
+                f"[Q1_ORQ] ❌ ERRO CRÍTICO: Resultado não é lista! Tipo: {type(resultado)}"
             )
-            # CORREÇÃO: Usa resultado original se normalização alterou cardinalidade
-            dados_normalizados = resultado
+            # Tenta normalizar
+            dados_normalizados = _normalizar_resultado_dw(resultado)
             logger.warning(
-                f"[Q1_ORQ] ✅ CORRIGIDO: Usando resultado original ({len(dados_normalizados)} registros)"
+                f"[Q1_ORQ] ⚠️  Normalizado para {len(dados_normalizados)} registros"
             )
     
     # PASSO 6: Determina status
