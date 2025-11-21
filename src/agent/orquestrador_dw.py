@@ -701,6 +701,25 @@ def executar_intent_spec(
                 kwargs["filtros_behavior"] = filtros_behavior if filtros_behavior else None
             
             resultado = funcao_dw(session, **kwargs)
+            
+            # ✅ LOG CRÍTICO: Para Q1, loga quantidade de registros retornados
+            if intent_spec.tipo == "clientes_sem_compra":
+                if isinstance(resultado, list):
+                    logger.info(
+                        f"[orquestrador_dw] ✅ Q1 executada: {len(resultado)} registros retornados pela função DW"
+                    )
+                    # Verifica duplicatas
+                    cliente_ids = [r.get("cliente_id") for r in resultado if isinstance(r, dict)]
+                    clientes_unicos = len(set(cliente_ids))
+                    if len(cliente_ids) != clientes_unicos:
+                        logger.warning(
+                            f"[orquestrador_dw] ⚠️  Q1: {len(cliente_ids)} registros vs {clientes_unicos} clientes únicos "
+                            f"(duplicatas detectadas!)"
+                        )
+                    else:
+                        logger.info(
+                            f"[orquestrador_dw] ✅ Q1: {clientes_unicos} clientes únicos (sem duplicatas)"
+                        )
         
         logger.info(f"[orquestrador_dw] Função DW executada com sucesso, resultado: {type(resultado)}")
         
@@ -719,6 +738,20 @@ def executar_intent_spec(
     
     # PASSO 5: Normaliza resultado
     dados_normalizados = _normalizar_resultado_dw(resultado)
+    
+    # ✅ LOG CRÍTICO: Para Q1, loga quantidade após normalização
+    if intent_spec.tipo == "clientes_sem_compra":
+        logger.info(
+            f"[orquestrador_dw] ✅ Q1 após normalização: {len(dados_normalizados)} registros"
+        )
+        # Verifica duplicatas após normalização
+        cliente_ids_norm = [r.get("cliente_id") for r in dados_normalizados if isinstance(r, dict)]
+        clientes_unicos_norm = len(set(cliente_ids_norm))
+        if len(cliente_ids_norm) != clientes_unicos_norm:
+            logger.warning(
+                f"[orquestrador_dw] ⚠️  Q1 após normalização: {len(cliente_ids_norm)} registros vs "
+                f"{clientes_unicos_norm} clientes únicos (duplicatas detectadas!)"
+            )
     
     # Se resultado for dict com estrutura especial (ex.: kpis_mes), extrai dados
     if isinstance(resultado, dict):
