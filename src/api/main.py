@@ -2089,6 +2089,75 @@ async def diagnostico_vendedor_supervisor():
         raise HTTPException(status_code=500, detail=f"Erro no diagnóstico: {str(e)}")
 
 
+@app.get("/diagnostico/db_fingerprint")
+async def diagnostico_db_fingerprint():
+    """
+    Endpoint de diagnóstico para gerar fingerprint do banco de dados.
+    
+    Retorna informações que permitem comparar se o banco usado em produção
+    é o mesmo usado localmente.
+    
+    Returns:
+        JSON com fingerprint do banco (contagens, paths, etc.)
+    """
+    try:
+        from src.dw.connection import SessionLocal, init_db
+        from src.dw.diagnostico_db import get_db_fingerprint
+        
+        if SessionLocal is None:
+            init_db()
+        
+        session = SessionLocal()
+        
+        try:
+            fingerprint = get_db_fingerprint(session)
+            return JSONResponse(status_code=200, content=fingerprint)
+        finally:
+            session.close()
+    
+    except Exception as e:
+        logger.error(f"Erro no diagnóstico de fingerprint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro no diagnóstico: {str(e)}")
+
+
+@app.get("/diagnostico/q1_contagem")
+async def diagnostico_q1_contagem(dias: int = 60):
+    """
+    Endpoint de diagnóstico para validar contagem da Q1.
+    
+    Executa a Q1 diretamente (sem passar pelo LLM) e retorna contagens detalhadas
+    para comparação entre ambientes (local vs produção).
+    
+    Query params:
+        - dias: número de dias sem compra (padrão: 60)
+    
+    Returns:
+        JSON com:
+        - total_clientes_q1: número de clientes únicos resultantes
+        - total_clientes_ativos: total de clientes ativos na base
+        - faixas_q1: contagens por faixa de dias
+        - amostra_ids: alguns cliente_id para inspeção
+    """
+    try:
+        from src.dw.connection import SessionLocal, init_db
+        from src.dw.diagnostico_db import get_q1_contagem
+        
+        if SessionLocal is None:
+            init_db()
+        
+        session = SessionLocal()
+        
+        try:
+            resultado = get_q1_contagem(session, dias=dias)
+            return JSONResponse(status_code=200, content=resultado)
+        finally:
+            session.close()
+    
+    except Exception as e:
+        logger.error(f"Erro no diagnóstico Q1: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro no diagnóstico Q1: {str(e)}")
+
+
 @app.get("/ml/status", response_model=Dict[str, Any])
 async def ml_status():
     """
