@@ -123,11 +123,20 @@ def query_cache(ttl_seconds: int = 300, query_id: Optional[str] = None):
         @query_cache(ttl_seconds=300, query_id="Q1")
         def get_clientes_sem_compra_ha_dias(...):
             ...
+    
+    Nota: Se kwargs contiver 'bypass_cache=True', o cache é ignorado.
     """
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             global _cache, _cache_stats
+            
+            # ✅ CORREÇÃO: Verifica se deve bypassar cache
+            bypass_cache = kwargs.pop("bypass_cache", False)
+            if bypass_cache:
+                logger.info(f"[cache] Bypass cache ativado para {query_id or func.__name__}")
+                # Remove bypass_cache dos kwargs antes de chamar a função
+                return func(*args, **kwargs)
             
             # Identifica query
             query_name = query_id or func.__name__

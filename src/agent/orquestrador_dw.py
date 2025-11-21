@@ -700,6 +700,11 @@ def executar_intent_spec(
                         filtros_behavior["excluir_segmentos"] = intent_spec.filtros.get("excluir_segmentos", [])
                 kwargs["filtros_behavior"] = filtros_behavior if filtros_behavior else None
             
+            # ✅ CORREÇÃO CRÍTICA Q1: Para Q1, bypassa cache para garantir resultado correto
+            if intent_spec.tipo == "clientes_sem_compra":
+                kwargs["bypass_cache"] = True
+                logger.info("[Q1_ORQ] Bypassando cache para garantir resultado correto")
+            
             resultado = funcao_dw(session, **kwargs)
             
             # ✅ LOG CRÍTICO: Para Q1, loga quantidade de registros retornados pela função DW
@@ -799,7 +804,8 @@ def executar_intent_spec(
             )
     
     # Se resultado for dict com estrutura especial (ex.: kpis_mes), extrai dados
-    # ✅ CORREÇÃO: Para Q1, NÃO processa essa lógica (já normalizado acima)
+    # ✅ CORREÇÃO CRÍTICA: Para Q1, NUNCA processa essa lógica (já normalizado acima)
+    # Essa lógica pode estar expandindo dados incorretamente para Q1
     if intent_spec.tipo != "clientes_sem_compra" and isinstance(resultado, dict):
         # Se tiver "linhas_detalhadas" ou "metas_por_mes", usa isso
         if "linhas_detalhadas" in resultado:
@@ -820,6 +826,19 @@ def executar_intent_spec(
         else:
             # Tenta normalizar o dict inteiro
             dados_normalizados = [resultado]
+    
+    # ✅ VALIDAÇÃO FINAL CRÍTICA Q1: Garante que cardinalidade não mudou
+    if intent_spec.tipo == "clientes_sem_compra":
+        if isinstance(resultado, list) and len(resultado) != len(dados_normalizados):
+            logger.error(
+                f"[Q1_ORQ] ❌ ERRO CRÍTICO: Normalização alterou cardinalidade! "
+                f"Resultado original: {len(resultado)}, Após normalização: {len(dados_normalizados)}"
+            )
+            # CORREÇÃO: Usa resultado original se normalização alterou cardinalidade
+            dados_normalizados = resultado
+            logger.warning(
+                f"[Q1_ORQ] ✅ CORRIGIDO: Usando resultado original ({len(dados_normalizados)} registros)"
+            )
     
     # PASSO 6: Determina status
     if len(dados_normalizados) == 0:
