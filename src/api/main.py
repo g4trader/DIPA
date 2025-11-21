@@ -2201,6 +2201,73 @@ async def diagnostico_invalidate_cache():
         raise HTTPException(status_code=500, detail=f"Erro ao invalidar cache: {str(e)}")
 
 
+@app.get("/diagnostico/q1_orquestrador")
+async def diagnostico_q1_orquestrador(dias: int = 60):
+    """
+    Endpoint de diagnóstico para executar Q1 via orquestrador (mesmo fluxo do /ask).
+    
+    Executa a Q1 usando o mesmo fluxo do /ask (orquestrador → handler → mapper)
+    para comparar com o endpoint direto /diagnostico/q1_contagem.
+    
+    Query params:
+        - dias: número de dias sem compra (padrão: 60)
+    
+    Returns:
+        JSON com dados brutos do orquestrador e contagens
+    """
+    try:
+        from src.dw.connection import SessionLocal, init_db
+        from src.agent.intent_spec import IntentSpec
+        from src.agent.orquestrador_dw import executar_intent_spec
+        
+        if SessionLocal is None:
+            init_db()
+        
+        session = SessionLocal()
+        
+        try:
+            # Cria IntentSpec para Q1 (mesmo que o /ask faria)
+            intent_spec = IntentSpec(
+                tipo="clientes_sem_compra",
+                dimensao_principal="cliente",
+                periodo_inicio=None,
+                periodo_fim=None,
+                filtros={"dias": dias}
+            )
+            
+            # Executa via orquestrador (mesmo fluxo do /ask)
+            resultado_orquestrador = executar_intent_spec(
+                session=session,
+                intent_spec=intent_spec,
+                contexto_usuario={"role": "diretor", "override_regras": False}
+            )
+            
+            dados = resultado_orquestrador.get("dados", [])
+            total_orquestrador = len(dados)
+            
+            # Verifica duplicatas
+            cliente_ids = [r.get("cliente_id") for r in dados if isinstance(r, dict)]
+            clientes_unicos = len(set(cliente_ids))
+            
+            resultado = {
+                "total_orquestrador": total_orquestrador,
+                "clientes_unicos": clientes_unicos,
+                "duplicatas": total_orquestrador != clientes_unicos,
+                "status": resultado_orquestrador.get("status"),
+                "dias_filtro": dias,
+                "amostra_ids": cliente_ids[:10],
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            return JSONResponse(status_code=200, content=resultado)
+        finally:
+            session.close()
+    
+    except Exception as e:
+        logger.error(f"Erro no diagnóstico Q1 orquestrador: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro no diagnóstico Q1 orquestrador: {str(e)}")
+
+
 @app.get("/ml/status", response_model=Dict[str, Any])
 async def ml_status():
     """
