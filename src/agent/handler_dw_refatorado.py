@@ -134,10 +134,31 @@ def processar_pergunta_com_dw(
         )
         
         # Extrai dados, regras aplicadas, análise de causas e causas_detector
+        dados_orquestrador = resultado_orquestrador.get("dados", [])
+        
+        # ✅ LOG CRÍTICO: Para Q1, loga quantidade de dados do orquestrador
+        if intent_spec.tipo == "clientes_sem_compra":
+            logger.info(
+                f"[Q1_ORQ] Payload final enviado ao LLM - registros: {len(dados_orquestrador)}"
+            )
+            # Validação: garante que não há duplicatas
+            if isinstance(dados_orquestrador, list):
+                cliente_ids = [r.get("cliente_id") for r in dados_orquestrador if isinstance(r, dict)]
+                clientes_unicos = len(set(cliente_ids))
+                if len(cliente_ids) != clientes_unicos:
+                    logger.error(
+                        f"[Q1_ORQ] ❌ ERRO: Payload tem {len(cliente_ids)} registros mas "
+                        f"apenas {clientes_unicos} clientes únicos!"
+                    )
+                else:
+                    logger.info(
+                        f"[Q1_ORQ] ✅ Payload: {clientes_unicos} clientes únicos"
+                    )
+        
         dados_dw = {
             "status": resultado_orquestrador.get("status"),
-            "dados": resultado_orquestrador.get("dados", []),
-            "tem_dados": resultado_orquestrador.get("status") == "ok" and len(resultado_orquestrador.get("dados", [])) > 0,
+            "dados": dados_orquestrador,
+            "tem_dados": resultado_orquestrador.get("status") == "ok" and len(dados_orquestrador) > 0,
             "analise_causas": resultado_orquestrador.get("analise_causas", {}),
             "causas_detector": resultado_orquestrador.get("causas_detector", {}),
             "tabela_por_rota": resultado_orquestrador.get("tabela_por_rota"),  # Tabela agregada por rota (Q1)

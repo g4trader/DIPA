@@ -2219,6 +2219,7 @@ async def diagnostico_q1_orquestrador(dias: int = 60):
         from src.dw.connection import SessionLocal, init_db
         from src.agent.intent_spec import IntentSpec
         from src.agent.orquestrador_dw import executar_intent_spec
+        from src.dw.diagnostico_db import get_q1_contagem
         
         if SessionLocal is None:
             init_db()
@@ -2226,6 +2227,10 @@ async def diagnostico_q1_orquestrador(dias: int = 60):
         session = SessionLocal()
         
         try:
+            # Primeiro, executa Q1 diretamente para comparação
+            resultado_direto = get_q1_contagem(session, dias=dias)
+            total_direto = resultado_direto.get("total_clientes_q1", 0)
+            
             # Cria IntentSpec para Q1 (mesmo que o /ask faria)
             intent_spec = IntentSpec(
                 tipo="clientes_sem_compra",
@@ -2249,11 +2254,37 @@ async def diagnostico_q1_orquestrador(dias: int = 60):
             cliente_ids = [r.get("cliente_id") for r in dados if isinstance(r, dict)]
             clientes_unicos = len(set(cliente_ids))
             
+            # Classifica por faixas (mesmo que o endpoint direto)
+            faixas_q1 = {
+                "faixa_61_120": 0,
+                "faixa_121_180": 0,
+                "faixa_181_300": 0,
+                "faixa_maior_300": 0
+            }
+            
+            for cliente in dados:
+                if isinstance(cliente, dict):
+                    dias_sem_compra = cliente.get("dias_sem_compra")
+                    if dias_sem_compra is None:
+                        continue
+                    
+                    if 61 <= dias_sem_compra <= 120:
+                        faixas_q1["faixa_61_120"] += 1
+                    elif 121 <= dias_sem_compra <= 180:
+                        faixas_q1["faixa_121_180"] += 1
+                    elif 181 <= dias_sem_compra <= 300:
+                        faixas_q1["faixa_181_300"] += 1
+                    elif dias_sem_compra > 300:
+                        faixas_q1["faixa_maior_300"] += 1
+            
             resultado = {
+                "total_direto": total_direto,  # Para comparação
                 "total_orquestrador": total_orquestrador,
                 "clientes_unicos": clientes_unicos,
                 "duplicatas": total_orquestrador != clientes_unicos,
+                "consistente": total_orquestrador == total_direto and total_orquestrador == clientes_unicos,
                 "status": resultado_orquestrador.get("status"),
+                "faixas_q1": faixas_q1,
                 "dias_filtro": dias,
                 "amostra_ids": cliente_ids[:10],
                 "timestamp": datetime.utcnow().isoformat()

@@ -702,24 +702,28 @@ def executar_intent_spec(
             
             resultado = funcao_dw(session, **kwargs)
             
-            # ✅ LOG CRÍTICO: Para Q1, loga quantidade de registros retornados
+            # ✅ LOG CRÍTICO: Para Q1, loga quantidade de registros retornados pela função DW
             if intent_spec.tipo == "clientes_sem_compra":
                 if isinstance(resultado, list):
                     logger.info(
-                        f"[orquestrador_dw] ✅ Q1 executada: {len(resultado)} registros retornados pela função DW"
+                        f"[Q1_ORQ] Resultado DW bruto - registros: {len(resultado)}"
                     )
                     # Verifica duplicatas
                     cliente_ids = [r.get("cliente_id") for r in resultado if isinstance(r, dict)]
                     clientes_unicos = len(set(cliente_ids))
                     if len(cliente_ids) != clientes_unicos:
-                        logger.warning(
-                            f"[orquestrador_dw] ⚠️  Q1: {len(cliente_ids)} registros vs {clientes_unicos} clientes únicos "
-                            f"(duplicatas detectadas!)"
+                        logger.error(
+                            f"[Q1_ORQ] ❌ ERRO: Função DW retornou {len(cliente_ids)} registros mas "
+                            f"apenas {clientes_unicos} clientes únicos (duplicatas na query!)"
                         )
                     else:
                         logger.info(
-                            f"[orquestrador_dw] ✅ Q1: {clientes_unicos} clientes únicos (sem duplicatas)"
+                            f"[Q1_ORQ] ✅ Função DW: {clientes_unicos} clientes únicos (sem duplicatas)"
                         )
+                else:
+                    logger.warning(
+                        f"[Q1_ORQ] ⚠️  Função DW retornou tipo inesperado: {type(resultado)}"
+                    )
         
         logger.info(f"[orquestrador_dw] Função DW executada com sucesso, resultado: {type(resultado)}")
         
@@ -737,24 +741,66 @@ def executar_intent_spec(
         }
     
     # PASSO 5: Normaliza resultado
-    dados_normalizados = _normalizar_resultado_dw(resultado)
+    # ✅ CORREÇÃO CRÍTICA Q1: Para Q1, NÃO permite que normalização altere cardinalidade
+    if intent_spec.tipo == "clientes_sem_compra":
+        # Para Q1, resultado já vem como lista de dicts, não precisa normalizar
+        # A query Q1 já garante 1 linha por cliente (GROUP BY cliente_id)
+        if isinstance(resultado, list):
+            dados_normalizados = resultado
+            logger.info(
+                f"[Q1_ORQ] Resultado DW bruto - registros: {len(dados_normalizados)}"
+            )
+            # Validação defensiva: garante que não há duplicatas
+            cliente_ids = [r.get("cliente_id") for r in dados_normalizados if isinstance(r, dict)]
+            clientes_unicos = len(set(cliente_ids))
+            if len(cliente_ids) != clientes_unicos:
+                logger.error(
+                    f"[Q1_ORQ] ❌ ERRO CRÍTICO: Query retornou {len(cliente_ids)} registros mas "
+                    f"apenas {clientes_unicos} clientes únicos. Isso não deveria acontecer!"
+                )
+                # Remove duplicatas mantendo a primeira ocorrência
+                visto = set()
+                dados_normalizados = []
+                for r in resultado:
+                    if isinstance(r, dict):
+                        cliente_id = r.get("cliente_id")
+                        if cliente_id not in visto:
+                            visto.add(cliente_id)
+                            dados_normalizados.append(r)
+                logger.warning(
+                    f"[Q1_ORQ] Duplicatas removidas: {len(resultado)} -> {len(dados_normalizados)}"
+                )
+            else:
+                logger.info(
+                    f"[Q1_ORQ] ✅ Q1: {clientes_unicos} clientes únicos (sem duplicatas)"
+                )
+        else:
+            # Fallback: normaliza se não for lista
+            dados_normalizados = _normalizar_resultado_dw(resultado)
+            logger.warning(
+                f"[Q1_ORQ] ⚠️  Q1 retornou tipo inesperado: {type(resultado)}, normalizado para {len(dados_normalizados)} registros"
+            )
+    else:
+        # Para outros tipos, usa normalização padrão
+        dados_normalizados = _normalizar_resultado_dw(resultado)
     
     # ✅ LOG CRÍTICO: Para Q1, loga quantidade após normalização
     if intent_spec.tipo == "clientes_sem_compra":
         logger.info(
-            f"[orquestrador_dw] ✅ Q1 após normalização: {len(dados_normalizados)} registros"
+            f"[Q1_ORQ] Resultado após normalização - registros: {len(dados_normalizados)}"
         )
-        # Verifica duplicatas após normalização
-        cliente_ids_norm = [r.get("cliente_id") for r in dados_normalizados if isinstance(r, dict)]
-        clientes_unicos_norm = len(set(cliente_ids_norm))
-        if len(cliente_ids_norm) != clientes_unicos_norm:
-            logger.warning(
-                f"[orquestrador_dw] ⚠️  Q1 após normalização: {len(cliente_ids_norm)} registros vs "
-                f"{clientes_unicos_norm} clientes únicos (duplicatas detectadas!)"
+        # Validação final: garante que cardinalidade não mudou
+        cliente_ids_final = [r.get("cliente_id") for r in dados_normalizados if isinstance(r, dict)]
+        clientes_unicos_final = len(set(cliente_ids_final))
+        if len(cliente_ids_final) != clientes_unicos_final:
+            logger.error(
+                f"[Q1_ORQ] ❌ ERRO: Normalização alterou cardinalidade! "
+                f"{len(cliente_ids_final)} registros vs {clientes_unicos_final} clientes únicos"
             )
     
     # Se resultado for dict com estrutura especial (ex.: kpis_mes), extrai dados
-    if isinstance(resultado, dict):
+    # ✅ CORREÇÃO: Para Q1, NÃO processa essa lógica (já normalizado acima)
+    if intent_spec.tipo != "clientes_sem_compra" and isinstance(resultado, dict):
         # Se tiver "linhas_detalhadas" ou "metas_por_mes", usa isso
         if "linhas_detalhadas" in resultado:
             dados_normalizados = _normalizar_resultado_dw(resultado["linhas_detalhadas"])
