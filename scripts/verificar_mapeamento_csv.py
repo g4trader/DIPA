@@ -79,3 +79,4 @@ if 'Nome RCA' in df.columns:
     if len(df_com_rota) > 0:
         print(df_com_rota[['Código', 'Fantasia', 'Vendedor 1', 'Nome RCA']].head(5).to_string())
 
+

@@ -17,12 +17,20 @@ from dateutil.relativedelta import relativedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, case, desc, asc, text, extract, cast, String, select
 import logging
+import time
 
 from src.dw.models import (
     Cliente, Vendedor, Supervisor, Venda,
     MetaVendedor, MetaDepartamento, DimProduto
 )
 from src.config import config
+
+# Importa módulos de performance
+from src.core.logging_config import log_query_execution
+from src.core.performance_guard import performance_guard
+from src.core.cache_layer import query_cache
+from src.core.profiler import profile_query
+from src.core.metrics import record_query_metric
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +74,15 @@ def _current_date(session: Session):
 # Q1: CLIENTES SEM COMPRA HÁ DIAS
 # ============================================================================
 
+@performance_guard(timeout_seconds=12.0)
+@query_cache(ttl_seconds=300, query_id="Q1")
+@profile_query("Q1")
 def get_clientes_sem_compra_ha_dias(
     session: Session,
     dias: int = 60,
     data_referencia: Optional[str] = None,
-    filtros_behavior: Optional[Dict[str, Any]] = None
+    filtros_behavior: Optional[Dict[str, Any]] = None,
+    query_id: str = "Q1"
 ) -> List[Dict[str, Any]]:
     """
     Retorna clientes ativos sem compras por mais de N dias.
@@ -128,14 +140,16 @@ def get_clientes_sem_compra_ha_dias(
     # - JOIN com Vendedor e Supervisor para trazer nomes
     # ✅ CORREÇÃO: JOIN melhorado - usa vendedor_id se disponível, senão usa rota_rca
     # ✅ CORREÇÃO: Supervisor pode vir do Cliente ou do Vendedor (prioriza do Cliente)
+    # ✅ CORREÇÃO Q1: Usar ROW_NUMBER() para garantir apenas 1 linha por cliente
     from sqlalchemy.orm import aliased
     SupervisorViaVendedor = aliased(Supervisor, name='supervisor_via_vendedor')
     
-    query = (
+    # CTE base com todos os dados (pode ter duplicatas devido aos JOINs)
+    base_query = (
         session.query(
             Cliente.id.label('cliente_id'),
             Cliente.nome,
-            Cliente.segmento_venda.label('segmento'),  # Equivalente a c.segmento do blueprint
+            Cliente.segmento_venda.label('segmento'),
             Cliente.rota_rca.label('rota_id'),
             Vendedor.nome.label('vendedor_nome'),
             Vendedor.codigo.label('vendedor_codigo'),
@@ -152,9 +166,10 @@ def get_clientes_sem_compra_ha_dias(
             dias_sem_compra_expr.label('dias_sem_compra')
         )
         .outerjoin(ultima_compra_subq, Cliente.id == ultima_compra_subq.c.cliente_id)
-        # ✅ CORREÇÃO: JOIN com Vendedor usando apenas rota_rca
-        # Nota: vendedor_id pode não existir no banco ainda, então usamos apenas rota_rca
-        .outerjoin(Vendedor, Cliente.rota_rca == Vendedor.codigo)
+        # ✅ CORREÇÃO: JOIN com Vendedor usando rota_rca
+        # Após ETL corrigido: Vendedor.codigo = código numérico, Vendedor.nome = rota
+        # Cliente.rota_rca = rota (ex.: "ROTA 301"), então JOIN por Vendedor.nome
+        .outerjoin(Vendedor, Cliente.rota_rca == Vendedor.nome)
         # Supervisor do Cliente (prioridade)
         .outerjoin(Supervisor, Cliente.supervisor_id == Supervisor.id)
         # Supervisor do Vendedor (fallback se Cliente não tiver supervisor)
@@ -162,24 +177,27 @@ def get_clientes_sem_compra_ha_dias(
             SupervisorViaVendedor,
             Vendedor.supervisor_id == SupervisorViaVendedor.id
         )
-        .filter(Cliente.ativo == True)  # c.ativo = 1 conforme blueprint
+        .filter(Cliente.ativo == True)  # ✅ OBRIGATÓRIO: Apenas clientes ATIVOS
     )
     
-    # Aplica filtros do Behavior Memory
+    # ✅ CORREÇÃO CRÍTICA: Garantir que o filtro de ativo está aplicado ANTES de qualquer processamento
+    # O filtro acima já está correto, mas vamos garantir que não seja removido acidentalmente
+    
+    # Aplica filtros do Behavior Memory ANTES do ROW_NUMBER
     if filtros_behavior:
         if "excluir_pastas" in filtros_behavior:
             pastas_excluir = filtros_behavior["excluir_pastas"]
             if isinstance(pastas_excluir, list) and pastas_excluir:
                 # Join com supervisor para filtrar por pasta
-                query = query.join(Supervisor, Cliente.supervisor_id == Supervisor.id)
-                query = query.filter(~Supervisor.pasta.in_(pastas_excluir))
+                base_query = base_query.join(Supervisor, Cliente.supervisor_id == Supervisor.id)
+                base_query = base_query.filter(~Supervisor.pasta.in_(pastas_excluir))
         
         if "excluir_segmentos" in filtros_behavior:
             segmentos_excluir = filtros_behavior["excluir_segmentos"]
             if isinstance(segmentos_excluir, list) and segmentos_excluir:
-                query = query.filter(~Cliente.segmento_venda.in_(segmentos_excluir))
+                base_query = base_query.filter(~Cliente.segmento_venda.in_(segmentos_excluir))
     
-    # Filtra por dias sem compra
+    # Filtra por dias sem compra ANTES do ROW_NUMBER
     # IMPORTANTE: "mais de 60 dias" significa >= 61 dias (não pode trazer 0 dias)
     # Se dias = 60, então filtro deve ser >= 61
     dias_minimo = dias + 1  # "mais de 60 dias" = >= 61 dias
@@ -191,7 +209,7 @@ def get_clientes_sem_compra_ha_dias(
     
     # Filtra apenas clientes com >= 61 dias sem compra
     # IMPORTANTE: Não inclui clientes com 0 dias ou None (só inclui se realmente >= 61 dias)
-    query = query.filter(
+    base_query = base_query.filter(
         and_(
             # Deve ter última compra registrada (não None) para calcular dias corretamente
             ultima_compra_subq.c.data_ultima_compra.isnot(None),
@@ -200,16 +218,80 @@ def get_clientes_sem_compra_ha_dias(
         )
     )
     
-    # Ordena por dias sem compra (crescente - menor primeiro, conforme pedido)
-    query = query.order_by(asc('dias_sem_compra'))
+    # Cria CTE com ROW_NUMBER() para eliminar duplicatas
+    # ROW_NUMBER() OVER(PARTITION BY cliente_id ORDER BY data_ultima_compra DESC NULLS LAST)
+    base_cte = base_query.cte(name='base_clientes')
     
-    resultados = query.all()
+    # Query final com ROW_NUMBER() e filtro rn = 1
+    # SQLite e PostgreSQL suportam window functions
+    if config.database.db_type == "sqlite":
+        # SQLite suporta ROW_NUMBER() desde versão 3.25+
+        query = (
+            session.query(
+                base_cte.c.cliente_id,
+                base_cte.c.nome,
+                base_cte.c.segmento,
+                base_cte.c.rota_id,
+                base_cte.c.vendedor_nome,
+                base_cte.c.vendedor_codigo,
+                base_cte.c.supervisor_nome,
+                base_cte.c.supervisor_codigo,
+                base_cte.c.data_ultima_compra,
+                base_cte.c.dias_sem_compra,
+                func.row_number().over(
+                    partition_by=base_cte.c.cliente_id,
+                    order_by=desc(base_cte.c.data_ultima_compra).nullslast()
+                ).label('rn')
+            )
+            .select_from(base_cte)
+        )
+    else:  # PostgreSQL
+        query = (
+            session.query(
+                base_cte.c.cliente_id,
+                base_cte.c.nome,
+                base_cte.c.segmento,
+                base_cte.c.rota_id,
+                base_cte.c.vendedor_nome,
+                base_cte.c.vendedor_codigo,
+                base_cte.c.supervisor_nome,
+                base_cte.c.supervisor_codigo,
+                base_cte.c.data_ultima_compra,
+                base_cte.c.dias_sem_compra,
+                func.row_number().over(
+                    partition_by=base_cte.c.cliente_id,
+                    order_by=desc(base_cte.c.data_ultima_compra).nullslast()
+                ).label('rn')
+            )
+            .select_from(base_cte)
+        )
     
-    # Log para debug
-    logger.info(f"[get_clientes_sem_compra_ha_dias] Query retornou {len(resultados)} resultados")
-    if resultados:
-        primeiro = resultados[0]
-        logger.debug(f"[get_clientes_sem_compra_ha_dias] Primeiro resultado: rota_rca={primeiro.rota_id}, vendedor_nome={primeiro.vendedor_nome}, vendedor_codigo={primeiro.vendedor_codigo}, supervisor_nome={primeiro.supervisor_nome}")
+    # Cria CTE final com ROW_NUMBER
+    ranked_cte = query.cte(name='ranked_clientes')
+    
+    # Query final: filtra apenas rn = 1 e ordena
+    query = (
+        session.query(
+            ranked_cte.c.cliente_id,
+            ranked_cte.c.nome,
+            ranked_cte.c.segmento,
+            ranked_cte.c.rota_id,
+            ranked_cte.c.vendedor_nome,
+            ranked_cte.c.vendedor_codigo,
+            ranked_cte.c.supervisor_nome,
+            ranked_cte.c.supervisor_codigo,
+            ranked_cte.c.data_ultima_compra,
+            ranked_cte.c.dias_sem_compra
+        )
+        .select_from(ranked_cte)
+        .filter(ranked_cte.c.rn == 1)
+        .order_by(asc(ranked_cte.c.dias_sem_compra))
+    )
+    
+    # Usa yield_per para otimizar memória
+    resultados = list(query.yield_per(500))
+    
+    start_time = time.time()
     
     # Converte para list[dict] e filtra para garantir >= 61 dias
     # IMPORTANTE: Filtro adicional para garantir que nenhum cliente com 0 dias seja retornado
@@ -220,8 +302,9 @@ def get_clientes_sem_compra_ha_dias(
         # Só inclui se dias_sem_compra >= 61 (não inclui 0, None ou < 61)
         if dias_sem_compra is not None and dias_sem_compra >= dias_minimo:
             # ✅ CORREÇÃO: Melhorar fallback para vendedor e supervisor
-            vendedor_nome = row.vendedor_nome if row.vendedor_nome else (row.vendedor_codigo if row.vendedor_codigo else (row.rota_id if row.rota_id else ""))
-            vendedor_codigo = row.vendedor_codigo if row.vendedor_codigo else (row.rota_id if row.rota_id else "")
+            # Após ETL corrigido: vendedor_nome = rota (ex.: "ROTA 301"), vendedor_codigo = código numérico
+            vendedor_nome = row.vendedor_nome if row.vendedor_nome else (row.rota_id if row.rota_id else "")
+            vendedor_codigo = row.vendedor_codigo if row.vendedor_codigo else ""
             supervisor_nome = row.supervisor_nome if row.supervisor_nome else (row.supervisor_codigo if row.supervisor_codigo else "")
             supervisor_codigo = row.supervisor_codigo if row.supervisor_codigo else ""
             
@@ -237,6 +320,21 @@ def get_clientes_sem_compra_ha_dias(
                 "data_ultima_compra": row.data_ultima_compra.isoformat() if row.data_ultima_compra else None,
                 "dias_sem_compra": dias_sem_compra
             })
+    
+    duration_ms = (time.time() - start_time) * 1000
+    
+    # Log estruturado
+    log_query_execution(
+        query_id=query_id,
+        duration_ms=duration_ms,
+        records=len(clientes_filtrados),
+        response_size_bytes=len(clientes_filtrados) * 200,  # Estimativa
+        status="success",
+        function_name="get_clientes_sem_compra_ha_dias"
+    )
+    
+    # Registra métrica
+    record_query_metric(query_id, duration_ms, len(clientes_filtrados))
     
     logger.info(f"[get_clientes_sem_compra_ha_dias] Retornando {len(clientes_filtrados)} clientes filtrados (>= {dias_minimo} dias)")
     
@@ -400,9 +498,11 @@ def get_clientes_queda_faturamento_ano_contra_ano(
     # Ordena por maior queda (delta negativo)
     query = query.order_by(asc('delta_faturamento')).limit(top_n)
     
-    resultados = query.all()
+    # Usa yield_per para otimizar memória
+    resultados = list(query.yield_per(500))
     
-    return [
+    start_time = time.time()
+    result_list = [
         {
             "cliente_id": row.cliente_id,
             "nome": row.nome or "",
@@ -419,12 +519,16 @@ def get_clientes_queda_faturamento_ano_contra_ano(
 # Q3: INDÚSTRIAS COM MAIS VENDEDORES FORA DA META
 # ============================================================================
 
+@performance_guard(timeout_seconds=12.0)
+@query_cache(ttl_seconds=300, query_id="Q3")
+@profile_query("Q3")
 def get_industrias_com_mais_vendedores_fora_meta(
     session: Session,
     ano: int,
     mes: int,
     atingimento_limite: float = 100.0,
-    filtros_behavior: Optional[Dict[str, Any]] = None
+    filtros_behavior: Optional[Dict[str, Any]] = None,
+    query_id: str = "Q3"
 ) -> List[Dict[str, Any]]:
     """
     Retorna indústrias com mais vendedores fora da meta.
@@ -476,27 +580,50 @@ def get_industrias_com_mais_vendedores_fora_meta(
     
     query = query.order_by(desc('qtd_vendedores_fora_meta'))
     
-    resultados = query.all()
+    # Usa yield_per para otimizar memória
+    resultados = list(query.yield_per(500))
     
-    return [
+    start_time = time.time()
+    result_list = [
         {
             "industria": row.industria or "",
             "qtd_vendedores_fora_meta": int(row.qtd_vendedores_fora_meta) if row.qtd_vendedores_fora_meta else 0
         }
         for row in resultados
     ]
+    
+    duration_ms = (time.time() - start_time) * 1000
+    
+    # Log estruturado
+    log_query_execution(
+        query_id=query_id,
+        duration_ms=duration_ms,
+        records=len(result_list),
+        response_size_bytes=len(result_list) * 150,
+        status="success",
+        function_name="get_industrias_com_mais_vendedores_fora_meta"
+    )
+    
+    # Registra métrica
+    record_query_metric(query_id, duration_ms, len(result_list))
+    
+    return result_list
 
 
 # ============================================================================
 # Q4: ROTAS COM POSITIVAÇÃO DE INDÚSTRIA
 # ============================================================================
 
+@performance_guard(timeout_seconds=12.0)
+@query_cache(ttl_seconds=300, query_id="Q4")
+@profile_query("Q4")
 def get_rotas_positivacao_industria(
     session: Session,
     industria: str,
     data_inicio: str,
     data_fim: str,
-    filtros_behavior: Optional[Dict[str, Any]] = None
+    filtros_behavior: Optional[Dict[str, Any]] = None,
+    query_id: str = "Q4"
 ) -> List[Dict[str, Any]]:
     """
     Retorna rotas com melhor/pior desempenho em positivação de clientes de uma indústria.
@@ -574,10 +701,11 @@ def get_rotas_positivacao_industria(
             if isinstance(rotas_excluir, list) and rotas_excluir:
                 query = query.filter(~clientes_ativos_subq.c.rota_id.in_(rotas_excluir))
     
-    resultados = query.all()
+    # Usa yield_per para otimizar memória
+    resultados = list(query.yield_per(500))
     
-    # Calcula percentual de positivação
-    return [
+    start_time = time.time()
+    result_list = [
         {
             "rota_id": row.rota_id or "",
             "total_clientes_ativos": int(row.total_clientes_ativos) if row.total_clientes_ativos else 0,
@@ -590,18 +718,39 @@ def get_rotas_positivacao_industria(
         }
         for row in resultados
     ]
+    
+    duration_ms = (time.time() - start_time) * 1000
+    
+    # Log estruturado
+    log_query_execution(
+        query_id=query_id,
+        duration_ms=duration_ms,
+        records=len(result_list),
+        response_size_bytes=len(result_list) * 180,
+        status="success",
+        function_name="get_rotas_positivacao_industria"
+    )
+    
+    # Registra métrica
+    record_query_metric(query_id, duration_ms, len(result_list))
+    
+    return result_list
 
 
 # ============================================================================
 # Q5: ITENS COM BAIXA MÉDIA MENSAL
 # ============================================================================
 
+@performance_guard(timeout_seconds=12.0)
+@query_cache(ttl_seconds=300, query_id="Q5")
+@profile_query("Q5")
 def get_itens_baixa_media_mensal(
     session: Session,
     meses_janela: int = 12,
     limite_media: float = 10.0,
     data_referencia: Optional[str] = None,
-    filtros_behavior: Optional[Dict[str, Any]] = None
+    filtros_behavior: Optional[Dict[str, Any]] = None,
+    query_id: str = "Q5"
 ) -> List[Dict[str, Any]]:
     """
     Retorna itens com média de vendas mensal menor que o limite.

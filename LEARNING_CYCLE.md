@@ -218,3 +218,4 @@ scripts/
 - Todas as mudanças são **internas** ao agente
 
 
+

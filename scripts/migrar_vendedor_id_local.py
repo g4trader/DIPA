@@ -170,3 +170,4 @@ def migrar_vendedor_id_local():
 if __name__ == "__main__":
     migrar_vendedor_id_local()
 
+

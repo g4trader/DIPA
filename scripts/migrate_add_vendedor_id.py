@@ -149,3 +149,4 @@ def migrate_add_vendedor_id():
 if __name__ == "__main__":
     migrate_add_vendedor_id()
 
+

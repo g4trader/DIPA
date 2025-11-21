@@ -14,6 +14,93 @@ from src.agent.intent_spec import IntentSpec
 logger = logging.getLogger(__name__)
 
 
+def _calcular_confianca_q1(dados_dw: Dict[str, Any], resposta_handler: Dict[str, Any]) -> float:
+    """
+    Calcula confiança para Q1 baseada em critérios reais.
+    
+    Critérios:
+    (a) % de clientes ativos sem vendedor faltante
+    (b) presença de supervisão
+    (c) coerência estatística das faixas
+    (d) ausência de inconsistências no DW
+    
+    Args:
+        dados_dw: Dados do DW
+        resposta_handler: Resposta do handler
+        
+    Returns:
+        float: Confiança entre 0.0 e 1.0
+    """
+    confianca_base = 0.5
+    
+    dados = dados_dw.get("dados", [])
+    if not dados or len(dados) == 0:
+        return 0.3  # Sem dados, confiança baixa
+    
+    total = len(dados)
+    
+    # (a) % de clientes com vendedor
+    clientes_com_vendedor = sum(
+        1 for c in dados 
+        if c.get("vendedor_nome") or c.get("vendedor_codigo") or c.get("rota_id")
+    )
+    percentual_vendedor = (clientes_com_vendedor / total * 100) if total > 0 else 0
+    
+    if percentual_vendedor >= 95:
+        confianca_base += 0.2
+    elif percentual_vendedor >= 85:
+        confianca_base += 0.15
+    elif percentual_vendedor >= 70:
+        confianca_base += 0.1
+    # Se < 70%, não adiciona pontos
+    
+    # (b) Presença de supervisão
+    clientes_com_supervisor = sum(
+        1 for c in dados 
+        if c.get("supervisor_nome") or c.get("supervisor_codigo")
+    )
+    percentual_supervisor = (clientes_com_supervisor / total * 100) if total > 0 else 0
+    
+    if percentual_supervisor >= 90:
+        confianca_base += 0.15
+    elif percentual_supervisor >= 70:
+        confianca_base += 0.1
+    elif percentual_supervisor >= 50:
+        confianca_base += 0.05
+    # Se < 50%, não adiciona pontos
+    
+    # (c) Coerência estatística das faixas
+    # Verifica se há classificação_faixas nos dados
+    classificacao_faixas = dados_dw.get("classificacao_faixas")
+    if classificacao_faixas:
+        total_faixas = (
+            classificacao_faixas.get("faixa_61_120", 0) +
+            classificacao_faixas.get("faixa_121_180", 0) +
+            classificacao_faixas.get("faixa_181_300", 0) +
+            classificacao_faixas.get("faixa_mais_300", 0)
+        )
+        # Se a soma das faixas bate com o total, há coerência
+        if abs(total_faixas - total) <= 5:  # Tolerância de 5 clientes
+            confianca_base += 0.1
+    
+    # (d) Ausência de inconsistências
+    # Verifica se há clientes com dias_sem_compra None ou inválido
+    clientes_inconsistentes = sum(
+        1 for c in dados 
+        if c.get("dias_sem_compra") is None or c.get("dias_sem_compra", 0) < 0
+    )
+    percentual_inconsistente = (clientes_inconsistentes / total * 100) if total > 0 else 0
+    
+    if percentual_inconsistente == 0:
+        confianca_base += 0.05
+    elif percentual_inconsistente <= 2:
+        confianca_base += 0.02
+    # Se > 2%, não adiciona pontos (ou pode subtrair)
+    
+    # Limita entre 0.0 e 1.0
+    return min(1.0, max(0.0, confianca_base))
+
+
 def map_handler_refatorado_to_ask_response(
     resposta_handler: Dict[str, Any],
     pergunta: str
@@ -38,6 +125,16 @@ def map_handler_refatorado_to_ask_response(
         intent = intent_spec.tipo
         intent_label = _map_intent_to_label(intent_spec.tipo)
         confianca = getattr(intent_spec, 'confianca', 0.7)
+        
+        # ✅ NOVO: Para Q1, calcula confiança baseada em critérios reais
+        if intent == "clientes_sem_compra":
+            dados_dw = resposta_handler.get("dados_dw", {})
+            confianca_calculada = _calcular_confianca_q1(dados_dw, resposta_handler)
+            logger.info(
+                f"[map_handler_refatorado_to_ask_response] Q1 - Confiança calculada: {confianca_calculada:.2f} "
+                f"(base: {getattr(intent_spec, 'confianca', 0.7):.2f})"
+            )
+            confianca = confianca_calculada
     
     # Resumo executivo
     resumo_executivo = resposta_handler.get("resumo_executivo", "")

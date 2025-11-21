@@ -24,7 +24,133 @@ call_openai_llm = call_llm
 OpenAIError = LLMError
 from src.agent.intent_spec import IntentSpec
 
+# Importa GROQ Guard para proteção contra limites
+try:
+    from src.api.groq_client import (
+        call_groq_model,
+        GroqContentTooLongError,
+        GroqError,
+        truncate_prompt
+    )
+    GROQ_GUARD_AVAILABLE = True
+except ImportError:
+    GROQ_GUARD_AVAILABLE = False
+    logger.warning("GROQ Guard não disponível. Usando cliente LLM padrão.")
+    
+    # Define função de fallback para truncate_prompt
+    def truncate_prompt(prompt: str, max_chars: int = 8000) -> str:
+        """Fallback simples de truncamento se GROQ Guard não estiver disponível."""
+        if len(prompt) <= max_chars:
+            return prompt
+        return prompt[:max_chars - 20] + "[CONTEXTO TRUNCADO]"
+
 logger = logging.getLogger(__name__)
+
+
+def _classificar_clientes_por_faixa(dados: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Classifica clientes por faixa de dias sem compra.
+    
+    Retorna estatísticas por faixa:
+    - total: Total de clientes
+    - faixa_61_120: Clientes com 61-120 dias sem compra (Prioridade 1)
+    - faixa_121_180: Clientes com 121-180 dias sem compra (Prioridade 2)
+    - faixa_181_300: Clientes com 181-300 dias sem compra (Prioridade 3)
+    - faixa_mais_300: Clientes com mais de 300 dias sem compra (não priorizar)
+    
+    Args:
+        dados: Lista de clientes com campo 'dias_sem_compra'
+        
+    Returns:
+        Dict com contagens por faixa e percentuais
+    """
+    if not dados:
+        return {
+            "total": 0,
+            "faixa_61_120": 0,
+            "faixa_121_180": 0,
+            "faixa_181_300": 0,
+            "faixa_mais_300": 0,
+            "percentual_61_120": 0.0,
+            "percentual_121_180": 0.0,
+            "percentual_181_300": 0.0,
+            "percentual_mais_300": 0.0,
+        }
+    
+    total = len(dados)
+    faixa_61_120 = 0
+    faixa_121_180 = 0
+    faixa_181_300 = 0
+    faixa_mais_300 = 0
+    
+    for cliente in dados:
+        dias = cliente.get("dias_sem_compra")
+        if dias is None:
+            continue
+        
+        if 61 <= dias <= 120:
+            faixa_61_120 += 1
+        elif 121 <= dias <= 180:
+            faixa_121_180 += 1
+        elif 181 <= dias <= 300:
+            faixa_181_300 += 1
+        elif dias > 300:
+            faixa_mais_300 += 1
+    
+    return {
+        "total": total,
+        "faixa_61_120": faixa_61_120,
+        "faixa_121_180": faixa_121_180,
+        "faixa_181_300": faixa_181_300,
+        "faixa_mais_300": faixa_mais_300,
+        "percentual_61_120": (faixa_61_120 / total * 100) if total > 0 else 0.0,
+        "percentual_121_180": (faixa_121_180 / total * 100) if total > 0 else 0.0,
+        "percentual_181_300": (faixa_181_300 / total * 100) if total > 0 else 0.0,
+        "percentual_mais_300": (faixa_mais_300 / total * 100) if total > 0 else 0.0,
+    }
+
+
+def _condensar_dados_dw(dados_dw: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Condensa dados_dw para evitar exceder limite do GROQ.
+    
+    Remove tabelas completas e mantém apenas:
+    - Metadados (tem_dados, total_registros, etc.)
+    - Top N registros (ex.: top 20)
+    - KPIs principais
+    
+    Args:
+        dados_dw: Dados completos do DW
+        
+    Returns:
+        Dados condensados
+    """
+    if not isinstance(dados_dw, dict):
+        return dados_dw
+    
+    dados_condensados = {}
+    
+    # Copia metadados
+    for key in ["tem_dados", "total_registros", "periodo_analisado", "erro"]:
+        if key in dados_dw:
+            dados_condensados[key] = dados_dw[key]
+    
+    # Condensa lista de dados (mantém apenas top 20)
+    if "dados" in dados_dw and isinstance(dados_dw["dados"], list):
+        dados_lista = dados_dw["dados"]
+        if len(dados_lista) > 20:
+            dados_condensados["dados"] = dados_lista[:20]
+            dados_condensados["total_registros"] = len(dados_lista)
+            dados_condensados["_nota"] = f"[Apenas top 20 de {len(dados_lista)} registros mostrados]"
+        else:
+            dados_condensados["dados"] = dados_lista
+    
+    # Copia outros campos importantes (KPIs, resumos, etc.)
+    for key in ["kpis", "resumo", "total_clientes", "total_vendedores", "meta_total", "realizado_total"]:
+        if key in dados_dw:
+            dados_condensados[key] = dados_dw[key]
+    
+    return dados_condensados
 
 
 def gerar_intent_spec_via_llm(pergunta: str, papel: Optional[str] = None) -> IntentSpec:
@@ -139,7 +265,25 @@ NUNCA classifique consultas envolvendo positivação em P12 como "clientes_sem_i
 Retorne APENAS o JSON, sem explicações adicionais."""
 
     try:
-        resposta_llm = call_openai_llm(prompt, system_prompt=system_prompt)
+        # ✅ CORREÇÃO: Usa GROQ Guard se disponível, senão usa cliente padrão
+        if GROQ_GUARD_AVAILABLE:
+            try:
+                resposta_llm = call_groq_model(
+                    prompt=prompt,
+                    system=system_prompt,
+                    max_tokens=1024,
+                    contexto="ask",
+                    temperature=0.3,
+                )
+            except (GroqContentTooLongError, GroqError) as e:
+                logger.warning(f"GROQ falhou, usando cliente padrão: {str(e)}")
+                # Fallback: usa cliente padrão com prompt truncado
+                prompt_truncated = truncate_prompt(prompt, max_chars=8000)
+                resposta_llm = call_openai_llm(prompt_truncated, system_prompt=system_prompt)
+        else:
+            # Trunca prompt antes de enviar
+            prompt_truncated = truncate_prompt(prompt, max_chars=8000)
+            resposta_llm = call_openai_llm(prompt_truncated, system_prompt=system_prompt)
         
         # Limpa a resposta (remove markdown code blocks se houver)
         resposta_limpa = resposta_llm.strip()
@@ -231,11 +375,29 @@ def gerar_resposta_executiva_com_dados_dw(
         "fim": intent_spec.periodo_fim
     }
     
-    # Prepara contexto completo para o LLM
+    # ✅ CORREÇÃO: Condensa dados_dw antes de enviar para GROQ
+    # Não envia tabelas completas, apenas resumo e top N registros
+    dados_dw_condensado = _condensar_dados_dw(dados_dw)
+    
+    # ✅ NOVO: Para Q1, adiciona classificação por faixas
+    if intent_spec.tipo == "clientes_sem_compra":
+        dados_lista = dados_dw_condensado.get("dados", [])
+        if isinstance(dados_lista, list) and len(dados_lista) > 0:
+            classificacao_faixas = _classificar_clientes_por_faixa(dados_lista)
+            dados_dw_condensado["classificacao_faixas"] = classificacao_faixas
+            logger.info(
+                f"[gerar_resposta_executiva_com_dados_dw] Q1 - Classificação por faixas: "
+                f"61-120: {classificacao_faixas['faixa_61_120']}, "
+                f"121-180: {classificacao_faixas['faixa_121_180']}, "
+                f"181-300: {classificacao_faixas['faixa_181_300']}, "
+                f">300: {classificacao_faixas['faixa_mais_300']}"
+            )
+    
+    # Prepara contexto completo para o LLM (condensado)
     contexto_completo = {
         "pergunta": pergunta,
         "intent_spec": intent_spec.to_dict(),
-        "dados_dw": dados_dw,
+        "dados_dw": dados_dw_condensado,
         "periodo_analisado": periodo_analisado,
         "regras_aplicadas": regras_aplicadas or {},
         "analise_causas": analise_causas or {},
@@ -249,8 +411,8 @@ PERGUNTA: {pergunta}
 INTENT ESPECIFICADO:
 {json.dumps(intent_spec.to_dict(), indent=2, ensure_ascii=False)}
 
-DADOS DO DATA WAREHOUSE DIPAM:
-{json.dumps(dados_dw, indent=2, ensure_ascii=False)}
+DADOS DO DATA WAREHOUSE DIPAM (resumo condensado):
+{json.dumps(dados_dw_condensado, indent=2, ensure_ascii=False)}
 
 PERÍODO ANALISADO:
 {json.dumps(periodo_analisado, indent=2, ensure_ascii=False)}
@@ -272,10 +434,58 @@ INSTRUÇÕES:
 5. Respeite o tipo de intent ({intent_spec.tipo}) e a dimensão principal ({intent_spec.dimensao_principal})
 6. Siga o perfil específico para este tipo de intent conforme definido no system prompt
 
+ESTRUTURA JSON OBRIGATÓRIA:
+{{
+  "resumo_executivo": "string (3-5 linhas para Q1, conforme estrutura executiva)",
+  "tabela_principal": [
+    {{
+      "colunas": ["Cliente ID", "Nome", "Dias sem Compra", "Vendedor", "Supervisor"],
+      "linhas": [[...], [...]]
+    }}
+  ],
+  "insights": ["string", "string"],
+  "diagnostico_comercial": {{
+    "riscos": "string",
+    "oportunidades": "string",
+    "tendencias": "string"
+  }},
+  "recomendacoes_estrategicas": {{
+    "prioridade_1": "string (61-120 dias)",
+    "prioridade_2": "string (121-180 dias)",
+    "nao_priorizar": "string (>300 dias)"
+  }},
+  "impacto_esperado": "string (curto e formal)"
+}}
+
+IMPORTANTE PARA Q1 (clientes_sem_compra):
+- Use a estrutura executiva específica definida no system prompt
+- NUNCA use palavras proibidas: "criticozinho", "movimento", "blitz", "talvez", "pode ser que"
+- SEMPRE priorize clientes 61-120 dias como OPORTUNIDADE principal
+- NUNCA classifique clientes >300 dias como oportunidade
+- Use os dados de "classificacao_faixas" se disponível nos dados_dw
+
 Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações adicionais."""
 
     try:
-        resposta_llm = call_openai_llm(prompt, system_prompt=system_prompt)
+        # ✅ CORREÇÃO: Usa GROQ Guard se disponível, senão usa cliente padrão
+        if GROQ_GUARD_AVAILABLE:
+            try:
+                resposta_llm = call_groq_model(
+                    prompt=prompt,
+                    system=system_prompt,
+                    max_tokens=2048,
+                    contexto="ask",
+                    temperature=0.3,
+                )
+            except (GroqContentTooLongError, GroqError) as e:
+                logger.warning(f"GROQ falhou, usando cliente padrão: {str(e)}")
+                # Fallback: usa cliente padrão com prompt truncado
+                prompt_truncated = truncate_prompt(prompt, max_chars=8000)
+                resposta_llm = call_openai_llm(prompt_truncated, system_prompt=system_prompt)
+        else:
+            # Trunca prompt antes de enviar
+            prompt_truncated = truncate_prompt(prompt, max_chars=8000)
+            resposta_llm = call_openai_llm(prompt_truncated, system_prompt=system_prompt)
         
         # Limpa a resposta (remove markdown code blocks se houver)
         resposta_limpa = resposta_llm.strip()
@@ -302,6 +512,17 @@ Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações a
         if "insights" not in resposta_dict:
             resposta_dict["insights"] = []
         
+        # ✅ NOVO: Para Q1, valida estrutura executiva
+        if intent_spec.tipo == "clientes_sem_compra":
+            # Valida que não há palavras proibidas
+            palavras_proibidas = ["criticozinho", "movimento", "blitz", "talvez", "pode ser que"]
+            texto_completo = json.dumps(resposta_dict, ensure_ascii=False).lower()
+            palavras_encontradas = [p for p in palavras_proibidas if p in texto_completo]
+            if palavras_encontradas:
+                logger.warning(
+                    f"[gerar_resposta_executiva_com_dados_dw] Q1 - Palavras proibidas encontradas: {palavras_encontradas}"
+                )
+        
         logger.info(
             f"[gerar_resposta_executiva_com_dados_dw] Resposta gerada: "
             f"resumo={len(resposta_dict['resumo_executivo'])} chars, "
@@ -315,12 +536,44 @@ Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações a
         logger.error(f"[gerar_resposta_executiva_com_dados_dw] Erro ao parsear JSON: {e}")
         logger.error(f"[gerar_resposta_executiva_com_dados_dw] Resposta LLM: {resposta_llm[:500]}")
         # Fallback: retorna estrutura básica
-        return {
-            "resumo_executivo": "Não foi possível processar os dados retornados pelo data warehouse DIPAM. Por favor, reformule sua pergunta.",
-            "periodo_analisado": periodo_analisado,
-            "tabela_principal": [],
-            "insights": ["Reformule sua pergunta de forma mais específica."]
-        }
+        # ✅ NOVO: Para Q1, fallback segue estrutura executiva
+        if intent_spec.tipo == "clientes_sem_compra":
+            classificacao_faixas = dados_dw_condensado.get("classificacao_faixas", {})
+            total = classificacao_faixas.get("total", 0)
+            faixa_61_120 = classificacao_faixas.get("faixa_61_120", 0)
+            
+            return {
+                "resumo_executivo": (
+                    f"Foram identificados {total} clientes ativos sem compra há mais de 60 dias. "
+                    f"Destes, {faixa_61_120} clientes estão na faixa de 61-120 dias, representando a principal oportunidade de recuperação de receita. "
+                    f"Recomenda-se ação imediata de recontato e campanhas de reativação para esta faixa prioritária."
+                ),
+                "periodo_analisado": periodo_analisado,
+                "tabela_principal": [],
+                "insights": [
+                    f"Prioridade 1 (61-120 dias): {faixa_61_120} clientes - Alta probabilidade de recuperação",
+                    f"Foco em recontato imediato e campanhas de reativação",
+                    f"Impacto esperado: recuperação de receita no curto prazo"
+                ],
+                "diagnostico_comercial": {
+                    "riscos": "Perda de share e roteiros frios",
+                    "oportunidades": f"{faixa_61_120} clientes na faixa prioritária (61-120 dias)",
+                    "tendencias": "Clientes recentes apresentam maior potencial de recuperação"
+                },
+                "recomendacoes_estrategicas": {
+                    "prioridade_1": "Recontato imediato, campanhas de reativação, SKU âncora por rota",
+                    "prioridade_2": "Ações com supervisão, acompanhamento de rotas específicas",
+                    "nao_priorizar": "Clientes com mais de 300 dias sem compra"
+                },
+                "impacto_esperado": "Recuperação de receita focada em clientes da faixa 61-120 dias"
+            }
+        else:
+            return {
+                "resumo_executivo": "Não foi possível processar os dados retornados pelo data warehouse DIPAM. Por favor, reformule sua pergunta.",
+                "periodo_analisado": periodo_analisado,
+                "tabela_principal": [],
+                "insights": ["Reformule sua pergunta de forma mais específica."]
+            }
     except Exception as e:
         logger.error(f"[gerar_resposta_executiva_com_dados_dw] Erro ao gerar resposta: {e}")
         raise
@@ -479,25 +732,49 @@ Quando o IntentSpec tiver um dos tipos abaixo, SIGA o foco indicado:
 
 1) tipo = "clientes_sem_compra"   (Q1 – clientes ativos sem compra > N dias)
 
-- Foco da análise:
+ESTRUTURA EXECUTIVA OBRIGATÓRIA PARA Q1:
 
-  - Identificar o TIPO de cliente que está "sumindo" da carteira (canal, porte, região, rota).
+Você DEVE seguir EXATAMENTE esta estrutura (não invente blocos, não use linguagem informal):
 
-  - Explicar impacto em cobertura e na meta de volume/faturamento.
+1. **VISÃO GERAL EXECUTIVA** (3-4 linhas, MÁXIMO)
+   - Quantidade total de clientes ativos sem compra >60 dias
+   - Concentração por rotas/supervisões (quando disponível)
+   - Insight principal: foco em clientes recentes (≤120 dias) como oportunidade de recuperação
+   - Risco comercial real, sem exageros
+   - **CRÍTICO**: Seja curto, objetivo, sem redundâncias. Não use frases longas. Máximo 4 linhas.
 
-- No Diagnóstico Técnico, sempre que houver dados suficientes, responda:
+2. **INDICADORES COMERCIAIS**
+   - Tabela estruturada com faixas de dias:
+     * 61-120 dias → Alta probabilidade de recuperação (Prioridade 1)
+     * 121-180 dias → Média probabilidade (Prioridade 2)
+     * 181-300 dias → Baixa probabilidade (Prioridade 3)
+     * >300 dias → Muito baixa probabilidade, não priorizar
+   - Use APENAS os dados fornecidos no campo "classificacao_faixas" dos dados_dw
 
-  - Se isso está concentrado em poucas rotas ou espalhado.
+3. **DIAGNÓSTICO COMERCIAL**
+   - Riscos reais: perda de share, roteiros frios, concentração em poucas rotas
+   - Oportunidades: rotas e supervisões com maior potencial de recuperação (foco em 61-120 dias)
+   - Tendências: faixa mais crítica vs faixa mais recuperável
 
-  - Se há padrão de indústria ou mix (clientes que só compravam uma indústria, por exemplo).
+4. **RECOMENDAÇÕES ESTRATÉGICAS**
+   Sempre dividir em:
+   - **Prioridade 1 (61-120 dias)**: Recontato imediato, campanhas de reativação, SKU âncora por rota
+   - **Prioridade 2 (121-180 dias)**: Ações com supervisão, acompanhamento de rotas específicas
+   - **Não priorizar (>300 dias)**: Clientes com muito tempo sem compra não devem aparecer como oportunidade
 
-- No Plano de Ação:
+5. **IMPACTO ESPERADO**
+   - Bloco curto e formal
+   - Foco em receita recuperável (principalmente faixa 61-120 dias)
 
-  - D-1: ação de reativação (lista de clientes prioritários por rota/vendedor).
-
-  - D7: plano de contatos (visita, ligação, campanhas táticas).
-
-  - D30: ajuste de carteira ou de política para reduzir churn.
+REGRAS CRÍTICAS PARA Q1:
+- NUNCA use linguagem informal ("criticozinho", "movimento", "blitz", "talvez", "pode ser que")
+- NUNCA classifique clientes >300 dias como oportunidade
+- SEMPRE priorize clientes 61-120 dias como OPORTUNIDADE principal
+- SEMPRE foque em receita recuperável, não em quantidade total
+- SEMPRE seja acionável: cada bloco deve levar a uma decisão real
+- SEMPRE seja curto, limpo e sem redundâncias
+- **Resumo Executivo**: Máximo 4 linhas, sem percentuais artificiais, sem frases longas
+- **Cada bloco**: Deve ser objetivo e direto ao ponto
 
 2) tipo = "queda_faturamento"   (Q2 – queda de faturamento 2025 x 2024)
 

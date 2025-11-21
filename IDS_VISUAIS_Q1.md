@@ -85,3 +85,4 @@ Para ajustar um elemento específico, me informe o ID e o que precisa ser altera
 - `{idx}` indica índice numérico (0, 1, 2...)
 - Todos os IDs são únicos e consistentes
 
+

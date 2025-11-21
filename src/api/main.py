@@ -525,6 +525,85 @@ class FeedbackResponse(BaseModel):
 
 
 # Endpoints
+@app.get("/healthz")
+async def healthz():
+    """
+    Endpoint de health check completo (/healthz).
+    
+    Retorna status da API, banco de dados, última execução de ETL e uptime.
+    
+    Returns:
+        dict: Status completo da aplicação
+    """
+    try:
+        from src.core.cache_layer import get_etl_timestamp
+        from src.core.metrics import _metrics
+        import time
+        
+        # Verifica banco de dados
+        db_ok = False
+        try:
+            from src.dw.connection import get_db_engine
+            from sqlalchemy import text
+            engine = get_db_engine()
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            db_ok = True
+        except Exception:
+            pass
+        
+        # Lê timestamp do ETL
+        etl_timestamp = get_etl_timestamp()
+        last_etl = None
+        if etl_timestamp:
+            last_etl = datetime.fromtimestamp(etl_timestamp).isoformat()
+        
+        # Calcula uptime
+        startup_time = _metrics.get("startup_time", time.time())
+        uptime_seconds = int(time.time() - startup_time)
+        
+        return {
+            "status": "ok",
+            "db_ok": db_ok,
+            "last_etl": last_etl,
+            "uptime_seconds": uptime_seconds
+        }
+    except Exception as e:
+        logger.error(f"Erro no healthz: {str(e)}")
+        return {
+            "status": "error",
+            "db_ok": False,
+            "last_etl": None,
+            "uptime_seconds": 0,
+            "error": str(e)
+        }
+
+
+@app.get("/metrics")
+async def metrics():
+    """
+    Endpoint de métricas em formato Prometheus-compatible (/metrics).
+    
+    Retorna métricas de queries, cache e sistema.
+    
+    Returns:
+        Response: Métricas em formato Prometheus
+    """
+    try:
+        from src.core.metrics import get_metrics_prometheus_format
+        from fastapi.responses import PlainTextResponse
+        
+        metrics_text = get_metrics_prometheus_format()
+        return PlainTextResponse(content=metrics_text, media_type="text/plain")
+    except Exception as e:
+        logger.error(f"Erro ao gerar métricas: {str(e)}")
+        return PlainTextResponse(
+            content=f"# Erro ao gerar métricas: {str(e)}\n",
+            status_code=500,
+            media_type="text/plain"
+        )
+
+
 @app.get("/health")
 async def health_check():
     """
@@ -1309,23 +1388,38 @@ async def ask_question(
         import time
         start_time = time.perf_counter()
         
-        logger.info(f"Pergunta recebida: {request.pergunta[:100]}...")
+        # ✅ CORREÇÃO: Sanitiza pergunta antes de processar
+        # Limita tamanho da pergunta para evitar problemas com GROQ
+        from src.api.groq_client import truncate_prompt
+        pergunta_sanitizada = truncate_prompt(request.pergunta, max_chars=2000)  # Limite razoável para pergunta
+        
+        if len(pergunta_sanitizada) < len(request.pergunta):
+            logger.warning(
+                f"Pergunta truncada: {len(request.pergunta)} -> {len(pergunta_sanitizada)} caracteres",
+                extra={
+                    "event": "ask_pergunta_truncada",
+                    "original_length": len(request.pergunta),
+                    "truncated_length": len(pergunta_sanitizada),
+                }
+            )
+        
+        logger.info(f"Pergunta recebida: {pergunta_sanitizada[:100]}...")
         
         # NOVO FLUXO: Usa handler refatorado (IntentSpec + Orquestrador + Regras)
         from src.agent.handler_dw_refatorado import processar_pergunta_com_dw
         from src.api.mapper_handler_refatorado import map_handler_refatorado_to_ask_response
         
-        # Processa pergunta usando novo fluxo
+        # Processa pergunta usando novo fluxo (usa pergunta sanitizada)
         resposta_handler = processar_pergunta_com_dw(
-            pergunta=request.pergunta,
+            pergunta=pergunta_sanitizada,
             session=session,
             papel=request.papel
         )
         
-        # Converte para formato AskResponse
+        # Converte para formato AskResponse (usa pergunta original para resposta, mas sanitizada foi usada no processamento)
         dados_estruturados = map_handler_refatorado_to_ask_response(
             resposta_handler=resposta_handler,
-            pergunta=request.pergunta
+            pergunta=request.pergunta  # Mantém pergunta original na resposta
         )
         
         response = AskResponse(**dados_estruturados)
@@ -2177,6 +2271,43 @@ async def feedback_behavior_rule(
         raise HTTPException(
             status_code=500,
             detail=f"Erro ao registrar regra de comportamento: {str(e)}"
+        )
+
+
+@app.post("/metrics/frontend")
+async def metrics_frontend(request: Request):
+    """
+    Endpoint para receber métricas de performance do frontend.
+    
+    Recebe telemetria leve do frontend Next.js e registra em logs.
+    """
+    try:
+        body = await request.json()
+        
+        event = body.get("event", "frontend_performance")
+        big_number_ms = body.get("big_number_ms", 0)
+        table_ms = body.get("table_ms", 0)
+        records = body.get("records", 0)
+        cache_fallback = body.get("cache_fallback", False)
+        network_error = body.get("network_error", False)
+        timestamp = body.get("timestamp", datetime.utcnow().isoformat())
+        
+        # Log estruturado
+        logger.info(
+            f"[frontend_metrics] event={event}, big_number_ms={big_number_ms}, "
+            f"table_ms={table_ms}, records={records}, cache_fallback={cache_fallback}, "
+            f"network_error={network_error}, timestamp={timestamp}"
+        )
+        
+        return {
+            "status": "ok",
+            "message": "Métricas recebidas"
+        }
+    except Exception as e:
+        logger.error(f"Erro ao processar métricas do frontend: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(e)}
         )
 
 

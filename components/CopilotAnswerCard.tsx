@@ -3,6 +3,7 @@ import { ChevronDown, Download } from "lucide-react";
 import { clsx } from "clsx";
 import { CopilotAnswerPayload } from "@/types/agent";
 import { ResponseDashboard } from "./ResponseDashboard";
+import { ResponseDashboardOptimized } from "./ResponseDashboardOptimized";
 import { generateExecutivePdf } from "./pdf/generateExecutivePdf";
 
 type Props = {
@@ -107,7 +108,16 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
         {/* Conteúdo principal - Dashboard estruturado */}
         <div id="dipam-card-content" className="px-6 pt-4 pb-6">
           {/* Renderiza dashboard estruturado (pergunta removida - já aparece no chat) */}
-          <ResponseDashboard data={structuredWithMarkdown} question={question} />
+          {/* Usa versão otimizada se disponível, senão usa versão antiga */}
+          {process.env.NEXT_PUBLIC_USE_OPTIMIZED_DASHBOARD === "true" ? (
+            <ResponseDashboardOptimized
+              data={structuredWithMarkdown}
+              question={question}
+              isLoading={false}
+            />
+          ) : (
+            <ResponseDashboard data={structuredWithMarkdown} question={question} />
+          )}
         </div>
       </div>
     );

@@ -550,6 +550,31 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
               })}
               highlightFirstColumn={true}
             />
+            {/* Log de validação para console (apenas em desenvolvimento) */}
+            {process.env.NODE_ENV === 'development' && (() => {
+              const linhas = tabelaClientesPaginada.linhas;
+              const colunas = tabelaClientesPaginada.colunas;
+              const idxVendedor = colunas.findIndex((c: string) => c.toLowerCase().includes('vendedor'));
+              const idxSupervisor = colunas.findIndex((c: string) => c.toLowerCase().includes('supervisor'));
+              
+              if (idxVendedor >= 0 && idxSupervisor >= 0) {
+                const total = linhas.length;
+                const comVendedor = linhas.filter((l: any[]) => 
+                  l[idxVendedor] && String(l[idxVendedor]).trim() && String(l[idxVendedor]).trim() !== '—'
+                ).length;
+                const comSupervisor = linhas.filter((l: any[]) => 
+                  l[idxSupervisor] && String(l[idxSupervisor]).trim() && String(l[idxSupervisor]).trim() !== '—'
+                ).length;
+                
+                console.log('📊 VALIDAÇÃO Q1 - VENDEDOR E SUPERVISOR:');
+                console.log(`   Total de registros: ${total}`);
+                console.log(`   Com vendedor: ${comVendedor} (${(comVendedor/total*100).toFixed(1)}%)`);
+                console.log(`   Com supervisor: ${comSupervisor} (${(comSupervisor/total*100).toFixed(1)}%)`);
+                console.log(`   Meta vendedor (≥85%): ${comVendedor/total*100 >= 85 ? '✅' : '❌'}`);
+                console.log(`   Meta supervisor (≥70%): ${comSupervisor/total*100 >= 70 ? '✅' : '❌'}`);
+              }
+              return null;
+            })()}
             
             {/* Paginação Q1 - sempre exibe quando há dados */}
             {tabelaClientesPaginada && (

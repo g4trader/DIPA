@@ -16,6 +16,26 @@ from src.llm_client import call_llm, LLMError
 call_openai_llm = call_llm
 OpenAIError = LLMError
 
+# Importa GROQ Guard para proteção contra limites
+try:
+    from src.api.groq_client import (
+        call_groq_model,
+        GroqContentTooLongError,
+        GroqError,
+        truncate_prompt
+    )
+    GROQ_GUARD_AVAILABLE = True
+except ImportError:
+    GROQ_GUARD_AVAILABLE = False
+    logger.warning("GROQ Guard não disponível. Usando cliente LLM padrão.")
+    
+    # Define função de fallback para truncate_prompt
+    def truncate_prompt(prompt: str, max_chars: int = 8000) -> str:
+        """Fallback simples de truncamento se GROQ Guard não estiver disponível."""
+        if len(prompt) <= max_chars:
+            return prompt
+        return prompt[:max_chars - 20] + "[CONTEXTO TRUNCADO]"
+
 logger = logging.getLogger(__name__)
 
 # Limites para truncar listas grandes no contexto (evitar custos desnecessários)
@@ -1207,6 +1227,41 @@ mas ainda assim não invente números.
         return f"Erro ao processar pergunta: {str(e)}", 0.2
 
 
+def _gerar_resumo_executivo_fallback(contexto: Dict[str, Any]) -> str:
+    """
+    Gera um resumo executivo simples via código quando GROQ falha.
+    
+    Args:
+        contexto: Contexto com dados estruturados
+        
+    Returns:
+        str: Resumo executivo gerado via código
+    """
+    mes_ano = contexto.get('mes_ano', 'N/A')
+    meta_total = contexto.get('meta_total', 0)
+    realizado_total = contexto.get('realizado_total', 0)
+    gap_total = contexto.get('gap_total', 0)
+    atingimento_medio = contexto.get('atingimento_medio', 0)
+    piores_vendedores = contexto.get('piores_vendedores', [])[:3]
+    
+    resumo = f"Foram identificados {contexto.get('total_vendedores', 0)} vendedores no período {mes_ano}. "
+    
+    if gap_total < 0:
+        resumo += f"O gap negativo de R$ {abs(gap_total):,.2f} precisa ser recuperado. "
+    else:
+        resumo += f"Superação de R$ {gap_total:,.2f} foi alcançada. "
+    
+    resumo += f"O atingimento médio foi de {atingimento_medio:.1f}%. "
+    
+    if piores_vendedores:
+        nomes = [v.get('vendedor_nome', 'N/A') for v in piores_vendedores]
+        resumo += f"As rotas mais impactadas são: {', '.join(nomes[:3])}. "
+    
+    resumo += "Principais alertas: revisar estratégia comercial e acompanhamento de metas."
+    
+    return resumo
+
+
 def gerar_resposta_llm_diretor(
     contexto: Dict[str, Any],
     pergunta: str,
@@ -1270,6 +1325,18 @@ Se a camada de código marcar tem_dados = true, sempre traga alguma análise."""
                     nomes_risco = ", ".join([v.get("vendedor_nome", "N/A") for v in top_vendedores])
                     insights_texto += f"- Principais vendedores em risco: {nomes_risco}.\n"
         
+        # ✅ CORREÇÃO: Condensa contexto para evitar exceder limite do GROQ
+        # Não envia tabelas completas, apenas KPIs principais e top vendedores
+        piores_vendedores = contexto.get('piores_vendedores', [])[:5]  # Top 5 apenas
+        piores_vendedores_texto = ""
+        if piores_vendedores:
+            piores_vendedores_texto = "\nPrincipais responsáveis (top 5):\n"
+            for i, v in enumerate(piores_vendedores, 1):
+                nome = v.get('vendedor_nome', 'N/A')
+                atingimento = v.get('atingimento', 0)
+                gap = v.get('gap', 0)
+                piores_vendedores_texto += f"{i}. {nome}: {atingimento:.1f}% atingimento, gap R$ {gap:,.2f}\n"
+        
         prompt = f"""Com base nos dados abaixo, escreva um resumo executivo de 3-5 frases explicando por que não batemos a meta no mês {contexto.get('mes_ano', 'N/A')}.
 
 Dados (USE EXATAMENTE ESTES VALORES - NÃO RECALCULE):
@@ -1280,31 +1347,67 @@ Dados (USE EXATAMENTE ESTES VALORES - NÃO RECALCULE):
 - Total de vendedores: {contexto.get('total_vendedores', 0)}
 - Vendedores em risco: {contexto.get('total_vendedores_em_risco', 0)}
 {insights_texto}
-Principais responsáveis:
-{json.dumps(contexto.get('piores_vendedores', [])[:5], ensure_ascii=False, indent=2)}
+{piores_vendedores_texto}
 
 IMPORTANTE: Use EXATAMENTE os valores de Meta total, Realizado total e Atingimento médio fornecidos acima. NÃO recalcule, NÃO arredonde além do necessário, NÃO invente novos números.
 
 Escreva o resumo executivo em linguagem de Diretor, citando os principais vendedores e o impacto deles no gap total.{" Se houver insights preditivos acima, mencione-os explicitamente no resumo." if insights_texto else ""}"""
     else:
+        # Para recomendações, também condensa o contexto
+        contexto_condensado = {
+            "mes_ano": contexto.get('mes_ano'),
+            "meta_total": contexto.get('meta_total'),
+            "realizado_total": contexto.get('realizado_total'),
+            "gap_total": contexto.get('gap_total'),
+            "atingimento_medio": contexto.get('atingimento_medio'),
+            "top_vendedores": contexto.get('piores_vendedores', [])[:5],
+        }
         prompt = f"""Com base nos dados abaixo, gere recomendações práticas para o Diretor.
 
 Dados:
-{json.dumps(contexto, ensure_ascii=False, indent=2)}
+{json.dumps(contexto_condensado, ensure_ascii=False, indent=2)}
 
 Gere 3-7 ações claras e práticas."""
     
     try:
-        resposta = call_openai_llm(
-            system_prompt=system_prompt,
-            user_prompt=prompt,
-            temperature=0.3,  # Mais determinístico para respostas de Diretor
-            max_tokens=500
-        )
-        return resposta.strip()
+        # ✅ CORREÇÃO: Usa GROQ Guard se disponível, senão usa cliente padrão
+        if GROQ_GUARD_AVAILABLE:
+            try:
+                resposta = call_groq_model(
+                    prompt=prompt,
+                    system=system_prompt,
+                    max_tokens=512,
+                    contexto="resumo_executivo",
+                    temperature=0.3,
+                )
+                return resposta.strip()
+            except GroqContentTooLongError as e:
+                logger.error(
+                    f"GROQ recusou conteúdo muito longo para resumo executivo: {str(e)}",
+                    extra={
+                        "event": "resumo_executivo_fallback_sem_groq",
+                        "error": str(e),
+                    }
+                )
+                # Fallback: gera resumo simples via código
+                return _gerar_resumo_executivo_fallback(contexto)
+            except GroqError as e:
+                logger.error(f"Erro do GROQ ao gerar resumo executivo: {str(e)}")
+                # Fallback: gera resumo simples via código
+                return _gerar_resumo_executivo_fallback(contexto)
+        else:
+            # Usa cliente LLM padrão (compatibilidade)
+            resposta = call_openai_llm(
+                system_prompt=system_prompt,
+                user_prompt=prompt,
+                temperature=0.3,
+                max_tokens=500
+            )
+            return resposta.strip()
     except Exception as e:
         logger.error(f"Erro ao gerar resposta LLM Diretor: {str(e)}")
-        raise
+        # Fallback: gera resumo simples via código
+        return _gerar_resumo_executivo_fallback(contexto)
 
 
 def gerar_resposta_performance_vendedores(
@@ -1431,13 +1534,53 @@ Explique qualquer limitação de dados de forma clara e objetiva.
 """
     
     try:
-        # Chama LLM usando a função padrão do projeto
-        resposta_texto = call_openai_llm(
-            prompt=user_msg,
-            system_prompt=system_msg,
-            temperature=0.3,  # Mais conservador para não inventar dados
-            max_tokens=2000
-        )
+        # ✅ CORREÇÃO: Usa GROQ Guard se disponível, senão usa cliente padrão
+        if GROQ_GUARD_AVAILABLE:
+            try:
+                resposta_texto = call_groq_model(
+                    prompt=user_msg,
+                    system=system_msg,
+                    max_tokens=1024,  # Reduzido de 2000 para evitar limite
+                    contexto="ask",
+                    temperature=0.3,
+                )
+            except GroqContentTooLongError as e:
+                logger.error(
+                    f"GROQ recusou conteúdo muito longo para performance vendedores: {str(e)}",
+                    extra={
+                        "event": "groq_too_long",
+                        "contexto": "performance_vendedores",
+                        "error": str(e),
+                    }
+                )
+                # Fallback: usa cliente padrão com prompt truncado
+                user_msg_truncated = truncate_prompt(user_msg, max_chars=8000)
+                resposta_texto = call_openai_llm(
+                    prompt=user_msg_truncated,
+                    system_prompt=system_msg,
+                    temperature=0.3,
+                    max_tokens=1024
+                )
+            except GroqError as e:
+                logger.error(f"Erro do GROQ ao gerar resposta performance vendedores: {str(e)}")
+                # Fallback: usa cliente padrão
+                user_msg_truncated = truncate_prompt(user_msg, max_chars=8000)
+                resposta_texto = call_openai_llm(
+                    prompt=user_msg_truncated,
+                    system_prompt=system_msg,
+                    temperature=0.3,
+                    max_tokens=1024
+                )
+        else:
+            # Usa cliente LLM padrão (compatibilidade)
+            # ✅ CORREÇÃO: Trunca prompt antes de enviar
+            user_msg_truncated = truncate_prompt(user_msg, max_chars=8000) if 'truncate_prompt' in globals() else user_msg[:8000]
+            resposta_texto = call_openai_llm(
+                prompt=user_msg_truncated,
+                system_prompt=system_msg,
+                temperature=0.3,
+                max_tokens=1024  # Reduzido de 2000
+            )
         
         logger.info(f"Resposta especializada para performance de vendedores gerada ({len(resposta_texto)} caracteres)")
         # Retorna confiança fixa de 0.9 conforme especificado

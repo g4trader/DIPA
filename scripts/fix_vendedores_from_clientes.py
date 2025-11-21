@@ -125,3 +125,4 @@ def fix_vendedores_from_clientes():
 if __name__ == "__main__":
     fix_vendedores_from_clientes()
 
+

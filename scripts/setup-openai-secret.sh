@@ -105,3 +105,4 @@ echo "     -d '{\"pergunta\":\"qual a meta de vendas do mês de outubro 2025\",\
 echo ""
 
 
+

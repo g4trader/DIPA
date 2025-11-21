@@ -1,0 +1,46 @@
+================================================================================
+DIFF: src/dw/queries.py - Correção Q1 (Apenas Clientes Ativos)
+================================================================================
+
+Linha 180 (aproximadamente):
+-        .filter(Cliente.ativo == True)  # c.ativo = 1 conforme blueprint
++        .filter(Cliente.ativo == True)  # ✅ OBRIGATÓRIO: Apenas clientes ATIVOS
+
+Linhas 147-181 (CTE base):
++    # CTE base com todos os dados (pode ter duplicatas devido aos JOINs)
++    # ✅ CORREÇÃO CRÍTICA: FILTRO DE CLIENTES ATIVOS OBRIGATÓRIO
++    # A Q1 DEVE RETORNAR APENAS CLIENTES ATIVOS (Cliente.ativo == True)
+     base_query = (
+         session.query(
+             ...
+         )
+         ...
+         # ✅ FILTRO OBRIGATÓRIO: Apenas clientes ATIVOS (ativo=True)
+         # Este filtro DEVE estar presente e ser aplicado ANTES do ROW_NUMBER()
+         .filter(Cliente.ativo == True)
+     )
+
+================================================================================
+RESUMO DAS MUDANÇAS:
+================================================================================
+
+1. Campo identificado: Cliente.ativo (Boolean)
+   - Tipo: Boolean
+   - Valores: True (ativo) / False (inativo)
+   - Localização: src/dw/models.py linha 136
+
+2. Filtro reforçado:
+   - Localização: src/dw/queries.py linha 180
+   - Filtro: Cliente.ativo == True
+   - Aplicado na CTE base (ANTES do ROW_NUMBER())
+   - Comentários adicionados para garantir que não seja removido
+
+3. Validação:
+   - Script criado: scripts/validar_q1_clientes_ativos.py
+   - Valida que 100% dos clientes retornados têm ativo=True
+   - Se encontrar qualquer cliente inativo, levanta Exception
+
+4. Documentação:
+   - DOCUMENTACAO_PACOTE_FRONTEND.md atualizada com regra de negócio
+
+================================================================================

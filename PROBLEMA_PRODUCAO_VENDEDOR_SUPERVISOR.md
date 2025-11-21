@@ -89,3 +89,4 @@ Após recarregar:
 **Versão:** v-query-simple-join  
 **Revisão:** dipam-ai-backend-00115-v9h
 
+
