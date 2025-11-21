@@ -87,25 +87,57 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     return data.resumo_executivo || data.resumoExecutivo || "";
   }, [data]);
 
-  // Blocos complementares (insights, etc.)
+  // Blocos complementares (insights, etc.) - ✅ CORREÇÃO: Renderização defensiva
   const blocosComplementares = useMemo(() => {
     const blocos: React.ReactNode[] = [];
     
-    // Insights
-    if (data.insightsRecomendacoes && data.insightsRecomendacoes.length > 0) {
-      const insightsText = data.insightsRecomendacoes.join(" ").trim();
-      if (insightsText.length > 0 && !/erro no processamento avançado/i.test(insightsText)) {
-        blocos.push(
-          <InsightsBlock
-            key="insights"
-            insights={data.insightsRecomendacoes}
-          />
-        );
+    // Insights - ✅ CORREÇÃO: Verificação defensiva com try/catch implícito
+    try {
+      if (Array.isArray(data.insightsRecomendacoes) && data.insightsRecomendacoes.length > 0) {
+        const insightsText = data.insightsRecomendacoes.join(" ").trim();
+        if (insightsText.length > 0 && !/erro no processamento avançado/i.test(insightsText)) {
+          blocos.push(
+            <InsightsBlock
+              key="insights"
+              insights={data.insightsRecomendacoes}
+            />
+          );
+        }
       }
+    } catch (error) {
+      // ✅ CORREÇÃO: Se houver erro ao processar insights, não quebra o dashboard
+      console.warn("Erro ao processar insights:", error);
     }
     
     return blocos.length > 0 ? <>{blocos}</> : null;
   }, [data.insightsRecomendacoes]);
+
+  // ✅ CORREÇÃO: Determina se os dados estão prontos baseado na presença de dados reais
+  // Não depende apenas do hook de loading, que pode ficar travado
+  const isDataReady = useMemo(() => {
+    // Se isLoading prop for true, ainda está carregando
+    if (isLoading) return false;
+    
+    // Verifica se há dados válidos na resposta
+    const dataAny = data as any;
+    
+    // Se houver tabela principal, dados estão prontos
+    if (tabelaPrincipal && tabelaPrincipal.rows.length > 0) return true;
+    
+    // Se houver resumo executivo, dados estão prontos
+    if (resumoExecutivo && resumoExecutivo.trim().length > 0) return true;
+    
+    // Se houver insights, dados estão prontos
+    if (data.insightsRecomendacoes && data.insightsRecomendacoes.length > 0) return true;
+    
+    // Se houver jsonTecnico, dados estão prontos
+    if (dataAny.jsonTecnico || dataAny.structured?.jsonTecnico) return true;
+    
+    // Se houver detalhe_tabela, dados estão prontos
+    if (data.detalhe_tabela || dataAny.detalheTabela) return true;
+    
+    return false;
+  }, [isLoading, data, tabelaPrincipal, resumoExecutivo]);
 
   // Telemetria: Big Number
   useEffect(() => {
@@ -130,8 +162,24 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     }
   }, [tabelaPrincipal, loadingState]);
 
-  // Loading state
-  if (isLoading || loadingState.isLoading) {
+  // ✅ CORREÇÃO: Se não houver tabela mas houver dados, marca como pronto
+  useEffect(() => {
+    if (isDataReady && !tabelaPrincipal && loadingState.isLoading) {
+      // Se os dados estão prontos mas não há tabela, marca como não carregando
+      // Isso evita skeleton infinito quando não há tabela
+      loadingState.markTableReady();
+    }
+  }, [isDataReady, tabelaPrincipal, loadingState]);
+
+  // ✅ CORREÇÃO: Loading state - prioriza isDataReady sobre loadingState.isLoading
+  // Se os dados estão prontos, não mostra skeleton mesmo que loadingState.isLoading seja true
+  if (isLoading) {
+    return <DashboardSkeleton />;
+  }
+  
+  // Se não há dados prontos E o loading state ainda está ativo, mostra skeleton
+  // Mas se há dados prontos, mostra o conteúdo mesmo que loadingState.isLoading seja true
+  if (!isDataReady && loadingState.isLoading) {
     return <DashboardSkeleton />;
   }
 
