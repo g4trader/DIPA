@@ -141,20 +141,45 @@ export function DataTable({
                   i % 2 === 0 ? "bg-white/2" : "bg-transparent"
                 }`}
               >
-                {visibleColumns.map((col, c) => (
-                  <td
-                    key={`cell-${i}-${c}-${col}`}
-                    className={`px-4 py-3 text-white text-sm ${
-                      highlightFirstColumn && c === 0
-                        ? "font-semibold text-white"
-                        : "text-white/80"
-                    }`}
-                  >
-                    {typeof row[col] === "number"
-                      ? row[col].toLocaleString("pt-BR")
-                      : row[col] || "—"}
-                  </td>
-                ))}
+                {visibleColumns.map((col, c) => {
+                  const cellValue = row[col];
+                  // ✅ Renderiza valores com múltiplas linhas (separados por \n)
+                  const renderCellValue = () => {
+                    if (cellValue === null || cellValue === undefined || cellValue === "") {
+                      return "—";
+                    }
+                    if (typeof cellValue === "number") {
+                      return cellValue.toLocaleString("pt-BR");
+                    }
+                    const strValue = String(cellValue);
+                    // Se contém \n, renderiza múltiplas linhas
+                    if (strValue.includes("\n")) {
+                      return (
+                        <div className="flex flex-col gap-1">
+                          {strValue.split("\n").map((line, idx) => (
+                            <span key={idx} className={idx > 0 ? "text-white/60" : ""}>
+                              {line.trim() || "—"}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return strValue;
+                  };
+                  
+                  return (
+                    <td
+                      key={`cell-${i}-${c}-${col}`}
+                      className={`px-4 py-3 text-white text-sm ${
+                        highlightFirstColumn && c === 0
+                          ? "font-semibold text-white"
+                          : "text-white/80"
+                      }`}
+                    >
+                      {renderCellValue()}
+                    </td>
+                  );
+                })}
               </tr>
               );
             })}

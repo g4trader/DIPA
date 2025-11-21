@@ -218,75 +218,81 @@ def get_clientes_sem_compra_ha_dias(
         )
     )
     
-    # Cria CTE com ROW_NUMBER() para eliminar duplicatas
-    # ROW_NUMBER() OVER(PARTITION BY cliente_id ORDER BY data_ultima_compra DESC NULLS LAST)
+    # ✅ CORREÇÃO CRÍTICA: Agrupa por cliente_id e agrega múltiplos vendedores/supervisores
+    # Em vez de ROW_NUMBER(), usa GROUP BY com GROUP_CONCAT/STRING_AGG
+    # Isso garante 1 linha por cliente, com todos os vendedores/supervisores agregados
     base_cte = base_query.cte(name='base_clientes')
     
-    # Query final com ROW_NUMBER() e filtro rn = 1
-    # SQLite e PostgreSQL suportam window functions
+    # Agrega múltiplos vendedores e supervisores por cliente
     if config.database.db_type == "sqlite":
-        # SQLite suporta ROW_NUMBER() desde versão 3.25+
+        # SQLite: usa GROUP_CONCAT para agregar valores
+        # GROUP_CONCAT(column, separator) - SQLite não suporta DISTINCT dentro de GROUP_CONCAT diretamente
+        # Usamos GROUP_CONCAT sem DISTINCT e processamos duplicatas no Python
         query = (
             session.query(
                 base_cte.c.cliente_id,
-                base_cte.c.nome,
-                base_cte.c.segmento,
-                base_cte.c.rota_id,
-                base_cte.c.vendedor_nome,
-                base_cte.c.vendedor_codigo,
-                base_cte.c.supervisor_nome,
-                base_cte.c.supervisor_codigo,
-                base_cte.c.data_ultima_compra,
-                base_cte.c.dias_sem_compra,
-                func.row_number().over(
-                    partition_by=base_cte.c.cliente_id,
-                    order_by=desc(base_cte.c.data_ultima_compra).nullslast()
-                ).label('rn')
+                func.max(base_cte.c.nome).label('nome'),  # MAX pega qualquer valor (todos são iguais por cliente)
+                func.max(base_cte.c.segmento).label('segmento'),
+                func.max(base_cte.c.rota_id).label('rota_id'),
+                # ✅ Agrega múltiplos vendedores com separador de nova linha
+                # GROUP_CONCAT(column, '\n') - duplicatas serão removidas no Python
+                func.group_concat(
+                    base_cte.c.vendedor_nome,
+                    text("'\n'")  # Separador: nova linha
+                ).label('vendedor_nome'),
+                func.group_concat(
+                    base_cte.c.vendedor_codigo,
+                    text("'\n'")
+                ).label('vendedor_codigo'),
+                # ✅ Agrega múltiplos supervisores com separador de nova linha
+                func.group_concat(
+                    base_cte.c.supervisor_nome,
+                    text("'\n'")
+                ).label('supervisor_nome'),
+                func.group_concat(
+                    base_cte.c.supervisor_codigo,
+                    text("'\n'")
+                ).label('supervisor_codigo'),
+                func.max(base_cte.c.data_ultima_compra).label('data_ultima_compra'),
+                func.max(base_cte.c.dias_sem_compra).label('dias_sem_compra')
             )
-            .select_from(base_cte)
+            .group_by(base_cte.c.cliente_id)
         )
     else:  # PostgreSQL
+        # PostgreSQL: usa STRING_AGG para agregar valores
+        # STRING_AGG(DISTINCT column, E'\n') no PostgreSQL
         query = (
             session.query(
                 base_cte.c.cliente_id,
-                base_cte.c.nome,
-                base_cte.c.segmento,
-                base_cte.c.rota_id,
-                base_cte.c.vendedor_nome,
-                base_cte.c.vendedor_codigo,
-                base_cte.c.supervisor_nome,
-                base_cte.c.supervisor_codigo,
-                base_cte.c.data_ultima_compra,
-                base_cte.c.dias_sem_compra,
-                func.row_number().over(
-                    partition_by=base_cte.c.cliente_id,
-                    order_by=desc(base_cte.c.data_ultima_compra).nullslast()
-                ).label('rn')
+                func.max(base_cte.c.nome).label('nome'),
+                func.max(base_cte.c.segmento).label('segmento'),
+                func.max(base_cte.c.rota_id).label('rota_id'),
+                # ✅ Agrega múltiplos vendedores com separador de nova linha
+                func.string_agg(
+                    func.distinct(base_cte.c.vendedor_nome),
+                    text("E'\\n'")  # Separador: nova linha (PostgreSQL)
+                ).label('vendedor_nome'),
+                func.string_agg(
+                    func.distinct(base_cte.c.vendedor_codigo),
+                    text("E'\\n'")
+                ).label('vendedor_codigo'),
+                # ✅ Agrega múltiplos supervisores com separador de nova linha
+                func.string_agg(
+                    func.distinct(base_cte.c.supervisor_nome),
+                    text("E'\\n'")
+                ).label('supervisor_nome'),
+                func.string_agg(
+                    func.distinct(base_cte.c.supervisor_codigo),
+                    text("E'\\n'")
+                ).label('supervisor_codigo'),
+                func.max(base_cte.c.data_ultima_compra).label('data_ultima_compra'),
+                func.max(base_cte.c.dias_sem_compra).label('dias_sem_compra')
             )
-            .select_from(base_cte)
+            .group_by(base_cte.c.cliente_id)
         )
     
-    # Cria CTE final com ROW_NUMBER
-    ranked_cte = query.cte(name='ranked_clientes')
-    
-    # Query final: filtra apenas rn = 1 e ordena
-    query = (
-        session.query(
-            ranked_cte.c.cliente_id,
-            ranked_cte.c.nome,
-            ranked_cte.c.segmento,
-            ranked_cte.c.rota_id,
-            ranked_cte.c.vendedor_nome,
-            ranked_cte.c.vendedor_codigo,
-            ranked_cte.c.supervisor_nome,
-            ranked_cte.c.supervisor_codigo,
-            ranked_cte.c.data_ultima_compra,
-            ranked_cte.c.dias_sem_compra
-        )
-        .select_from(ranked_cte)
-        .filter(ranked_cte.c.rn == 1)
-        .order_by(asc(ranked_cte.c.dias_sem_compra))
-    )
+    # Query final: ordena por dias_sem_compra
+    query = query.order_by(asc(text('dias_sem_compra')))
     
     # Usa yield_per para otimizar memória
     resultados = list(query.yield_per(500))
@@ -301,12 +307,35 @@ def get_clientes_sem_compra_ha_dias(
         dias_sem_compra = int(row.dias_sem_compra) if row.dias_sem_compra is not None else None
         # Só inclui se dias_sem_compra >= 61 (não inclui 0, None ou < 61)
         if dias_sem_compra is not None and dias_sem_compra >= dias_minimo:
-            # ✅ CORREÇÃO: Melhorar fallback para vendedor e supervisor
-            # Após ETL corrigido: vendedor_nome = rota (ex.: "ROTA 301"), vendedor_codigo = código numérico
-            vendedor_nome = row.vendedor_nome if row.vendedor_nome else (row.rota_id if row.rota_id else "")
-            vendedor_codigo = row.vendedor_codigo if row.vendedor_codigo else ""
-            supervisor_nome = row.supervisor_nome if row.supervisor_nome else (row.supervisor_codigo if row.supervisor_codigo else "")
-            supervisor_codigo = row.supervisor_codigo if row.supervisor_codigo else ""
+            # ✅ CORREÇÃO: Processar valores agregados (múltiplos vendedores/supervisores)
+            # Remove duplicatas e mantém múltiplos valores distintos separados por \n
+            def processar_valor_agregado(valor):
+                """Processa valor agregado: remove duplicatas e None, mantém ordem"""
+                if not valor:
+                    return ""
+                # Separa por \n, remove vazios e duplicatas, mantém ordem
+                valores = [v.strip() for v in str(valor).split('\n') if v.strip()]
+                # Remove duplicatas mantendo ordem
+                valores_unicos = []
+                vistos = set()
+                for v in valores:
+                    if v and v not in vistos:
+                        valores_unicos.append(v)
+                        vistos.add(v)
+                return '\n'.join(valores_unicos) if valores_unicos else ""
+            
+            # Processa vendedores e supervisores agregados
+            vendedor_nome = processar_valor_agregado(row.vendedor_nome)
+            if not vendedor_nome:
+                vendedor_nome = row.rota_id if row.rota_id else ""
+            
+            vendedor_codigo = processar_valor_agregado(row.vendedor_codigo)
+            
+            supervisor_nome = processar_valor_agregado(row.supervisor_nome)
+            if not supervisor_nome:
+                supervisor_nome = processar_valor_agregado(row.supervisor_codigo)
+            
+            supervisor_codigo = processar_valor_agregado(row.supervisor_codigo)
             
             clientes_filtrados.append({
                 "cliente_id": row.cliente_id,
