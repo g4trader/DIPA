@@ -2121,7 +2121,7 @@ async def diagnostico_db_fingerprint():
 
 
 @app.get("/diagnostico/q1_contagem")
-async def diagnostico_q1_contagem(dias: int = 60):
+async def diagnostico_q1_contagem(dias: int = 60, bypass_cache: bool = False):
     """
     Endpoint de diagnóstico para validar contagem da Q1.
     
@@ -2130,6 +2130,7 @@ async def diagnostico_q1_contagem(dias: int = 60):
     
     Query params:
         - dias: número de dias sem compra (padrão: 60)
+        - bypass_cache: se True, invalida cache antes de executar (padrão: False)
     
     Returns:
         JSON com:
@@ -2141,14 +2142,29 @@ async def diagnostico_q1_contagem(dias: int = 60):
     try:
         from src.dw.connection import SessionLocal, init_db
         from src.dw.diagnostico_db import get_q1_contagem
+        from src.core.cache_layer import invalidate_cache, get_cache_info
         
         if SessionLocal is None:
             init_db()
+        
+        # Se bypass_cache, invalida cache antes
+        if bypass_cache:
+            invalidate_cache()
+            logger.info("[diagnostico_q1_contagem] Cache invalidado por bypass_cache=True")
         
         session = SessionLocal()
         
         try:
             resultado = get_q1_contagem(session, dias=dias)
+            
+            # Adiciona informações de cache
+            cache_info = get_cache_info()
+            resultado["cache_info"] = {
+                "cache_size": cache_info.get("cache_size", 0),
+                "cache_stats": cache_info.get("cache_stats", {}),
+                "etl_timestamp": cache_info.get("etl_timestamp")
+            }
+            
             return JSONResponse(status_code=200, content=resultado)
         finally:
             session.close()
@@ -2156,6 +2172,33 @@ async def diagnostico_q1_contagem(dias: int = 60):
     except Exception as e:
         logger.error(f"Erro no diagnóstico Q1: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erro no diagnóstico Q1: {str(e)}")
+
+
+@app.post("/diagnostico/invalidate_cache")
+async def diagnostico_invalidate_cache():
+    """
+    Endpoint para invalidar o cache de queries (útil para debug).
+    
+    Returns:
+        JSON com confirmação de invalidação
+    """
+    try:
+        from src.core.cache_layer import invalidate_cache, get_cache_info
+        
+        cache_info_antes = get_cache_info()
+        invalidate_cache()
+        cache_info_depois = get_cache_info()
+        
+        return JSONResponse(status_code=200, content={
+            "status": "cache_invalidated",
+            "cache_size_antes": cache_info_antes.get("cache_size", 0),
+            "cache_size_depois": cache_info_depois.get("cache_size", 0),
+            "timestamp": datetime.utcnow().isoformat()
+        })
+    
+    except Exception as e:
+        logger.error(f"Erro ao invalidar cache: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro ao invalidar cache: {str(e)}")
 
 
 @app.get("/ml/status", response_model=Dict[str, Any])
