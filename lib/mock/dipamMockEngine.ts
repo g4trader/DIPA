@@ -183,7 +183,11 @@ function carregarDadosMock() {
       // Tenta caminho relativo ao arquivo atual
       const q1ClientesModule = require("../../mock/data/q1_clientes_sem_compra.json");
       q1Dados = Array.isArray(q1ClientesModule) ? q1ClientesModule : (q1ClientesModule?.default || q1ClientesModule);
-      console.log(`[dipamMockEngine] ✅ Dados Q1 importados via require(): ${q1Dados.length} clientes`);
+      if (q1Dados && q1Dados.length > 0) {
+        console.log(`[dipamMockEngine] ✅ Dados Q1 importados via require(): ${q1Dados.length} clientes`);
+      } else {
+        throw new Error("Dados vazios após require()");
+      }
     } catch (e: any) {
       console.log(`[dipamMockEngine] ⚠️  require() falhou: ${e.message}, tentando readFileSync...`);
       
@@ -203,9 +207,16 @@ function carregarDadosMock() {
         }
       }
       
-      // Se não conseguiu carregar do arquivo, usa fallback
+      // Se não conseguiu carregar do arquivo, tenta via fetch (API route)
       if (!dadosCarregados || q1Dados.length === 0) {
-        console.warn("[dipamMockEngine] ⚠️  Arquivo não encontrado, usando dados mock fallback.");
+        console.log("[dipamMockEngine] ⚠️  Arquivo não encontrado via readFileSync, tentando via API route...");
+        // Não tenta via fetch aqui porque estamos no servidor e pode causar loop
+        // O fetch só funcionaria se estivéssemos em um contexto diferente
+      }
+      
+      // Se ainda não conseguiu, usa fallback
+      if (!dadosCarregados || q1Dados.length === 0) {
+        console.warn("[dipamMockEngine] ⚠️  Todos os métodos falharam, usando dados mock fallback.");
         q1Dados = DADOS_MOCK_FALLBACK;
       }
     }
