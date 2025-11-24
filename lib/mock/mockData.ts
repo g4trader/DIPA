@@ -1,17 +1,60 @@
 /**
- * Importação estática dos dados mock Q1
- * Isso garante que os JSONs sejam incluídos no bundle do Next.js
+ * Carregamento dinâmico dos dados mock Q1
+ * Usa require() dinâmico para evitar problemas de resolução de módulos no build
  */
 
-// Importa os JSONs diretamente usando caminho relativo - Next.js vai incluí-los no bundle
-// Caminho relativo: lib/mock/mockData.ts -> mock/data/ = ../../mock/data/
-import q1ClientesData from "../../mock/data/q1_clientes_sem_compra.json";
-import q1EstatisticasData from "../../mock/data/q1_estatisticas.json";
+let q1ClientesMock: any[] | null = null;
+let q1EstatisticasMock: any | null = null;
 
-// Exporta os dados normalizados
-export const q1ClientesMock = Array.isArray(q1ClientesData) 
-  ? q1ClientesData 
-  : (q1ClientesData as any)?.default || q1ClientesData;
+// Função para carregar dados (lazy loading)
+export function getQ1ClientesMock(): any[] {
+  if (q1ClientesMock === null) {
+    try {
+      // Tenta diferentes caminhos possíveis
+      const paths = [
+        require("../../mock/data/q1_clientes_sem_compra.json"),
+        require("../../../mock/data/q1_clientes_sem_compra.json"),
+        require("@/mock/data/q1_clientes_sem_compra.json"),
+      ];
+      
+      for (const data of paths) {
+        if (data) {
+          q1ClientesMock = Array.isArray(data) ? data : (data?.default || data);
+          if (q1ClientesMock && q1ClientesMock.length > 0) {
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[mockData] Erro ao carregar q1_clientes_sem_compra.json:", e);
+      q1ClientesMock = [];
+    }
+  }
+  return q1ClientesMock || [];
+}
 
-export const q1EstatisticasMock = (q1EstatisticasData as any)?.default || q1EstatisticasData;
+export function getQ1EstatisticasMock(): any {
+  if (q1EstatisticasMock === null) {
+    try {
+      const paths = [
+        require("../../mock/data/q1_estatisticas.json"),
+        require("../../../mock/data/q1_estatisticas.json"),
+        require("@/mock/data/q1_estatisticas.json"),
+      ];
+      
+      for (const data of paths) {
+        if (data) {
+          q1EstatisticasMock = data?.default || data;
+          if (q1EstatisticasMock && q1EstatisticasMock.total_clientes) {
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[mockData] Erro ao carregar q1_estatisticas.json:", e);
+      q1EstatisticasMock = {};
+    }
+  }
+  return q1EstatisticasMock || {};
+}
 

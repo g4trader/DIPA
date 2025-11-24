@@ -1,7 +1,7 @@
 import { AskParams, AskResponse } from "@/lib/dipamApi";
 import { CopilotStructuredResponse } from "@/types/agent";
 import { safeNumber } from "@/lib/formatters";
-import { q1ClientesMock, q1EstatisticasMock } from "./mockData";
+import { getQ1ClientesMock, getQ1EstatisticasMock } from "./mockData";
 
 // APIs do Node.js - só disponíveis no servidor
 let readFileSync: any;
@@ -194,12 +194,13 @@ function carregarDadosMock() {
       },
     };
     
-    // Tenta usar dados importados estaticamente primeiro (incluídos no bundle)
+    // Tenta usar dados carregados dinamicamente primeiro
     let dadosCarregados = false;
     
+    const q1ClientesMock = getQ1ClientesMock();
     if (q1ClientesMock && Array.isArray(q1ClientesMock) && q1ClientesMock.length > 0) {
       q1Dados = q1ClientesMock;
-      console.log(`[dipamMockEngine] ✅ Dados Q1 importados estaticamente: ${q1Dados.length} clientes`);
+      console.log(`[dipamMockEngine] ✅ Dados Q1 carregados dinamicamente: ${q1Dados.length} clientes`);
       dadosCarregados = true;
     } else {
       console.log(`[dipamMockEngine] ⚠️  Import estático vazio, tentando require()...`);
@@ -265,12 +266,13 @@ function carregarDadosMock() {
       }
     }
     
-    // Tenta usar estatísticas importadas estaticamente primeiro
+    // Tenta usar estatísticas carregadas dinamicamente primeiro
     let statsCarregadas = false;
     
+    const q1EstatisticasMock = getQ1EstatisticasMock();
     if (q1EstatisticasMock && q1EstatisticasMock.total_clientes) {
       q1Estatisticas = q1EstatisticasMock;
-      console.log(`[dipamMockEngine] ✅ Estatísticas Q1 importadas estaticamente`);
+      console.log(`[dipamMockEngine] ✅ Estatísticas Q1 carregadas dinamicamente`);
       statsCarregadas = true;
     } else {
       console.log(`[dipamMockEngine] ⚠️  Import estático de estatísticas vazio, tentando require()...`);
