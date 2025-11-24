@@ -152,8 +152,12 @@ function carregarDadosMock() {
     // Tenta diferentes caminhos possíveis (Vercel pode ter estrutura diferente)
     // Prioriza q1_clientes_sem_compra.json (dados reais dos CSVs), fallback para q1_dados_dw.json
     const caminhosPossiveis = [
+      // Caminho padrão (desenvolvimento e produção local)
       join(basePath, "mock", "data", "q1_clientes_sem_compra.json"),
-      join(basePath, "mock", "data", "q1_dados_dw.json"), // Fallback para dados antigos
+      // Vercel standalone build (produção)
+      join(basePath, ".next", "standalone", "mock", "data", "q1_clientes_sem_compra.json"),
+      // Fallback para dados antigos
+      join(basePath, "mock", "data", "q1_dados_dw.json"),
       join(basePath, ".next", "server", "mock", "data", "q1_clientes_sem_compra.json"),
       join(basePath, "..", "mock", "data", "q1_clientes_sem_compra.json"),
     ];
@@ -215,7 +219,10 @@ function carregarDadosMock() {
       console.log(`[dipamMockEngine] ⚠️  require() de estatísticas falhou: ${e.message}, tentando readFileSync...`);
       
       const caminhosEstatisticas = [
+        // Caminho padrão (desenvolvimento e produção local)
         join(basePath, "mock", "data", "q1_estatisticas.json"),
+        // Vercel standalone build (produção)
+        join(basePath, ".next", "standalone", "mock", "data", "q1_estatisticas.json"),
         join(basePath, ".next", "server", "mock", "data", "q1_estatisticas.json"),
         join(basePath, "..", "mock", "data", "q1_estatisticas.json"),
       ];
