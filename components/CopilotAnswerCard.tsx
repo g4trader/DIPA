@@ -237,18 +237,12 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
                       <p className="text-slate-500 uppercase tracking-wide">Meta</p>
                       <p className="text-slate-200">
                         {formatCurrencyBR(v.meta)}
-                          style: "currency",
-                          currency: "BRL",
-                        })}
                       </p>
                     </div>
                     <div>
                       <p className="text-slate-500 uppercase tracking-wide">Realizado</p>
                       <p className="text-emerald-400">
                         {formatCurrencyBR(v.realizado)}
-                          style: "currency",
-                          currency: "BRL",
-                        })}
                       </p>
                     </div>
                   </div>
@@ -334,15 +328,9 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
                             )}
                             <td className="py-2 px-3 text-slate-300 text-right">
                               {formatCurrencyBR(v.meta)}
-                                style: "currency",
-                                currency: "BRL",
-                              })}
                             </td>
                             <td className="py-2 px-3 text-slate-200 text-right font-medium">
                               {formatCurrencyBR(v.realizado)}
-                                style: "currency",
-                                currency: "BRL",
-                              })}
                             </td>
                             <td
                               className={clsx(
@@ -428,9 +416,6 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
                             )}
                             <td className="py-2 px-3 text-slate-200 text-right font-medium">
                               {formatCurrencyBR(c.faturamento_mes)}
-                                style: "currency",
-                                currency: "BRL",
-                              })}
                             </td>
                             {clientesProblema[0]?.qtd_pedidos !== undefined && (
                               <td className="py-2 px-3 text-slate-300 text-right">
