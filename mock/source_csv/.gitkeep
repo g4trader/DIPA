@@ -1,0 +1,10 @@
+# Esta pasta contém os CSVs reais usados para gerar os dados mock
+# Os arquivos CSV devem ser copiados aqui antes de executar o script de exportação
+# 
+# Arquivos esperados:
+# - Clientes ativos.xls - Clientes ativos.csv (ou similar)
+# - Detalhes de vendas - Set-out 2025.xlsx - Sheet1.csv (ou similar)
+# - Supervisor pasta 1.xlsx - Sheet1.csv (ou similar)
+#
+# NOTA: Esta pasta está no .gitignore para não commitar os CSVs grandes
+

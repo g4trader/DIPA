@@ -75,10 +75,12 @@ function carregarDadosMock() {
     const basePath = process.cwd();
     
     // Tenta diferentes caminhos possíveis (Vercel pode ter estrutura diferente)
+    // Prioriza q1_clientes_sem_compra.json (dados reais dos CSVs), fallback para q1_dados_dw.json
     const caminhosPossiveis = [
-      join(basePath, "mock", "data", "q1_dados_dw.json"),
-      join(basePath, ".next", "server", "mock", "data", "q1_dados_dw.json"),
-      join(basePath, "..", "mock", "data", "q1_dados_dw.json"),
+      join(basePath, "mock", "data", "q1_clientes_sem_compra.json"),
+      join(basePath, "mock", "data", "q1_dados_dw.json"), // Fallback para dados antigos
+      join(basePath, ".next", "server", "mock", "data", "q1_clientes_sem_compra.json"),
+      join(basePath, "..", "mock", "data", "q1_clientes_sem_compra.json"),
     ];
     
     let q1Dados: any[] = [];
@@ -116,7 +118,7 @@ function carregarDadosMock() {
       q1Dados = DADOS_MOCK_FALLBACK;
     }
     
-    // Tenta carregar q1_estatisticas.json
+    // Tenta carregar q1_estatisticas.json (dados reais dos CSVs)
     const caminhosEstatisticas = [
       join(basePath, "mock", "data", "q1_estatisticas.json"),
       join(basePath, ".next", "server", "mock", "data", "q1_estatisticas.json"),
@@ -138,20 +140,7 @@ function carregarDadosMock() {
     
     // Se não conseguiu carregar estatísticas, calcula a partir dos dados
     if (!statsCarregadas && q1Dados.length > 0) {
-      const faixas = {
-        faixa_61_120: 0,
-        faixa_121_180: 0,
-        faixa_181_300: 0,
-        faixa_maior_300: 0,
-      };
-      
-      for (const cliente of q1Dados) {
-        const dias = cliente.dias_sem_compra || 0;
-        if (61 <= dias && dias <= 120) faixas.faixa_61_120++;
-        else if (121 <= dias && dias <= 180) faixas.faixa_121_180++;
-        else if (181 <= dias && dias <= 300) faixas.faixa_181_300++;
-        else if (dias > 300) faixas.faixa_maior_300++;
-      }
+      const faixas = classificarPorFaixas(q1Dados);
       
       q1Estatisticas = {
         total_clientes: q1Dados.length,
@@ -159,20 +148,29 @@ function carregarDadosMock() {
       };
     }
     
+    // Normaliza estrutura de faixas (compatibilidade com formato antigo e novo)
+    if (q1Estatisticas.faixas) {
+      // Se está no formato antigo (faixa_61_120), converte para novo (61_120)
+      if (q1Estatisticas.faixas.faixa_61_120 !== undefined) {
+        q1Estatisticas.faixas = {
+          "61_120": q1Estatisticas.faixas.faixa_61_120 || 0,
+          "121_180": q1Estatisticas.faixas.faixa_121_180 || 0,
+          "181_300": q1Estatisticas.faixas.faixa_181_300 || 0,
+          "acima_300": q1Estatisticas.faixas.faixa_maior_300 || q1Estatisticas.faixas.faixa_acima_300 || 0,
+        };
+      }
+    }
+    
     return { q1Dados, q1Estatisticas };
   } catch (error) {
     console.error("[dipamMockEngine] ❌ Erro ao carregar dados mock, usando fallback:", error);
     // Retorna dados fallback em caso de erro
+    const faixasFallback = classificarPorFaixas(DADOS_MOCK_FALLBACK);
     return {
       q1Dados: DADOS_MOCK_FALLBACK,
       q1Estatisticas: {
         total_clientes: DADOS_MOCK_FALLBACK.length,
-        faixas: {
-          faixa_61_120: 2,
-          faixa_121_180: 1,
-          faixa_181_300: 1,
-          faixa_maior_300: 1,
-        },
+        faixas: faixasFallback,
       },
     };
   }
@@ -207,29 +205,29 @@ function detectarQ1(pergunta: string): boolean {
  * Classifica clientes por faixas de dias sem compra
  */
 function classificarPorFaixas(dados: any[]): {
-  faixa_61_120: number;
-  faixa_121_180: number;
-  faixa_181_300: number;
-  faixa_maior_300: number;
+  "61_120": number;
+  "121_180": number;
+  "181_300": number;
+  "acima_300": number;
 } {
   const faixas = {
-    faixa_61_120: 0,
-    faixa_121_180: 0,
-    faixa_181_300: 0,
-    faixa_maior_300: 0,
+    "61_120": 0,
+    "121_180": 0,
+    "181_300": 0,
+    "acima_300": 0,
   };
   
   for (const cliente of dados) {
     const dias = cliente.dias_sem_compra || 0;
     
     if (61 <= dias && dias <= 120) {
-      faixas.faixa_61_120++;
+      faixas["61_120"]++;
     } else if (121 <= dias && dias <= 180) {
-      faixas.faixa_121_180++;
+      faixas["121_180"]++;
     } else if (181 <= dias && dias <= 300) {
-      faixas.faixa_181_300++;
+      faixas["181_300"]++;
     } else if (dias > 300) {
-      faixas.faixa_maior_300++;
+      faixas["acima_300"]++;
     }
   }
   
@@ -255,10 +253,10 @@ function montarResumoExecutivoQ1(
   }
   
   return `Identificamos ${totalClientes.toLocaleString("pt-BR")} clientes ativos sem compra há mais de 60 dias. ` +
-    `Destes, ${faixas.faixa_61_120} estão na faixa de 61-120 dias (${calcularPercentual(faixas.faixa_61_120, totalClientes)}%), ` +
-    `${faixas.faixa_121_180} entre 121-180 dias (${calcularPercentual(faixas.faixa_121_180, totalClientes)}%), ` +
-    `${faixas.faixa_181_300} entre 181-300 dias (${calcularPercentual(faixas.faixa_181_300, totalClientes)}%) ` +
-    `e ${faixas.faixa_maior_300} com mais de 300 dias sem compra (${calcularPercentual(faixas.faixa_maior_300, totalClientes)}%). ` +
+    `Destes, ${faixas["61_120"]} estão na faixa de 61-120 dias (${calcularPercentual(faixas["61_120"], totalClientes)}%), ` +
+    `${faixas["121_180"]} entre 121-180 dias (${calcularPercentual(faixas["121_180"], totalClientes)}%), ` +
+    `${faixas["181_300"]} entre 181-300 dias (${calcularPercentual(faixas["181_300"], totalClientes)}%) ` +
+    `e ${faixas["acima_300"]} com mais de 300 dias sem compra (${calcularPercentual(faixas["acima_300"], totalClientes)}%). ` +
     `Recomendamos ações de reativação prioritárias para os clientes com maior tempo sem compra.`;
 }
 
@@ -287,19 +285,33 @@ export async function executarMockAsk(payload: AskParams): Promise<AskResponse> 
  * Executa mock específico para Q1
  */
 function executarMockQ1(payload: AskParams): AskResponse {
-  // Lê dados mock (já normalizados no import)
+  // Lê dados mock (já normalizados no carregamento)
   const dados = q1Dados || [];
   
   // Debug: log dos dados carregados
   if (process.env.NODE_ENV === "development") {
     console.log("[dipamMockEngine] Dados Q1 carregados:", dados.length, "clientes");
+    if (q1Estatisticas.total_clientes) {
+      console.log("[dipamMockEngine] Estatísticas carregadas:", q1Estatisticas);
+    }
   }
   
-  // Calcula faixas
-  const faixas = classificarPorFaixas(dados);
+  // Usa estatísticas carregadas ou calcula
+  let faixas: ReturnType<typeof classificarPorFaixas>;
+  let totalClientes: number;
+  
+  if (q1Estatisticas.faixas && q1Estatisticas.total_clientes) {
+    // Usa estatísticas do JSON
+    faixas = q1Estatisticas.faixas as any;
+    totalClientes = q1Estatisticas.total_clientes;
+  } else {
+    // Calcula a partir dos dados
+    faixas = classificarPorFaixas(dados);
+    totalClientes = dados.length;
+  }
   
   // Monta resumo executivo
-  const resumoExecutivo = montarResumoExecutivoQ1(dados.length, faixas);
+  const resumoExecutivo = montarResumoExecutivoQ1(totalClientes, faixas);
   
   // Monta tabela principal
   const tabelaPrincipal = {
