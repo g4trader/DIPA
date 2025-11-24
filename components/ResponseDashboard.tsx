@@ -184,8 +184,31 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
     
     // ✅ CORREÇÃO Q1: Para Q1, prioriza big_number do contexto (total de clientes)
     // Isso garante que o Big Number mostre o total correto, não um percentual extraído do texto
-    if (isQ1 && dataAny.contexto?.big_number !== undefined) {
-      const totalClientes = Number(dataAny.contexto.big_number) || Number(dataAny.contexto.total_clientes_q1) || 0;
+    if (isQ1) {
+      // Tenta múltiplas fontes para o total de clientes
+      let totalClientes = 0;
+      
+      // 1. Tenta contexto.big_number (prioridade)
+      if (dataAny.contexto?.big_number !== undefined) {
+        totalClientes = Number(dataAny.contexto.big_number);
+      }
+      // 2. Tenta contexto.total_clientes_q1
+      else if (dataAny.contexto?.total_clientes_q1 !== undefined) {
+        totalClientes = Number(dataAny.contexto.total_clientes_q1);
+      }
+      // 3. Tenta contexto.total_clientes
+      else if (dataAny.contexto?.total_clientes !== undefined) {
+        totalClientes = Number(dataAny.contexto.total_clientes);
+      }
+      // 4. Tenta dados_dw.classificacao_faixas.total
+      else if (dataAny.contexto?.dados_dw?.classificacao_faixas?.total !== undefined) {
+        totalClientes = Number(dataAny.contexto.dados_dw.classificacao_faixas.total);
+      }
+      // 5. Tenta contar linhas da tabela (fallback)
+      else if (dataAny.structured?.secoes?.[0]?.dados && Array.isArray(dataAny.structured.secoes[0].dados)) {
+        totalClientes = dataAny.structured.secoes[0].dados.length;
+      }
+      
       if (totalClientes > 0) {
         kpisList.push({
           label: "Total de Clientes",
@@ -435,21 +458,13 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                         </p>
                       </div>
                     </div>
-                    {/* Coluna direita: Resumo Executivo (apenas primeira frase, curta e objetiva) */}
+                    {/* Coluna direita: Resumo Executivo (texto completo, mas limitado a 2-3 linhas) */}
                     {parsedMarkdown?.resumoExecutivo && (
                       <div className="flex-1 flex items-center border-l border-white/10 pl-6">
                         <div id={generateCardId('resumo-executivo-conteudo')} className="prose prose-invert max-w-none">
-                          <p className="text-sm opacity-90 leading-relaxed text-white/80 m-0">
-                            {/* Pega apenas a primeira frase (até o primeiro ponto final) */}
-                            {(() => {
-                              const texto = parsedMarkdown.resumoExecutivo.trim();
-                              const primeiraFrase = texto.split('.')[0];
-                              // Se a primeira frase for muito longa (>200 chars), pega apenas até 200 chars
-                              if (primeiraFrase.length > 200) {
-                                return primeiraFrase.substring(0, 200).trim() + '...';
-                              }
-                              return primeiraFrase + (texto.includes('.') ? '.' : '');
-                            })()}
+                          <p className="text-sm opacity-90 leading-relaxed text-white/80 m-0 line-clamp-3">
+                            {/* Mostra o resumo executivo completo, mas limita a 3 linhas com CSS line-clamp */}
+                            {parsedMarkdown.resumoExecutivo.trim()}
                           </p>
                         </div>
                       </div>

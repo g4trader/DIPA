@@ -631,7 +631,14 @@ function executarMockQ1(payload: AskParams): AskResponse {
         dados: dadosOrdenados.map((cliente: any) => {
           // Converte para formato de seção (dicionário)
           // IMPORTANTE: Usa mesma lógica de fallback do mapper real
-          const vendedor = cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "";
+          // IMPORTANTE: vendedor_nome pode conter rota_id se não houver nome do vendedor
+          // Se vendedor_nome for apenas um número (rota), formata como "ROTA X"
+          let vendedor = cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "";
+          // Se vendedor_nome é apenas número (rota), formata como "ROTA X" para melhor legibilidade
+          if (vendedor && /^\d+$/.test(String(vendedor).trim())) {
+            vendedor = `ROTA ${vendedor.trim()}`;
+          }
+          
           const supervisor = cliente.supervisor_nome || cliente.supervisor_codigo || "";
           
           return {
