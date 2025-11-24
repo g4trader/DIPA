@@ -151,6 +151,8 @@ export type AskResponse = {
   confidence: number;
   /** Resumo executivo extraído da resposta */
   resumoExecutivo: string;
+  /** Resposta em markdown completo com blocos executivos (opcional) */
+  respostaMarkdown?: string;
   /** KPIs estruturados (opcional) */
   kpis?: KpisData;
   /** Top vendedores (opcional) */

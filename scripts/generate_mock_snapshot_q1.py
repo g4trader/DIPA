@@ -220,11 +220,24 @@ def processar_q1(
     )
     
     # Filtra clientes ativos
+    # Lógica: cliente está ativo se NÃO está bloqueado por inatividade
+    # Mas também consideramos clientes que têm compras recentes (mesmo se marcados como bloqueados)
     if col_ativo:
-        # Remove clientes bloqueados/inativos
+        # Remove apenas clientes explicitamente bloqueados por inatividade
+        # Se a coluna contém "Sim(S)" ou similar, considera bloqueado
         df_clientes_ativos = df_clientes[
             ~df_clientes[col_ativo].astype(str).str.contains("Sim", case=False, na=False)
         ].copy()
+        
+        # Se muito poucos clientes ativos, considera uma lógica alternativa:
+        # clientes que têm compras nos últimos 12 meses também são considerados ativos
+        if len(df_clientes_ativos) < 100:
+            logger.warning(f"Apenas {len(df_clientes_ativos)} clientes marcados como ativos. Considerando também clientes com compras recentes.")
+            # Adiciona clientes que têm compras (mesmo que marcados como bloqueados)
+            clientes_com_compras = set(ultima_compra.keys())
+            df_clientes_com_compras = df_clientes[df_clientes[col_codigo].isin(clientes_com_compras)].copy()
+            # Remove duplicatas
+            df_clientes_ativos = pd.concat([df_clientes_ativos, df_clientes_com_compras]).drop_duplicates(subset=[col_codigo])
     else:
         # Se não tem coluna de bloqueio, assume todos ativos
         logger.warning("Coluna de bloqueio não encontrada, assumindo todos clientes como ativos")

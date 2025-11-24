@@ -391,16 +391,23 @@ function detectarQ1(pergunta: string): boolean {
 }
 
 /**
- * Monta resumo executivo mock para Q1
+ * Calcula percentual de forma segura
+ */
+function calcularPercentual(valor: number, total: number): string {
+  if (total === 0 || !total) return "0.0";
+  if (!valor || valor === 0) return "0.0";
+  return ((valor / total) * 100).toFixed(1);
+}
+
+/**
+ * Monta resumo executivo mock para Q1 (formato curto, 3-4 linhas)
  */
 function montarResumoExecutivoQ1(
   totalClientes: number,
   faixas: ReturnType<typeof classificarPorFaixas>
 ): string {
-  // Valida e normaliza totalClientes
   const total = typeof totalClientes === "number" && !isNaN(totalClientes) ? totalClientes : 0;
   
-  // Valida e normaliza faixas
   const faixasValidas = {
     "61_120": typeof faixas["61_120"] === "number" ? faixas["61_120"] : 0,
     "121_180": typeof faixas["121_180"] === "number" ? faixas["121_180"] : 0,
@@ -408,24 +415,96 @@ function montarResumoExecutivoQ1(
     "acima_300": typeof faixas["acima_300"] === "number" ? faixas["acima_300"] : 0,
   };
   
-  // Evita divisão por zero
-  const calcularPercentual = (valor: number, total: number): string => {
-    if (total === 0 || !total) return "0.0";
-    if (!valor || valor === 0) return "0.0";
-    return ((valor / total) * 100).toFixed(1);
-  };
-  
   if (total === 0) {
     return "Não foram identificados clientes ativos sem compra há mais de 60 dias no momento. " +
       "Recomendamos monitorar regularmente este indicador para identificar oportunidades de reativação.";
   }
   
+  const pct61_120 = calcularPercentual(faixasValidas["61_120"], total);
+  const pct121_180 = calcularPercentual(faixasValidas["121_180"], total);
+  const pct181_300 = calcularPercentual(faixasValidas["181_300"], total);
+  const pctAcima300 = calcularPercentual(faixasValidas["acima_300"], total);
+  
   return `Identificamos ${total.toLocaleString("pt-BR")} clientes ativos sem compra há mais de 60 dias. ` +
-    `Destes, ${faixasValidas["61_120"]} estão na faixa de 61-120 dias (${calcularPercentual(faixasValidas["61_120"], total)}%), ` +
-    `${faixasValidas["121_180"]} entre 121-180 dias (${calcularPercentual(faixasValidas["121_180"], total)}%), ` +
-    `${faixasValidas["181_300"]} entre 181-300 dias (${calcularPercentual(faixasValidas["181_300"], total)}%) ` +
-    `e ${faixasValidas["acima_300"]} com mais de 300 dias sem compra (${calcularPercentual(faixasValidas["acima_300"], total)}%). ` +
-    `Recomendamos ações de reativação prioritárias para os clientes com maior tempo sem compra.`;
+    `Destes, ${faixasValidas["61_120"]} estão na faixa de 61-120 dias (${pct61_120}%), ` +
+    `${faixasValidas["121_180"]} entre 121-180 dias (${pct121_180}%), ` +
+    `${faixasValidas["181_300"]} entre 181-300 dias (${pct181_300}%) ` +
+    `e ${faixasValidas["acima_300"]} com mais de 300 dias sem compra (${pctAcima300}%). ` +
+    `O foco de curto prazo deve ser nos clientes com 61-120 dias, que representam a maior oportunidade de reativação.`;
+}
+
+/**
+ * Gera markdown executivo completo para Q1 (mesma estrutura da Q1 real)
+ * Inclui: Resumo Executivo, Impactos Comerciais, Plano Prioritário de Ação
+ */
+function gerarMarkdownExecutivoQ1(
+  totalClientes: number,
+  faixas: ReturnType<typeof classificarPorFaixas>,
+  dados: any[]
+): string {
+  const total = typeof totalClientes === "number" && !isNaN(totalClientes) ? totalClientes : 0;
+  
+  const faixasValidas = {
+    "61_120": typeof faixas["61_120"] === "number" ? faixas["61_120"] : 0,
+    "121_180": typeof faixas["121_180"] === "number" ? faixas["121_180"] : 0,
+    "181_300": typeof faixas["181_300"] === "number" ? faixas["181_300"] : 0,
+    "acima_300": typeof faixas["acima_300"] === "number" ? faixas["acima_300"] : 0,
+  };
+  
+  if (total === 0) {
+    return `## Resumo Executivo
+
+Não foram identificados clientes ativos sem compra há mais de 60 dias no momento. Recomendamos monitorar regularmente este indicador para identificar oportunidades de reativação.
+
+## Impactos Comerciais
+
+A ausência de clientes inativos indica saúde da carteira neste recorte específico. Mantenha o monitoramento para detectar precocemente possíveis migrações.
+
+## Plano Prioritário de Ação (Próximos 7 dias)
+
+- Manter rotina de monitoramento semanal deste indicador
+- Validar se a ausência de inativos é resultado de ações de reativação recentes
+- Documentar boas práticas que mantiveram a carteira ativa`;
+  }
+  
+  const pct61_120 = calcularPercentual(faixasValidas["61_120"], total);
+  const pct121_180 = calcularPercentual(faixasValidas["121_180"], total);
+  const pct181_300 = calcularPercentual(faixasValidas["181_300"], total);
+  const pctAcima300 = calcularPercentual(faixasValidas["acima_300"], total);
+  
+  // Analisa distribuição por rotas/supervisões (se disponível)
+  const rotasUnicas = new Set<string>();
+  const supervisoesUnicas = new Set<string>();
+  dados.forEach((cliente: any) => {
+    if (cliente.rota_id) rotasUnicas.add(String(cliente.rota_id));
+    if (cliente.supervisor_nome || cliente.supervisor_codigo) {
+      supervisoesUnicas.add(String(cliente.supervisor_nome || cliente.supervisor_codigo));
+    }
+  });
+  
+  const totalRotas = rotasUnicas.size;
+  const totalSupervisoes = supervisoesUnicas.size;
+  
+  // Gera markdown estruturado
+  const markdown = `## Resumo Executivo
+
+Identificamos ${total.toLocaleString("pt-BR")} clientes ativos sem compra há mais de 60 dias. A distribuição por faixas indica que ${faixasValidas["61_120"]} clientes (${pct61_120}%) estão na faixa de 61-120 dias, representando a maior oportunidade de reativação imediata. ${faixasValidas["121_180"]} clientes (${pct121_180}%) estão entre 121-180 dias, ${faixasValidas["181_300"]} (${pct181_300}%) entre 181-300 dias e ${faixasValidas["acima_300"]} (${pctAcima300}%) com mais de 300 dias sem compra, caracterizando carteira fria de baixa probabilidade de reativação.
+
+## Impactos Comerciais
+
+- **Perda de receita recorrente**: A ausência de compras por período prolongado impacta diretamente o faturamento mensal e a previsibilidade de receita.
+- **Risco de migração de carteira**: Clientes inativos por mais de 120 dias apresentam maior probabilidade de migração para concorrentes ou mudança de padrão de compra.
+- **Concentração operacional**: A distribuição dos clientes inativos está presente em ${totalRotas > 0 ? `${totalRotas} rotas distintas` : "múltiplas rotas"}, ${totalSupervisoes > 0 ? `envolvendo ${totalSupervisoes} supervisões` : "com impacto em diferentes supervisões"}, indicando necessidade de ação coordenada.
+- **Oportunidade de recuperação**: A faixa de 61-120 dias concentra ${pct61_120}% dos clientes inativos, representando a melhor janela de oportunidade para reativação com menor esforço comercial.
+
+## Plano Prioritário de Ação (Próximos 7 dias)
+
+- **Prioridade 1 (61-120 dias - ${faixasValidas["61_120"]} clientes)**: Recontato imediato pela equipe comercial, campanhas de reativação com SKU âncora por rota, e alocação de energia de curto prazo da equipe para esta faixa.
+- **Prioridade 2 (121-180 dias - ${faixasValidas["121_180"]} clientes)**: Ações coordenadas com supervisão, acompanhamento de rotas específicas e análise de causas raiz da inatividade.
+- **Prioridade 3 (181-300 dias - ${faixasValidas["181_300"]} clientes)**: Avaliação caso a caso, priorizando clientes com histórico de ticket médio elevado ou importância estratégica.
+- **Não priorizar (>300 dias - ${faixasValidas["acima_300"]} clientes)**: Carteira fria com baixa probabilidade de reativação. Manter em monitoramento passivo, sem alocação de recursos comerciais ativos.`;
+  
+  return markdown;
 }
 
 /**
@@ -490,30 +569,53 @@ function executarMockQ1(payload: AskParams): AskResponse {
     faixas = classificarPorFaixas(dados);
   }
   
-  // Monta resumo executivo
+  // Monta resumo executivo (formato curto)
   const resumoExecutivo = montarResumoExecutivoQ1(totalClientes, faixas);
   
-  // Monta tabela principal
+  // Gera markdown executivo completo (mesma estrutura da Q1 real)
+  const respostaMarkdown = gerarMarkdownExecutivoQ1(totalClientes, faixas, dados);
+  
+  // Monta tabela principal com título "Dados Analíticos - Consulta Geral" (mesma estrutura da Q1 real)
   // Garante que todos os valores numéricos são números válidos
   const tabelaPrincipal = {
+    titulo: "Dados Analíticos - Consulta Geral",
     colunas: ["Cliente ID", "Nome", "Dias sem Compra", "Vendedor", "Supervisor"],
-    linhas: dados.map((cliente: any) => [
-      safeNumber(cliente.cliente_id, 0),
-      String(cliente.nome || ""),
-      safeNumber(cliente.dias_sem_compra, 0),
-      String(cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || ""),
-      String(cliente.supervisor_nome || cliente.supervisor_codigo || ""),
-    ]),
+    linhas: dados.map((cliente: any) => {
+      // Usa mesma lógica de fallback do mapper real
+      const vendedor = cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "—";
+      const supervisor = cliente.supervisor_nome || cliente.supervisor_codigo || "—";
+      
+      return [
+        safeNumber(cliente.cliente_id, 0),
+        String(cliente.nome || ""),
+        safeNumber(cliente.dias_sem_compra, 0),
+        String(vendedor),
+        String(supervisor),
+      ];
+    }),
   };
   
-  // Monta structured response
+  // Monta structured response (mesma estrutura da Q1 real)
   const structured: CopilotStructuredResponse = {
     resumo_executivo: resumoExecutivo,
+    respostaMarkdown: respostaMarkdown, // Adiciona markdown completo
     secoes: [
       {
-        titulo: "Clientes sem Compra há Mais de 60 Dias",
-        tipo: "lista_clientes",
-        dados: dados.slice(0, 10), // Top 10 para preview
+        tipo: "tabela_detalhada",
+        titulo: "Dados Analíticos - Consulta Geral",
+        dados: dados.map((cliente: any) => {
+          // Converte para formato de seção (dicionário)
+          const vendedor = cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "—";
+          const supervisor = cliente.supervisor_nome || cliente.supervisor_codigo || "—";
+          
+          return {
+            "Cliente ID": safeNumber(cliente.cliente_id, 0),
+            "Nome": String(cliente.nome || ""),
+            "Dias sem Compra": safeNumber(cliente.dias_sem_compra, 0),
+            "Vendedor": String(vendedor),
+            "Supervisor": String(supervisor),
+          };
+        }),
       },
     ],
     detalhe_tabela: tabelaPrincipal,
@@ -534,7 +636,8 @@ function executarMockQ1(payload: AskParams): AskResponse {
     total_registros_tabela: dados.length,
   });
   
-  // Monta resposta completa
+  // Monta resposta completa (mesma estrutura da Q1 real)
+  // O frontend busca tabela_principal em jsonTecnico, então precisamos estruturar assim
   const resposta: AskResponse = {
     question: payload.pergunta,
     intent: "clientes_sem_compra",
@@ -549,11 +652,17 @@ function executarMockQ1(payload: AskParams): AskResponse {
       structured: structured,
     },
     structured: structured,
+    // Adiciona respostaMarkdown para o frontend processar os blocos executivos
+    respostaMarkdown: respostaMarkdown,
     // Adiciona big_number explicitamente para compatibilidade
     contexto: {
       big_number: totalClientes,
       total_clientes: totalClientes,
       faixas: faixas,
+      // Adiciona jsonTecnico com tabela_principal (formato esperado pelo frontend)
+      jsonTecnico: {
+        tabela_principal: [tabelaPrincipal], // Array com a tabela (formato esperado)
+      },
     },
   };
   

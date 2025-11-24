@@ -284,18 +284,46 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
   const tabelaPrincipalQ1 = useMemo(() => {
     if (!isQ1) return null;
     
+    // Prioridade 1: jsonTecnico.tabela_principal (formato do mapper real)
     const tabelaPrincipal = dataAny.jsonTecnico?.tabela_principal;
     if (tabelaPrincipal && Array.isArray(tabelaPrincipal) && tabelaPrincipal.length > 0) {
       const tabela = tabelaPrincipal[0];
       if (tabela.colunas && tabela.linhas) {
         return {
+          titulo: tabela.titulo || "Dados Analíticos - Consulta Geral",
           colunas: tabela.colunas,
           linhas: tabela.linhas
         };
       }
     }
+    
+    // Prioridade 2: structured.detalhe_tabela (formato do mock engine)
+    const detalheTabela = dataAny.structured?.detalhe_tabela || data.detalhe_tabela;
+    if (detalheTabela && detalheTabela.colunas && detalheTabela.linhas) {
+      return {
+        titulo: detalheTabela.titulo || "Dados Analíticos - Consulta Geral",
+        colunas: detalheTabela.colunas,
+        linhas: detalheTabela.linhas
+      };
+    }
+    
+    // Prioridade 3: structured.secoes (formato alternativo)
+    const tabelaSecao = dataAny.structured?.secoes?.find((s: any) => s.tipo === "tabela_detalhada");
+    if (tabelaSecao?.dados && Array.isArray(tabelaSecao.dados) && tabelaSecao.dados.length > 0) {
+      // Converte dados de objeto para formato de linhas/colunas
+      const primeiraLinha = tabelaSecao.dados[0];
+      const colunas = Object.keys(primeiraLinha);
+      const linhas = tabelaSecao.dados.map((item: any) => colunas.map((col: string) => item[col]));
+      
+      return {
+        titulo: tabelaSecao.titulo || "Dados Analíticos - Consulta Geral",
+        colunas: colunas,
+        linhas: linhas
+      };
+    }
+    
     return null;
-  }, [isQ1, dataAny.jsonTecnico]);
+  }, [isQ1, dataAny.jsonTecnico, dataAny.structured, data.detalhe_tabela]);
   
   // Reset paginação quando dados mudarem
   useEffect(() => {
@@ -530,14 +558,14 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
         );
       })()}
       
-      {/* 3. Tabela "Clientes sem compra" (Q1) - REMOVIDO: "Dados Analíticos - Consulta Geral" (muita informação inútil para Diretor) */}
+      {/* 3. Tabela "Dados Analíticos - Consulta Geral" (Q1) */}
       {isQ1 && tabelaClientesPaginada ? (
         <div 
           id={generateTableId('clientes-sem-compra')} 
           className="bg-[#0f172a] p-6 rounded-xl border border-white/10 shadow-lg space-y-4"
         >
           <h2 id={generateTableId('clientes-sem-compra-titulo')} className="text-xl font-semibold text-white">
-            Clientes sem compra há mais de 60 dias
+            {tabelaPrincipalQ1?.titulo || dataAny.jsonTecnico?.tabela_principal?.[0]?.titulo || "Dados Analíticos - Consulta Geral"}
           </h2>
           <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
             <DataTable
