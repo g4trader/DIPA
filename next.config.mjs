@@ -37,6 +37,7 @@ const nextConfig = {
       '@/app': path.resolve(projectRoot, 'app'),
       '@/styles': path.resolve(projectRoot, 'styles'),
       '@/assets': path.resolve(projectRoot, 'assets'),
+      '@/mock': path.resolve(projectRoot, 'mock'),
     };
     
     // Garante que os módulos sejam resolvidos corretamente
