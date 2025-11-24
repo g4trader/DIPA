@@ -62,13 +62,21 @@ O `components/ResponseDashboard.tsx` foi ajustado para:
 
 ### 1. Regenerar Snapshot do DW
 
+⚠️ **IMPORTANTE**: O snapshot atual foi gerado a partir de CSVs e **não tem supervisor preenchido**. Para ter supervisor preenchido (como na produção), use o script que usa o DW real:
+
 ```bash
-# Usa a função real do DW (recomendado)
+# Usa a função real do DW (recomendado - preenche supervisor corretamente)
 python3 scripts/generate_mock_snapshot_q1_from_dw.py \
   --output-dir ./mock/data \
   --dias 60 \
   --data-referencia 2025-11-24
 ```
+
+Este script:
+- ✅ Usa `get_clientes_sem_compra_ha_dias()` real (mesma função da produção)
+- ✅ Preenche `supervisor_nome` e `supervisor_codigo` corretamente (via JOINs)
+- ✅ Ordena por `dias_sem_compra` crescente (mesma ordem da produção)
+- ✅ Garante que todos os campos numéricos são int/float
 
 ### 2. Regenerar Dados TypeScript
 

@@ -577,21 +577,37 @@ function executarMockQ1(payload: AskParams): AskResponse {
     faixas = classificarPorFaixas(dados);
   }
   
+  // ✅ ORDENAÇÃO: Ordena dados por dias_sem_compra crescente (mesma ordem da produção)
+  // A query real ordena por dias_sem_compra ASC (queries.py linha 332)
+  const dadosOrdenados = [...dados].sort((a: any, b: any) => {
+    const diasA = safeNumber(a.dias_sem_compra, 0);
+    const diasB = safeNumber(b.dias_sem_compra, 0);
+    return diasA - diasB; // Ordem crescente
+  });
+  
   // Monta resumo executivo (formato curto)
   const resumoExecutivo = montarResumoExecutivoQ1(totalClientes, faixas);
   
   // Gera markdown executivo completo (mesma estrutura da Q1 real)
-  const respostaMarkdown = gerarMarkdownExecutivoQ1(totalClientes, faixas, dados);
+  const respostaMarkdown = gerarMarkdownExecutivoQ1(totalClientes, faixas, dadosOrdenados);
   
   // Monta tabela principal com título "Dados Analíticos - Consulta Geral" (mesma estrutura da Q1 real)
   // Garante que todos os valores numéricos são números válidos
   // IMPORTANTE: Usa a mesma lógica do mapper_handler_refatorado.py (linha 261-273)
+  // IMPORTANTE: Ordena por dias_sem_compra crescente (mesma ordem da produção)
   const tabelaPrincipal = {
     titulo: "Dados Analíticos - Consulta Geral",
     colunas: ["Cliente ID", "Nome", "Dias sem Compra", "Vendedor", "Supervisor"],
-    linhas: dados.map((cliente: any) => {
+    linhas: dadosOrdenados.map((cliente: any) => {
       // Usa mesma lógica de fallback do mapper real (mapper_handler_refatorado.py linha 268-269)
-      const vendedor = cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "";
+      // IMPORTANTE: vendedor_nome pode conter rota_id se não houver nome do vendedor
+      // Se vendedor_nome for apenas um número (rota), formata como "ROTA X"
+      let vendedor = cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "";
+      // Se vendedor_nome é apenas número (rota), formata como "ROTA X" para melhor legibilidade
+      if (vendedor && /^\d+$/.test(String(vendedor).trim())) {
+        vendedor = `ROTA ${vendedor.trim()}`;
+      }
+      
       const supervisor = cliente.supervisor_nome || cliente.supervisor_codigo || "";
       
       return [
@@ -612,17 +628,18 @@ function executarMockQ1(payload: AskParams): AskResponse {
       {
         tipo: "tabela_detalhada",
         titulo: "Dados Analíticos - Consulta Geral",
-        dados: dados.map((cliente: any) => {
+        dados: dadosOrdenados.map((cliente: any) => {
           // Converte para formato de seção (dicionário)
-          const vendedor = cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "—";
-          const supervisor = cliente.supervisor_nome || cliente.supervisor_codigo || "—";
+          // IMPORTANTE: Usa mesma lógica de fallback do mapper real
+          const vendedor = cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "";
+          const supervisor = cliente.supervisor_nome || cliente.supervisor_codigo || "";
           
           return {
             "Cliente ID": safeNumber(cliente.cliente_id, 0),
             "Nome": String(cliente.nome || ""),
             "Dias sem Compra": safeNumber(cliente.dias_sem_compra, 0),
-            "Vendedor": String(vendedor),
-            "Supervisor": String(supervisor),
+            "Vendedor": String(vendedor || "—"),
+            "Supervisor": String(supervisor || "—"),
           };
         }),
       },

@@ -129,6 +129,11 @@ def gerar_snapshot_q1_from_dw(
         
         clientes = clientes_unicos
         
+        # ✅ ORDENAÇÃO: Ordena por dias_sem_compra crescente (mesma ordem da query real)
+        # A query real ordena por dias_sem_compra ASC (queries.py linha 332)
+        clientes.sort(key=lambda c: c.get("dias_sem_compra", 0))
+        logger.info(f"✅ Dados ordenados por dias_sem_compra crescente")
+        
         # Garante que todos os campos numéricos são int/float
         for cliente in clientes:
             if "cliente_id" in cliente:
