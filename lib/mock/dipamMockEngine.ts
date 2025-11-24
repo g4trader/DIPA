@@ -1,6 +1,7 @@
 import { AskParams, AskResponse } from "@/lib/dipamApi";
 import { CopilotStructuredResponse } from "@/types/agent";
 import { safeNumber } from "@/lib/formatters";
+import { q1ClientesMock, q1EstatisticasMock } from "./mockData";
 
 // APIs do Node.js - só disponíveis no servidor
 let readFileSync: any;
@@ -193,21 +194,31 @@ function carregarDadosMock() {
       },
     };
     
-    // Tenta importar diretamente primeiro (funciona no build do Next.js)
-    try {
-      // Tenta caminho relativo ao arquivo atual
-      const q1ClientesModule = require("../../mock/data/q1_clientes_sem_compra.json");
-      q1Dados = Array.isArray(q1ClientesModule) ? q1ClientesModule : (q1ClientesModule?.default || q1ClientesModule);
-      if (q1Dados && q1Dados.length > 0) {
-        console.log(`[dipamMockEngine] ✅ Dados Q1 importados via require(): ${q1Dados.length} clientes`);
-      } else {
-        throw new Error("Dados vazios após require()");
-      }
-    } catch (e: any) {
-      console.log(`[dipamMockEngine] ⚠️  require() falhou: ${e.message}, tentando readFileSync...`);
+    // Tenta usar dados importados estaticamente primeiro (incluídos no bundle)
+    let dadosCarregados = false;
+    
+    if (q1ClientesMock && Array.isArray(q1ClientesMock) && q1ClientesMock.length > 0) {
+      q1Dados = q1ClientesMock;
+      console.log(`[dipamMockEngine] ✅ Dados Q1 importados estaticamente: ${q1Dados.length} clientes`);
+      dadosCarregados = true;
+    } else {
+      console.log(`[dipamMockEngine] ⚠️  Import estático vazio, tentando require()...`);
       
-      // Fallback: tenta carregar via readFileSync
-      let dadosCarregados = false;
+      // Fallback: tenta require()
+      try {
+        const q1ClientesModule = require("../../mock/data/q1_clientes_sem_compra.json");
+        q1Dados = Array.isArray(q1ClientesModule) ? q1ClientesModule : (q1ClientesModule?.default || q1ClientesModule);
+        if (q1Dados && q1Dados.length > 0) {
+          console.log(`[dipamMockEngine] ✅ Dados Q1 importados via require(): ${q1Dados.length} clientes`);
+          dadosCarregados = true;
+        }
+      } catch (e2: any) {
+        console.log(`[dipamMockEngine] ⚠️  require() falhou: ${e2.message}, tentando readFileSync...`);
+      }
+    }
+    
+    // Se ainda não carregou, tenta readFileSync
+    if (!dadosCarregados) {
       for (const caminho of caminhosPossiveis) {
         try {
           const dadosRaw = readFileSync(caminho, "utf-8");
@@ -254,14 +265,29 @@ function carregarDadosMock() {
       }
     }
     
-    // Tenta carregar q1_estatisticas.json (dados reais dos CSVs)
-    try {
-      const q1StatsModule = require("../../mock/data/q1_estatisticas.json");
-      q1Estatisticas = q1StatsModule?.default || q1StatsModule;
-      console.log(`[dipamMockEngine] ✅ Estatísticas Q1 importadas via require()`);
-    } catch (e: any) {
-      console.log(`[dipamMockEngine] ⚠️  require() de estatísticas falhou: ${e.message}, tentando readFileSync...`);
+    // Tenta usar estatísticas importadas estaticamente primeiro
+    let statsCarregadas = false;
+    
+    if (q1EstatisticasMock && q1EstatisticasMock.total_clientes) {
+      q1Estatisticas = q1EstatisticasMock;
+      console.log(`[dipamMockEngine] ✅ Estatísticas Q1 importadas estaticamente`);
+      statsCarregadas = true;
+    } else {
+      console.log(`[dipamMockEngine] ⚠️  Import estático de estatísticas vazio, tentando require()...`);
       
+      // Fallback: tenta require()
+      try {
+        const q1StatsModule = require("../../mock/data/q1_estatisticas.json");
+        q1Estatisticas = q1StatsModule?.default || q1StatsModule;
+        console.log(`[dipamMockEngine] ✅ Estatísticas Q1 importadas via require()`);
+        statsCarregadas = true;
+      } catch (e2: any) {
+        console.log(`[dipamMockEngine] ⚠️  require() de estatísticas falhou: ${e2.message}, tentando readFileSync...`);
+      }
+    }
+    
+    // Se ainda não carregou estatísticas, tenta readFileSync
+    if (!statsCarregadas) {
       const caminhosEstatisticas = [
         // Caminho padrão (desenvolvimento e produção local)
         join(basePath, "mock", "data", "q1_estatisticas.json"),
@@ -275,7 +301,6 @@ function carregarDadosMock() {
         caminhosEstatisticas.push(join(__dirname, "..", "..", "mock", "data", "q1_estatisticas.json"));
       }
       
-      let statsCarregadas = false;
       for (const caminho of caminhosEstatisticas) {
         try {
           const statsRaw = readFileSync(caminho, "utf-8");
