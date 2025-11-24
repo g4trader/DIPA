@@ -48,14 +48,28 @@ if (!cleanedUrl && process.env.NODE_ENV === "production") {
 export const DIPAM_API_BASE_URL = cleanedUrl;
 
 /**
+ * Verifica se estamos em modo mock
+ * 
+ * @returns true se NEXT_PUBLIC_DIPAM_ENV === "mock"
+ */
+function isMockEnv(): boolean {
+  return process.env.NEXT_PUBLIC_DIPAM_ENV === "mock";
+}
+
+/**
  * Constrói uma URL completa a partir do caminho
  * 
  * Garante que não há barras duplicadas na URL final
  * 
  * @param path - Caminho do endpoint (ex: "/ask" ou "ask")
- * @returns URL completa (ex: "https://api.example.com/ask")
+ * @returns URL completa (ex: "https://api.example.com/ask" ou "/api/mock/ask" se mock)
  */
 function buildUrl(path: string): string {
+  // Se estiver em modo mock, retorna endpoint local
+  if (isMockEnv() && path === "/ask") {
+    return "/api/mock/ask";
+  }
+  
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${DIPAM_API_BASE_URL}${normalizedPath}`;
 }
