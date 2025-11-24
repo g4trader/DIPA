@@ -13,6 +13,14 @@ const nextConfig = {
   // Isso cria um servidor Node.js otimizado que pode ser executado independentemente
   output: 'standalone',
   
+  // Garante que arquivos JSON em mock/data sejam incluídos no build
+  // Isso é necessário para que os dados mock estejam disponíveis na Vercel
+  experimental: {
+    outputFileTracingIncludes: {
+      '/api/mock/**': ['./mock/data/**'],
+    },
+  },
+  
   // Configura variáveis de ambiente públicas (acessíveis no navegador)
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_DIPAM_API_URL,
