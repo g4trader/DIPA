@@ -154,8 +154,10 @@ function carregarDadosMock() {
     const caminhosPossiveis = [
       // Caminho padrão (desenvolvimento e produção local)
       join(basePath, "mock", "data", "q1_clientes_sem_compra.json"),
-      // Vercel standalone build (produção)
+      // Vercel standalone build (produção) - caminho mais provável na Vercel
       join(basePath, ".next", "standalone", "mock", "data", "q1_clientes_sem_compra.json"),
+      // Vercel serverless (alternativa)
+      join(basePath, "mock", "data", "q1_clientes_sem_compra.json"),
       // Fallback para dados antigos
       join(basePath, "mock", "data", "q1_dados_dw.json"),
       join(basePath, ".next", "server", "mock", "data", "q1_clientes_sem_compra.json"),
@@ -166,6 +168,9 @@ function carregarDadosMock() {
     if (__dirname) {
       caminhosPossiveis.push(join(__dirname, "..", "..", "mock", "data", "q1_clientes_sem_compra.json"));
     }
+    
+    // Log todos os caminhos que serão tentados
+    console.log(`[dipamMockEngine] 📂 Caminhos que serão tentados:`, caminhosPossiveis.slice(0, 3));
     
     let q1Dados: any[] = [];
     let q1Estatisticas: any = {
@@ -204,6 +209,15 @@ function carregarDadosMock() {
         } catch (e2: any) {
           // Continua tentando próximo caminho
           console.log(`[dipamMockEngine] ⚠️  Não encontrado em ${caminho}: ${e2.message}`);
+          // Em produção, log mais detalhado
+          if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+            console.log(`[dipamMockEngine] 🔍 Detalhes do erro:`, {
+              code: e2.code,
+              errno: e2.errno,
+              syscall: e2.syscall,
+              path: caminho,
+            });
+          }
         }
       }
       
