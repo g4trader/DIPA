@@ -1,7 +1,7 @@
 [
   {
     "cliente_id": 1,
-    "nome": "Cliente Exemplo",
+    "nome": "Cliente Exemplo 1",
     "segmento": "Segmento A",
     "rota_id": "ROTA 301",
     "vendedor_nome": "Vendedor Exemplo",
@@ -10,6 +10,53 @@
     "supervisor_codigo": "S001",
     "data_ultima_compra": "2024-01-01",
     "dias_sem_compra": 90
+  },
+  {
+    "cliente_id": 2,
+    "nome": "Cliente Exemplo 2",
+    "segmento": "Segmento B",
+    "rota_id": "ROTA 302",
+    "vendedor_nome": "Vendedor 2",
+    "vendedor_codigo": "V002",
+    "supervisor_nome": "Supervisor 2",
+    "supervisor_codigo": "S002",
+    "data_ultima_compra": "2024-02-15",
+    "dias_sem_compra": 150
+  },
+  {
+    "cliente_id": 3,
+    "nome": "Cliente Exemplo 3",
+    "segmento": "Segmento C",
+    "rota_id": "ROTA 303",
+    "vendedor_nome": "Vendedor 3",
+    "vendedor_codigo": "V003",
+    "supervisor_nome": "Supervisor 3",
+    "supervisor_codigo": "S003",
+    "data_ultima_compra": "2023-12-01",
+    "dias_sem_compra": 250
+  },
+  {
+    "cliente_id": 4,
+    "nome": "Cliente Exemplo 4",
+    "segmento": "Segmento A",
+    "rota_id": "ROTA 301",
+    "vendedor_nome": "Vendedor Exemplo",
+    "vendedor_codigo": "V001",
+    "supervisor_nome": "Supervisor Exemplo",
+    "supervisor_codigo": "S001",
+    "data_ultima_compra": "2023-06-01",
+    "dias_sem_compra": 400
+  },
+  {
+    "cliente_id": 5,
+    "nome": "Cliente Exemplo 5",
+    "segmento": "Segmento B",
+    "rota_id": "ROTA 302",
+    "vendedor_nome": "Vendedor 2",
+    "vendedor_codigo": "V002",
+    "supervisor_nome": "Supervisor 2",
+    "supervisor_codigo": "S002",
+    "data_ultima_compra": "2024-03-01",
+    "dias_sem_compra": 100
   }
 ]
-

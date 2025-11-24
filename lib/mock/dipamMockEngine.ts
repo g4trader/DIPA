@@ -3,6 +3,70 @@ import { CopilotStructuredResponse } from "@/types/agent";
 import { readFileSync } from "fs";
 import { join } from "path";
 
+// Dados mock fallback (hardcoded) caso os arquivos não sejam encontrados
+const DADOS_MOCK_FALLBACK = [
+  {
+    cliente_id: 1,
+    nome: "Cliente Exemplo 1",
+    segmento: "Segmento A",
+    rota_id: "ROTA 301",
+    vendedor_nome: "Vendedor Exemplo",
+    vendedor_codigo: "V001",
+    supervisor_nome: "Supervisor Exemplo",
+    supervisor_codigo: "S001",
+    data_ultima_compra: "2024-01-01",
+    dias_sem_compra: 90
+  },
+  {
+    cliente_id: 2,
+    nome: "Cliente Exemplo 2",
+    segmento: "Segmento B",
+    rota_id: "ROTA 302",
+    vendedor_nome: "Vendedor 2",
+    vendedor_codigo: "V002",
+    supervisor_nome: "Supervisor 2",
+    supervisor_codigo: "S002",
+    data_ultima_compra: "2024-02-15",
+    dias_sem_compra: 150
+  },
+  {
+    cliente_id: 3,
+    nome: "Cliente Exemplo 3",
+    segmento: "Segmento C",
+    rota_id: "ROTA 303",
+    vendedor_nome: "Vendedor 3",
+    vendedor_codigo: "V003",
+    supervisor_nome: "Supervisor 3",
+    supervisor_codigo: "S003",
+    data_ultima_compra: "2023-12-01",
+    dias_sem_compra: 250
+  },
+  {
+    cliente_id: 4,
+    nome: "Cliente Exemplo 4",
+    segmento: "Segmento A",
+    rota_id: "ROTA 301",
+    vendedor_nome: "Vendedor Exemplo",
+    vendedor_codigo: "V001",
+    supervisor_nome: "Supervisor Exemplo",
+    supervisor_codigo: "S001",
+    data_ultima_compra: "2023-06-01",
+    dias_sem_compra: 400
+  },
+  {
+    cliente_id: 5,
+    nome: "Cliente Exemplo 5",
+    segmento: "Segmento B",
+    rota_id: "ROTA 302",
+    vendedor_nome: "Vendedor 2",
+    vendedor_codigo: "V002",
+    supervisor_nome: "Supervisor 2",
+    supervisor_codigo: "S002",
+    data_ultima_compra: "2024-03-01",
+    dias_sem_compra: 100
+  }
+];
+
 // Função para carregar dados mock do sistema de arquivos
 // Isso funciona tanto em desenvolvimento quanto em produção (Vercel)
 function carregarDadosMock() {
@@ -10,9 +74,10 @@ function carregarDadosMock() {
     // Usa process.cwd() que funciona tanto em dev quanto em produção
     const basePath = process.cwd();
     
-    // Tenta diferentes caminhos possíveis
+    // Tenta diferentes caminhos possíveis (Vercel pode ter estrutura diferente)
     const caminhosPossiveis = [
       join(basePath, "mock", "data", "q1_dados_dw.json"),
+      join(basePath, ".next", "server", "mock", "data", "q1_dados_dw.json"),
       join(basePath, "..", "mock", "data", "q1_dados_dw.json"),
     ];
     
@@ -28,12 +93,14 @@ function carregarDadosMock() {
     };
     
     // Tenta carregar q1_dados_dw.json
+    let dadosCarregados = false;
     for (const caminho of caminhosPossiveis) {
       try {
         const dadosRaw = readFileSync(caminho, "utf-8");
         const dadosParsed = JSON.parse(dadosRaw);
         q1Dados = Array.isArray(dadosParsed) ? dadosParsed : (dadosParsed?.dados || []);
         console.log(`[dipamMockEngine] ✅ Dados Q1 carregados: ${q1Dados.length} clientes de ${caminho}`);
+        dadosCarregados = true;
         break;
       } catch (e: any) {
         // Continua tentando próximo caminho
@@ -43,39 +110,68 @@ function carregarDadosMock() {
       }
     }
     
-    if (q1Dados.length === 0) {
-      console.warn("[dipamMockEngine] ⚠️  Nenhum dado Q1 carregado! Usando array vazio.");
+    // Se não conseguiu carregar do arquivo, usa fallback
+    if (!dadosCarregados || q1Dados.length === 0) {
+      console.warn("[dipamMockEngine] ⚠️  Arquivo não encontrado, usando dados mock fallback.");
+      q1Dados = DADOS_MOCK_FALLBACK;
     }
     
     // Tenta carregar q1_estatisticas.json
     const caminhosEstatisticas = [
       join(basePath, "mock", "data", "q1_estatisticas.json"),
+      join(basePath, ".next", "server", "mock", "data", "q1_estatisticas.json"),
       join(basePath, "..", "mock", "data", "q1_estatisticas.json"),
     ];
     
+    let statsCarregadas = false;
     for (const caminho of caminhosEstatisticas) {
       try {
         const statsRaw = readFileSync(caminho, "utf-8");
         q1Estatisticas = JSON.parse(statsRaw);
         console.log(`[dipamMockEngine] ✅ Estatísticas Q1 carregadas de ${caminho}`);
+        statsCarregadas = true;
         break;
       } catch (e) {
         // Continua tentando próximo caminho
       }
     }
     
+    // Se não conseguiu carregar estatísticas, calcula a partir dos dados
+    if (!statsCarregadas && q1Dados.length > 0) {
+      const faixas = {
+        faixa_61_120: 0,
+        faixa_121_180: 0,
+        faixa_181_300: 0,
+        faixa_maior_300: 0,
+      };
+      
+      for (const cliente of q1Dados) {
+        const dias = cliente.dias_sem_compra || 0;
+        if (61 <= dias && dias <= 120) faixas.faixa_61_120++;
+        else if (121 <= dias && dias <= 180) faixas.faixa_121_180++;
+        else if (181 <= dias && dias <= 300) faixas.faixa_181_300++;
+        else if (dias > 300) faixas.faixa_maior_300++;
+      }
+      
+      q1Estatisticas = {
+        total_clientes: q1Dados.length,
+        faixas,
+      };
+    }
+    
     return { q1Dados, q1Estatisticas };
   } catch (error) {
-    console.error("[dipamMockEngine] ❌ Erro ao carregar dados mock:", error);
+    console.error("[dipamMockEngine] ❌ Erro ao carregar dados mock, usando fallback:", error);
+    // Retorna dados fallback em caso de erro
     return {
-      q1Dados: [],
+      q1Dados: DADOS_MOCK_FALLBACK,
       q1Estatisticas: {
-        total_clientes: 0,
+        total_clientes: DADOS_MOCK_FALLBACK.length,
         faixas: {
-          faixa_61_120: 0,
-          faixa_121_180: 0,
-          faixa_181_300: 0,
-          faixa_maior_300: 0,
+          faixa_61_120: 2,
+          faixa_121_180: 1,
+          faixa_181_300: 1,
+          faixa_maior_300: 1,
         },
       },
     };

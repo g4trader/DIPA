@@ -1,12 +1,11 @@
 {
-  "total_clientes": 1,
+  "total_clientes": 5,
   "faixas": {
-    "faixa_61_120": 1,
-    "faixa_121_180": 0,
-    "faixa_181_300": 0,
-    "faixa_maior_300": 0
+    "faixa_61_120": 2,
+    "faixa_121_180": 1,
+    "faixa_181_300": 1,
+    "faixa_maior_300": 1
   },
   "data_exportacao": "2025-01-01T00:00:00",
   "dias_filtro": 60
 }
-
