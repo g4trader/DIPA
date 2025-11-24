@@ -263,22 +263,34 @@ function montarResumoExecutivoQ1(
   totalClientes: number,
   faixas: ReturnType<typeof classificarPorFaixas>
 ): string {
+  // Valida e normaliza totalClientes
+  const total = typeof totalClientes === "number" && !isNaN(totalClientes) ? totalClientes : 0;
+  
+  // Valida e normaliza faixas
+  const faixasValidas = {
+    "61_120": typeof faixas["61_120"] === "number" ? faixas["61_120"] : 0,
+    "121_180": typeof faixas["121_180"] === "number" ? faixas["121_180"] : 0,
+    "181_300": typeof faixas["181_300"] === "number" ? faixas["181_300"] : 0,
+    "acima_300": typeof faixas["acima_300"] === "number" ? faixas["acima_300"] : 0,
+  };
+  
   // Evita divisão por zero
   const calcularPercentual = (valor: number, total: number): string => {
-    if (total === 0) return "0.0";
+    if (total === 0 || !total) return "0.0";
+    if (!valor || valor === 0) return "0.0";
     return ((valor / total) * 100).toFixed(1);
   };
   
-  if (totalClientes === 0) {
+  if (total === 0) {
     return "Não foram identificados clientes ativos sem compra há mais de 60 dias no momento. " +
       "Recomendamos monitorar regularmente este indicador para identificar oportunidades de reativação.";
   }
   
-  return `Identificamos ${totalClientes.toLocaleString("pt-BR")} clientes ativos sem compra há mais de 60 dias. ` +
-    `Destes, ${faixas["61_120"]} estão na faixa de 61-120 dias (${calcularPercentual(faixas["61_120"], totalClientes)}%), ` +
-    `${faixas["121_180"]} entre 121-180 dias (${calcularPercentual(faixas["121_180"], totalClientes)}%), ` +
-    `${faixas["181_300"]} entre 181-300 dias (${calcularPercentual(faixas["181_300"], totalClientes)}%) ` +
-    `e ${faixas["acima_300"]} com mais de 300 dias sem compra (${calcularPercentual(faixas["acima_300"], totalClientes)}%). ` +
+  return `Identificamos ${total.toLocaleString("pt-BR")} clientes ativos sem compra há mais de 60 dias. ` +
+    `Destes, ${faixasValidas["61_120"]} estão na faixa de 61-120 dias (${calcularPercentual(faixasValidas["61_120"], total)}%), ` +
+    `${faixasValidas["121_180"]} entre 121-180 dias (${calcularPercentual(faixasValidas["121_180"], total)}%), ` +
+    `${faixasValidas["181_300"]} entre 181-300 dias (${calcularPercentual(faixasValidas["181_300"], total)}%) ` +
+    `e ${faixasValidas["acima_300"]} com mais de 300 dias sem compra (${calcularPercentual(faixasValidas["acima_300"], total)}%). ` +
     `Recomendamos ações de reativação prioritárias para os clientes com maior tempo sem compra.`;
 }
 
@@ -322,14 +334,24 @@ function executarMockQ1(payload: AskParams): AskResponse {
   let faixas: ReturnType<typeof classificarPorFaixas>;
   let totalClientes: number;
   
-  if (q1Estatisticas.faixas && q1Estatisticas.total_clientes) {
+  if (q1Estatisticas && q1Estatisticas.faixas && typeof q1Estatisticas.total_clientes === "number") {
     // Usa estatísticas do JSON
     faixas = q1Estatisticas.faixas as any;
     totalClientes = q1Estatisticas.total_clientes;
   } else {
     // Calcula a partir dos dados
     faixas = classificarPorFaixas(dados);
-    totalClientes = dados.length;
+    totalClientes = Array.isArray(dados) ? dados.length : 0;
+  }
+  
+  // Garante que totalClientes é um número válido
+  if (typeof totalClientes !== "number" || isNaN(totalClientes)) {
+    totalClientes = 0;
+  }
+  
+  // Garante que faixas está no formato correto
+  if (!faixas || typeof faixas !== "object") {
+    faixas = classificarPorFaixas(dados);
   }
   
   // Monta resumo executivo
