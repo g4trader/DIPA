@@ -21,28 +21,63 @@ mock/
 
 ## 🚀 Gerando Snapshot Mock
 
-### Opção A: Usando a Query Real do DW (Recomendado)
+### Usando CSVs Reais da Dipam (Recomendado)
 
-Use o script que chama diretamente a função `get_clientes_sem_compra_ha_dias`:
+O script processa diretamente os CSVs fornecidos pela Dipam:
 
 ```bash
 python scripts/generate_mock_snapshot_q1.py \
+  --input-dir ./mock/source_csv \
   --output-dir ./mock/data \
   --dias 60 \
   --data-referencia 2025-10-31
 ```
 
 **Requisitos:**
-- Base local já alimentada pelo ETL
-- Banco SQLite ou PostgreSQL acessível
-- Módulos do projeto instalados (`pip install -r requirements.txt`)
+- CSVs reais da Dipam em `mock/source_csv/`:
+  - `Clientes ativos.xls - Clientes ativos.csv`
+  - `Detalhes de vendas - *.csv` (todos os arquivos de vendas)
+  - `Supervisor pasta 1.xlsx - Sheet1.csv`
+- Python com pandas instalado
 
 **Vantagens:**
-- ✅ Usa exatamente a mesma lógica da Q1 real
-- ✅ Garante consistência total
+- ✅ Processa CSVs diretamente (não precisa de banco)
+- ✅ Consolida automaticamente múltiplos CSVs de vendas
+- ✅ Replica a mesma lógica da Q1 real
 - ✅ Validações automáticas
 
-### Opção B: Usando CSVs (Fallback)
+### Preparação dos CSVs
+
+1. **Copie os CSVs para `mock/source_csv/`:**
+
+```bash
+# Exemplo: copiar CSVs do zip extraído
+cp "Clientes ativos.xls - Clientes ativos.csv" mock/source_csv/
+cp "Detalhes de vendas - Jan-fev 2025.xlsx - Sheet1.csv" mock/source_csv/
+cp "Detalhes de vendas - Mar-Abr 2025.xlsx - Sheet1.csv" mock/source_csv/
+cp "Detalhes de vendas - Mai-Jun 2025.xlsx - Sheet1.csv" mock/source_csv/
+cp "Detalhes de vendas - Jul-ago 2025.xlsx - Sheet1.csv" mock/source_csv/
+cp "Detalhes de vendas - Set-out 2025.xlsx - Sheet1.csv" mock/source_csv/
+cp "Detalhes de vendas - Nov-dez 2024.xlsx - Sheet1.csv" mock/source_csv/
+cp "Supervisor pasta 1.xlsx - Sheet1.csv" mock/source_csv/
+```
+
+2. **Execute o script:**
+
+```bash
+python scripts/generate_mock_snapshot_q1.py \
+  --input-dir ./mock/source_csv \
+  --output-dir ./mock/data
+```
+
+O script irá:
+- ✅ Consolidar todos os CSVs de vendas em um único dataframe
+- ✅ Calcular última compra por cliente
+- ✅ Filtrar clientes ativos sem compra >= 61 dias
+- ✅ Associar vendedor e supervisor
+- ✅ Gerar JSONs com tipos numéricos corretos
+
+### Opção Alternativa: Usando Query Real do DW
 
 Se a base não estiver disponível, use o script que processa CSVs:
 
