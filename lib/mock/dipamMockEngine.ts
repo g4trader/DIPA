@@ -1,27 +1,80 @@
 import { AskParams, AskResponse } from "@/lib/dipamApi";
 import { CopilotStructuredResponse } from "@/types/agent";
+import { readFileSync } from "fs";
+import { join } from "path";
 
-// Importa dados mock (serão criados pelo script Python)
-// Next.js suporta imports JSON estáticos com resolveJsonModule: true
-// @ts-ignore - JSON imports podem não ter tipos em tempo de compilação
-import q1DadosRaw from "@/mock/data/q1_dados_dw.json";
-// @ts-ignore
-import q1EstatisticasRaw from "@/mock/data/q1_estatisticas.json";
+// Função para carregar dados mock do sistema de arquivos
+// Isso funciona tanto em desenvolvimento quanto em produção (Vercel)
+function carregarDadosMock() {
+  try {
+    // Tenta diferentes caminhos possíveis
+    const caminhosPossiveis = [
+      join(process.cwd(), "mock", "data", "q1_dados_dw.json"),
+      join(process.cwd(), "..", "mock", "data", "q1_dados_dw.json"),
+      join(__dirname, "..", "..", "mock", "data", "q1_dados_dw.json"),
+    ];
+    
+    let q1Dados: any[] = [];
+    let q1Estatisticas: any = {
+      total_clientes: 0,
+      faixas: {
+        faixa_61_120: 0,
+        faixa_121_180: 0,
+        faixa_181_300: 0,
+        faixa_maior_300: 0,
+      },
+    };
+    
+    // Tenta carregar q1_dados_dw.json
+    for (const caminho of caminhosPossiveis) {
+      try {
+        const dadosRaw = readFileSync(caminho, "utf-8");
+        const dadosParsed = JSON.parse(dadosRaw);
+        q1Dados = Array.isArray(dadosParsed) ? dadosParsed : (dadosParsed?.dados || []);
+        console.log(`[dipamMockEngine] Dados Q1 carregados de: ${caminho} (${q1Dados.length} clientes)`);
+        break;
+      } catch (e) {
+        // Continua tentando próximo caminho
+      }
+    }
+    
+    // Tenta carregar q1_estatisticas.json
+    const caminhosEstatisticas = [
+      join(process.cwd(), "mock", "data", "q1_estatisticas.json"),
+      join(process.cwd(), "..", "mock", "data", "q1_estatisticas.json"),
+      join(__dirname, "..", "..", "mock", "data", "q1_estatisticas.json"),
+    ];
+    
+    for (const caminho of caminhosEstatisticas) {
+      try {
+        const statsRaw = readFileSync(caminho, "utf-8");
+        q1Estatisticas = JSON.parse(statsRaw);
+        break;
+      } catch (e) {
+        // Continua tentando próximo caminho
+      }
+    }
+    
+    return { q1Dados, q1Estatisticas };
+  } catch (error) {
+    console.warn("[dipamMockEngine] Erro ao carregar dados mock:", error);
+    return {
+      q1Dados: [],
+      q1Estatisticas: {
+        total_clientes: 0,
+        faixas: {
+          faixa_61_120: 0,
+          faixa_121_180: 0,
+          faixa_181_300: 0,
+          faixa_maior_300: 0,
+        },
+      },
+    };
+  }
+}
 
-// Normaliza dados mock
-const q1Dados: any[] = Array.isArray(q1DadosRaw) 
-  ? q1DadosRaw 
-  : ((q1DadosRaw as any)?.dados || []);
-
-const q1Estatisticas: any = q1EstatisticasRaw || {
-  total_clientes: 0,
-  faixas: {
-    faixa_61_120: 0,
-    faixa_121_180: 0,
-    faixa_181_300: 0,
-    faixa_maior_300: 0,
-  },
-};
+// Carrega dados mock uma vez no carregamento do módulo
+const { q1Dados, q1Estatisticas } = carregarDadosMock();
 
 /**
  * Detecta se a pergunta é sobre Q1 (clientes sem compra há mais de 60 dias)

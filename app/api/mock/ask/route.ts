@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executarMockAsk } from "@/lib/mock/dipamMockEngine";
 import { AskParams } from "@/lib/dipamApi";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 /**
  * Endpoint mock para /ask
@@ -33,6 +35,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(resposta, { status: 200 });
   } catch (error) {
     console.error("[mock/ask] Erro:", error);
+    
+    // Log detalhado do erro para debug
+    if (error instanceof Error) {
+      console.error("[mock/ask] Stack:", error.stack);
+    }
     
     const errorMessage = error instanceof Error 
       ? error.message 
