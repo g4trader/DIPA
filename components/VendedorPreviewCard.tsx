@@ -186,12 +186,7 @@ function DataRow({ label, value }: { label: string; value: any }) {
     if (typeof val === "number") {
       // Se for um número grande, pode ser um valor monetário
       if (val >= 1000) {
-        return formatCurrencyBR(val); 
-          style: "currency", 
-          currency: "BRL",
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        });
+        return formatCurrencyBR(val);
       }
       return formatNumberBR(val);
     }
