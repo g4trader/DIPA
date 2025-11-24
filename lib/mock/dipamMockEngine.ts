@@ -7,11 +7,13 @@ import { join } from "path";
 // Isso funciona tanto em desenvolvimento quanto em produção (Vercel)
 function carregarDadosMock() {
   try {
+    // Usa process.cwd() que funciona tanto em dev quanto em produção
+    const basePath = process.cwd();
+    
     // Tenta diferentes caminhos possíveis
     const caminhosPossiveis = [
-      join(process.cwd(), "mock", "data", "q1_dados_dw.json"),
-      join(process.cwd(), "..", "mock", "data", "q1_dados_dw.json"),
-      join(__dirname, "..", "..", "mock", "data", "q1_dados_dw.json"),
+      join(basePath, "mock", "data", "q1_dados_dw.json"),
+      join(basePath, "..", "mock", "data", "q1_dados_dw.json"),
     ];
     
     let q1Dados: any[] = [];
@@ -31,24 +33,31 @@ function carregarDadosMock() {
         const dadosRaw = readFileSync(caminho, "utf-8");
         const dadosParsed = JSON.parse(dadosRaw);
         q1Dados = Array.isArray(dadosParsed) ? dadosParsed : (dadosParsed?.dados || []);
-        console.log(`[dipamMockEngine] Dados Q1 carregados de: ${caminho} (${q1Dados.length} clientes)`);
+        console.log(`[dipamMockEngine] ✅ Dados Q1 carregados: ${q1Dados.length} clientes de ${caminho}`);
         break;
-      } catch (e) {
+      } catch (e: any) {
         // Continua tentando próximo caminho
+        if (process.env.NODE_ENV === "development") {
+          console.log(`[dipamMockEngine] ⚠️  Não encontrado em ${caminho}: ${e.message}`);
+        }
       }
+    }
+    
+    if (q1Dados.length === 0) {
+      console.warn("[dipamMockEngine] ⚠️  Nenhum dado Q1 carregado! Usando array vazio.");
     }
     
     // Tenta carregar q1_estatisticas.json
     const caminhosEstatisticas = [
-      join(process.cwd(), "mock", "data", "q1_estatisticas.json"),
-      join(process.cwd(), "..", "mock", "data", "q1_estatisticas.json"),
-      join(__dirname, "..", "..", "mock", "data", "q1_estatisticas.json"),
+      join(basePath, "mock", "data", "q1_estatisticas.json"),
+      join(basePath, "..", "mock", "data", "q1_estatisticas.json"),
     ];
     
     for (const caminho of caminhosEstatisticas) {
       try {
         const statsRaw = readFileSync(caminho, "utf-8");
         q1Estatisticas = JSON.parse(statsRaw);
+        console.log(`[dipamMockEngine] ✅ Estatísticas Q1 carregadas de ${caminho}`);
         break;
       } catch (e) {
         // Continua tentando próximo caminho
@@ -57,7 +66,7 @@ function carregarDadosMock() {
     
     return { q1Dados, q1Estatisticas };
   } catch (error) {
-    console.warn("[dipamMockEngine] Erro ao carregar dados mock:", error);
+    console.error("[dipamMockEngine] ❌ Erro ao carregar dados mock:", error);
     return {
       q1Dados: [],
       q1Estatisticas: {
