@@ -1,0 +1,15 @@
+[
+  {
+    "cliente_id": 1,
+    "nome": "Cliente Exemplo",
+    "segmento": "Segmento A",
+    "rota_id": "ROTA 301",
+    "vendedor_nome": "Vendedor Exemplo",
+    "vendedor_codigo": "V001",
+    "supervisor_nome": "Supervisor Exemplo",
+    "supervisor_codigo": "S001",
+    "data_ultima_compra": "2024-01-01",
+    "dias_sem_compra": 90
+  }
+]
+
