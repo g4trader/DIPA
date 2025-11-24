@@ -1,7 +1,15 @@
 import { AskParams, AskResponse } from "@/lib/dipamApi";
 import { CopilotStructuredResponse } from "@/types/agent";
-import { readFileSync } from "fs";
-import { join } from "path";
+
+// APIs do Node.js - só disponíveis no servidor
+let readFileSync: any;
+let join: any;
+
+// Carrega APIs do Node.js apenas no servidor
+if (typeof window === "undefined") {
+  readFileSync = require("fs").readFileSync;
+  join = require("path").join;
+}
 
 // Dados mock fallback (hardcoded) caso os arquivos não sejam encontrados
 const DADOS_MOCK_FALLBACK = [
@@ -69,7 +77,21 @@ const DADOS_MOCK_FALLBACK = [
 
 // Função para carregar dados mock do sistema de arquivos
 // Isso funciona tanto em desenvolvimento quanto em produção (Vercel)
+// IMPORTANTE: Só funciona no servidor (API routes), não no cliente
 function carregarDadosMock() {
+  // Se estiver no cliente, retorna fallback imediatamente
+  if (typeof window !== "undefined" || !readFileSync || !join) {
+    console.warn("[dipamMockEngine] Executando no cliente, usando fallback");
+    const faixasFallback = classificarPorFaixas(DADOS_MOCK_FALLBACK);
+    return {
+      q1Dados: DADOS_MOCK_FALLBACK,
+      q1Estatisticas: {
+        total_clientes: DADOS_MOCK_FALLBACK.length,
+        faixas: faixasFallback,
+      },
+    };
+  }
+  
   try {
     // Usa process.cwd() que funciona tanto em dev quanto em produção
     const basePath = process.cwd();
