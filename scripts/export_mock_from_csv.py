@@ -273,17 +273,20 @@ def processar_q1(
                                 supervisor = str(sup_row[sup_col]).strip()
                             break
             
+            # Garante que dias_sem_compra é inteiro
+            dias_sem_compra_int = int(dias_sem_compra) if dias_sem_compra else 0
+            
             resultados.append({
-                "cliente_id": codigo,
-                "nome": nome,
+                "cliente_id": int(codigo) if codigo else 0,
+                "nome": str(nome) if nome else "",
                 "segmento": "",  # Não temos no CSV de exemplo
-                "rota_id": rota,
-                "vendedor_nome": vendedor_nome,
+                "rota_id": str(rota) if rota else "",
+                "vendedor_nome": str(vendedor_nome) if vendedor_nome else "",
                 "vendedor_codigo": "",
-                "supervisor_nome": supervisor,
+                "supervisor_nome": str(supervisor) if supervisor else "",
                 "supervisor_codigo": "",
                 "data_ultima_compra": data_ultima_compra.isoformat() if data_ultima_compra else None,
-                "dias_sem_compra": dias_sem_compra
+                "dias_sem_compra": dias_sem_compra_int  # Garantido como int
             })
         
         except Exception as e:
@@ -394,11 +397,17 @@ def exportar_mock_from_csv(
     logger.info(f"✅ Dados Q1 exportados: {q1_clientes_path} ({len(clientes_q1)} clientes)")
     
     # Gera JSON de estatísticas
+    # Garante que todos os valores são inteiros
     estatisticas = {
-        "total_clientes": len(clientes_q1),
-        "faixas": faixas,
+        "total_clientes": int(len(clientes_q1)),
+        "faixas": {
+            "61_120": int(faixas.get("61_120", 0)),
+            "121_180": int(faixas.get("121_180", 0)),
+            "181_300": int(faixas.get("181_300", 0)),
+            "acima_300": int(faixas.get("acima_300", 0)),
+        },
         "data_exportacao": datetime.now().isoformat(),
-        "dias_filtro": dias_minimo,
+        "dias_filtro": int(dias_minimo),
     }
     
     q1_stats_path = output_dir / "q1_estatisticas.json"

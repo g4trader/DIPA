@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { formatNumberBR } from "@/lib/formatters";
 
 type BigNumberProps = {
   value: string | number;
@@ -24,8 +25,10 @@ export function BigNumber({
 }: BigNumberProps) {
   const formattedValue =
     typeof value === "number"
-      ? value.toLocaleString("pt-BR")
-      : value;
+      ? formatNumberBR(value)
+      : typeof value === "string"
+      ? formatNumberBR(value)
+      : formatNumberBR(0);
 
   return (
     <div

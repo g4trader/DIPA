@@ -1,5 +1,6 @@
 import { AskParams, AskResponse } from "@/lib/dipamApi";
 import { CopilotStructuredResponse } from "@/types/agent";
+import { safeNumber } from "@/lib/formatters";
 
 // APIs do Node.js - só disponíveis no servidor
 let readFileSync: any;
@@ -322,13 +323,13 @@ function executarMockQ1(payload: AskParams): AskResponse {
   // Lê dados mock (já normalizados no carregamento)
   const dados = q1Dados || [];
   
-  // Debug: log dos dados carregados
-  if (process.env.NODE_ENV === "development") {
-    console.log("[dipamMockEngine] Dados Q1 carregados:", dados.length, "clientes");
-    if (q1Estatisticas.total_clientes) {
-      console.log("[dipamMockEngine] Estatísticas carregadas:", q1Estatisticas);
-    }
-  }
+  // Debug: log dos dados carregados (sempre em desenvolvimento, também em produção para debug)
+  console.log("[MOCK][Q1] Dados carregados:", {
+    total_clientes_dados: dados.length,
+    total_clientes_json: q1Estatisticas?.total_clientes || 0,
+    faixas_json: q1Estatisticas?.faixas || {},
+    dados_sample: dados.slice(0, 2),
+  });
   
   // Usa estatísticas carregadas ou calcula
   let faixas: ReturnType<typeof classificarPorFaixas>;
@@ -358,14 +359,15 @@ function executarMockQ1(payload: AskParams): AskResponse {
   const resumoExecutivo = montarResumoExecutivoQ1(totalClientes, faixas);
   
   // Monta tabela principal
+  // Garante que todos os valores numéricos são números válidos
   const tabelaPrincipal = {
     colunas: ["Cliente ID", "Nome", "Dias sem Compra", "Vendedor", "Supervisor"],
     linhas: dados.map((cliente: any) => [
-      cliente.cliente_id || "",
-      cliente.nome || "",
-      cliente.dias_sem_compra || 0,
-      cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "",
-      cliente.supervisor_nome || cliente.supervisor_codigo || "",
+      safeNumber(cliente.cliente_id, 0),
+      String(cliente.nome || ""),
+      safeNumber(cliente.dias_sem_compra, 0),
+      String(cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || ""),
+      String(cliente.supervisor_nome || cliente.supervisor_codigo || ""),
     ]),
   };
   
@@ -389,6 +391,14 @@ function executarMockQ1(payload: AskParams): AskResponse {
     },
   };
   
+  // Log de sanidade antes de retornar
+  console.log("[MOCK][Q1] Estatísticas finais:", {
+    big_number: totalClientes,
+    total_clientes_json: q1Estatisticas?.total_clientes || 0,
+    faixas: faixas,
+    total_registros_tabela: dados.length,
+  });
+  
   // Monta resposta completa
   const resposta: AskResponse = {
     question: payload.pergunta,
@@ -404,6 +414,12 @@ function executarMockQ1(payload: AskParams): AskResponse {
       structured: structured,
     },
     structured: structured,
+    // Adiciona big_number explicitamente para compatibilidade
+    contexto: {
+      big_number: totalClientes,
+      total_clientes: totalClientes,
+      faixas: faixas,
+    },
   };
   
   return resposta;

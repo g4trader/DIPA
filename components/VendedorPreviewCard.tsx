@@ -6,6 +6,7 @@ import { Loader2, User, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ds } from "@/styles/ui";
 import { previewVendedor, DipamApiError, type PreviewVendedorResponse } from "@/lib/dipamApi";
+import { formatCurrencyBR, formatNumberBR } from "@/lib/formatters";
 
 /**
  * Props para o componente VendedorPreviewCard
@@ -143,7 +144,7 @@ export function VendedorPreviewCard({ vendedor, mesAno, className }: VendedorPre
             {data.timestamp && (
               <div className="pt-4 border-t border-slate-700/60">
                 <p className="text-[10px] text-slate-500">
-                  Atualizado em: {new Date(data.timestamp).toLocaleString("pt-BR")}
+                  Atualizado em: {data.timestamp ? new Date(data.timestamp).toLocaleString("pt-BR") : "—"}
                 </p>
               </div>
             )}
@@ -185,14 +186,14 @@ function DataRow({ label, value }: { label: string; value: any }) {
     if (typeof val === "number") {
       // Se for um número grande, pode ser um valor monetário
       if (val >= 1000) {
-        return val.toLocaleString("pt-BR", { 
+        return formatCurrencyBR(val); 
           style: "currency", 
           currency: "BRL",
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         });
       }
-      return val.toLocaleString("pt-BR");
+      return formatNumberBR(val);
     }
     if (typeof val === "boolean") return val ? "Sim" : "Não";
     if (typeof val === "object") return JSON.stringify(val, null, 2);

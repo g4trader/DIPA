@@ -8,6 +8,7 @@ import { DataTable } from "./DataTable";
 import { ExecutiveSectionCard } from "./ExecutiveSectionCard";
 import { parseMarkdownExecutivo } from "./markdownParser";
 import { FileText, ShoppingCart, ArrowDown } from "lucide-react";
+import { formatNumberBR, formatCurrencyBR, safeNumber } from "@/lib/formatters";
 
 type Props = {
   data: CopilotStructuredResponse;
@@ -72,7 +73,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       
       kpisList.push({
         label: "Faturamento do Mês",
-        value: realizadoTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+        value: formatCurrencyBR(realizadoTotal),
         icon: <DollarSign className="w-4 h-4" />,
         color: "text-slate-100",
         trend: "neutral"
@@ -126,7 +127,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       
       kpisList.push({
         label: "Meta Total",
-        value: metaTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+        value: formatCurrencyBR(metaTotal),
         icon: <Target className="w-4 h-4" />,
         color: "text-slate-100",
         trend: "neutral"
@@ -134,7 +135,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       
       kpisList.push({
         label: "Realizado Total",
-        value: realizadoTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+        value: formatCurrencyBR(realizadoTotal),
         icon: <DollarSign className="w-4 h-4" />,
         color: realizadoTotal >= metaTotal ? "text-emerald-400" : "text-slate-100",
         trend: realizadoTotal >= metaTotal ? "up" : "neutral"
@@ -385,7 +386,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                       </div>
                       <div className="flex-1 flex items-end">
                         <p className="mt-2 text-3xl md:text-4xl font-bold tracking-tight text-white">
-                          {typeof kpi.value === "number" ? kpi.value.toLocaleString("pt-BR") : kpi.value}
+                          {formatNumberBR(kpi.value)}
                         </p>
                       </div>
                     </div>
@@ -902,10 +903,10 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                                 <td className="py-3 px-4 text-slate-400 font-medium">{idx + 1}</td>
                                 <td className="py-3 px-4 text-slate-100 font-medium">{v.vendedor_nome}</td>
                                 <td className="py-3 px-4 text-slate-300 text-right">
-                                  {v.meta_total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                  {formatCurrencyBR(v.meta_total)}
                                 </td>
                                 <td className="py-3 px-4 text-slate-200 text-right font-medium">
-                                  {v.realizado_total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                  {formatCurrencyBR(v.realizado_total)}
                                 </td>
                                 <td className="py-3 px-4">
                                   <div className="flex items-center gap-2 justify-end">
@@ -942,7 +943,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                                     v.gap_valor >= 0 ? "text-emerald-400" : "text-red-400"
                                   )}
                                 >
-                                  {v.gap_valor ? (v.gap_valor >= 0 ? "+" : "") + v.gap_valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
+                                  {v.gap_valor ? (v.gap_valor >= 0 ? "+" : "") + formatCurrencyBR(v.gap_valor) : "—"}
                                 </td>
                                 {v.meta_risk_score !== undefined && (
                                   <td className="py-3 px-4 text-right">
@@ -1037,7 +1038,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                                   <td className="py-3 px-4 text-slate-400 text-xs">{c.vendedor_nome || "—"}</td>
                                 )}
                                 <td className="py-3 px-4 text-slate-200 text-right font-medium">
-                                  {c.faturamento_total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                  {formatCurrencyBR(c.faturamento_total)}
                                 </td>
                                 {c.variacao_pct_vs_3m !== undefined && (
                                   <td
@@ -1149,10 +1150,10 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                                   <td className="py-3 px-4 text-slate-100 font-medium">{mes_ano}</td>
                                 )}
                                 <td className="py-3 px-4 text-slate-300 text-right">
-                                  {meta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                  {formatCurrencyBR(meta)}
                                 </td>
                                 <td className="py-3 px-4 text-slate-200 text-right font-medium">
-                                  {realizado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                  {formatCurrencyBR(realizado)}
                                 </td>
                                 <td
                                   className={clsx(
@@ -1161,7 +1162,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                                   )}
                                 >
                                   {gap >= 0 ? "+" : ""}
-                                  {gap.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                  {formatCurrencyBR(gap)}
                                 </td>
                                 <td className="py-3 px-4">
                                   <div className="flex items-center gap-2 justify-end">
@@ -1242,7 +1243,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                           >
                             <td className="py-3 px-4 text-slate-100 font-medium">{p.desc_produto || p.codigo_produto}</td>
                             <td className="py-3 px-4 text-slate-200 text-right font-medium">
-                              {p.faturamento_total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                              {formatCurrencyBR(p.faturamento_total)}
                             </td>
                             {p.variacao_pct_vs_3m !== undefined && (
                               <td
@@ -1396,10 +1397,10 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-slate-200 text-right font-medium">
-                        {op.fat_atual.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        {formatCurrencyBR(op.fat_atual)}
                       </td>
                       <td className="py-3 px-4 text-slate-300 text-right">
-                        {op.fat_max_12m.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        {formatCurrencyBR(op.fat_max_12m)}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2 justify-end">
@@ -1664,13 +1665,13 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                   )}
                 >
                   {typeof kpi.value === "number"
-                    ? kpi.value.toLocaleString("pt-BR", {
+                    ? formatNumberBR(kpi.value, {
                         style: kpi.value > 1000 ? "currency" : "decimal",
                         currency: "BRL",
                         minimumFractionDigits: kpi.value > 1000 ? 0 : 1,
                         maximumFractionDigits: kpi.value > 1000 ? 0 : 1,
                       })
-                    : kpi.value}
+                    : formatNumberBR(kpi.value)}
                 </p>
               </div>
             ))}
@@ -1727,13 +1728,13 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                   )}
                 >
                   {typeof kpi.value === "number"
-                    ? kpi.value.toLocaleString("pt-BR", {
+                    ? formatNumberBR(kpi.value, {
                         style: kpi.value > 1000 ? "currency" : "decimal",
                         currency: "BRL",
                         minimumFractionDigits: kpi.value > 1000 ? 0 : 1,
                         maximumFractionDigits: kpi.value > 1000 ? 0 : 1,
                       })
-                    : kpi.value}
+                    : formatNumberBR(kpi.value)}
                 </p>
               </div>
             ))}
@@ -1794,16 +1795,10 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                       <td className="py-3 px-4 text-slate-400 text-xs">{v.supervisor || "—"}</td>
                     )}
                     <td className="py-3 px-4 text-slate-300 text-right">
-                      {v.meta.toLocaleString("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      })}
+                      {formatCurrencyBR(v.meta)}
                     </td>
                     <td className="py-3 px-4 text-slate-200 text-right font-medium">
-                      {v.realizado.toLocaleString("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      })}
+                      {formatCurrencyBR(v.realizado)}
                     </td>
                     <td
                       className={clsx(
@@ -1824,10 +1819,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                       )}
                     >
                       {v.gap >= 0 ? "+" : ""}
-                      {v.gap.toLocaleString("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      })}
+                      {formatCurrencyBR(v.gap)}
                     </td>
                   </tr>
                 ))}
@@ -1890,10 +1882,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                       <td className="py-3 px-4 text-slate-400 text-xs">{c.vendedor || "—"}</td>
                     )}
                     <td className="py-3 px-4 text-slate-200 text-right font-medium">
-                      {c.faturamento.toLocaleString("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      })}
+                      {formatCurrencyBR(c.faturamento)}
                     </td>
                     <td className="py-3 px-4 text-slate-300 text-right">{c.pedidos}</td>
                     {data.clientesCriticos[0]?.variacao !== undefined && (

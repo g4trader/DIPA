@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { formatNumberBR } from "@/lib/formatters";
 
 type DataTableProps = {
   rows: Array<Record<string, any>>;
@@ -149,7 +150,7 @@ export function DataTable({
                       return "—";
                     }
                     if (typeof cellValue === "number") {
-                      return cellValue.toLocaleString("pt-BR");
+                      return formatNumberBR(cellValue);
                     }
                     const strValue = String(cellValue);
                     // Se contém \n, renderiza múltiplas linhas

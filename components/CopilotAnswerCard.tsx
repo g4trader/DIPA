@@ -5,6 +5,7 @@ import { CopilotAnswerPayload } from "@/types/agent";
 import { ResponseDashboard } from "./ResponseDashboard";
 import { ResponseDashboardOptimized } from "./ResponseDashboardOptimized";
 import { generateExecutivePdf } from "./pdf/generateExecutivePdf";
+import { formatCurrencyBR } from "@/lib/formatters";
 
 type Props = {
   payload: CopilotAnswerPayload;
@@ -235,7 +236,7 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
                     <div>
                       <p className="text-slate-500 uppercase tracking-wide">Meta</p>
                       <p className="text-slate-200">
-                        {v.meta.toLocaleString("pt-BR", {
+                        {formatCurrencyBR(v.meta)}
                           style: "currency",
                           currency: "BRL",
                         })}
@@ -244,7 +245,7 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
                     <div>
                       <p className="text-slate-500 uppercase tracking-wide">Realizado</p>
                       <p className="text-emerald-400">
-                        {v.realizado.toLocaleString("pt-BR", {
+                        {formatCurrencyBR(v.realizado)}
                           style: "currency",
                           currency: "BRL",
                         })}
@@ -332,13 +333,13 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
                               </td>
                             )}
                             <td className="py-2 px-3 text-slate-300 text-right">
-                              {v.meta.toLocaleString("pt-BR", {
+                              {formatCurrencyBR(v.meta)}
                                 style: "currency",
                                 currency: "BRL",
                               })}
                             </td>
                             <td className="py-2 px-3 text-slate-200 text-right font-medium">
-                              {v.realizado.toLocaleString("pt-BR", {
+                              {formatCurrencyBR(v.realizado)}
                                 style: "currency",
                                 currency: "BRL",
                               })}
@@ -426,7 +427,7 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
                               </td>
                             )}
                             <td className="py-2 px-3 text-slate-200 text-right font-medium">
-                              {c.faturamento_mes.toLocaleString("pt-BR", {
+                              {formatCurrencyBR(c.faturamento_mes)}
                                 style: "currency",
                                 currency: "BRL",
                               })}
