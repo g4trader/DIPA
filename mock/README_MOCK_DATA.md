@@ -1,140 +1,129 @@
-# Dados Mock - Guia de Uso
+# Modo Mock - Dados Reais da Base Dipam
 
-Este documento explica como gerar e atualizar os dados mock usados pelo modo MOCK do DIPAM Copilot.
+Este diretório contém os dados mock para o modo de demonstração do DIPAM Copilot™.
 
 ## 📋 Visão Geral
 
-O modo MOCK usa dados estáticos em JSON gerados a partir dos CSVs reais do cliente. Isso permite:
+O modo MOCK permite executar o DIPAM Copilot 100% na Vercel, sem depender de Cloud Run ou banco externo. Os dados são "congelados" em JSONs estáticos gerados a partir da base real.
 
-- ✅ Rodar 100% na Vercel sem Cloud Run/DB
-- ✅ Usar dados reais dos CSVs (mesmos números de produção)
-- ✅ Atualizar dados facilmente quando novos CSVs chegarem
+**Importante:** O modo MOCK não é para testes técnicos, é para **DEMO executiva**. Os dados devem ser consistentes com a Q1 real.
 
-## 📁 Estrutura de Arquivos
+## 🗂️ Estrutura de Arquivos
 
 ```
 mock/
-├── source_csv/          # CSVs reais (não commitados, .gitignore)
-│   ├── Clientes ativos.xls - Clientes ativos.csv
-│   ├── Detalhes de vendas - Set-out 2025.xlsx - Sheet1.csv
-│   └── Supervisor pasta 1.xlsx - Sheet1.csv
-└── data/                # JSONs gerados (commitados)
-    ├── q1_clientes_sem_compra.json
-    └── q1_estatisticas.json
+├── data/
+│   ├── q1_clientes_sem_compra.json    # Lista de clientes (tabela principal)
+│   └── q1_estatisticas.json           # Estatísticas (Big Number, faixas)
+├── source_csv/                        # CSVs originais (opcional, para fallback)
+└── README_MOCK_DATA.md                # Este arquivo
 ```
 
-## 🚀 Como Gerar os Dados Mock
+## 🚀 Gerando Snapshot Mock
 
-### 1. Preparar os CSVs
+### Opção A: Usando a Query Real do DW (Recomendado)
 
-Copie os CSVs reais para `mock/source_csv/`:
+Use o script que chama diretamente a função `get_clientes_sem_compra_ha_dias`:
 
 ```bash
-# Exemplo: copiar CSVs do data_raw para mock/source_csv
-cp "data_raw/Clientes ativos.xls - Clientes ativos.csv" mock/source_csv/
-cp "data_raw/Detalhes de vendas - Set-out 2025.xlsx - Sheet1.csv" mock/source_csv/
-cp "data_raw/Supervisor pasta 1.xlsx - Sheet1.csv" mock/source_csv/
+python scripts/generate_mock_snapshot_q1.py \
+  --output-dir ./mock/data \
+  --dias 60 \
+  --data-referencia 2025-10-31
 ```
 
-**Arquivos necessários:**
-- `Clientes ativos.xls - Clientes ativos.csv` (ou nome similar com "clientes" e "ativos")
-- `Detalhes de vendas - Set-out 2025.xlsx - Sheet1.csv` (ou nome similar com "vendas" ou "detalhes")
-- `Supervisor pasta 1.xlsx - Sheet1.csv` (ou nome similar com "supervisor")
+**Requisitos:**
+- Base local já alimentada pelo ETL
+- Banco SQLite ou PostgreSQL acessível
+- Módulos do projeto instalados (`pip install -r requirements.txt`)
 
-### 2. Executar o Script de Exportação
+**Vantagens:**
+- ✅ Usa exatamente a mesma lógica da Q1 real
+- ✅ Garante consistência total
+- ✅ Validações automáticas
+
+### Opção B: Usando CSVs (Fallback)
+
+Se a base não estiver disponível, use o script que processa CSVs:
 
 ```bash
-python scripts/export_mock_from_csv.py \
-  --input-dir ./mock/source_csv \
-  --output-dir ./mock/data
-```
+# 1. Copie os CSVs para mock/source_csv/
+cp "Clientes ativos.xls - Clientes ativos.csv" mock/source_csv/
+cp "Detalhes de vendas - Set-out 2025.xlsx - Sheet1.csv" mock/source_csv/
+cp "Supervisor pasta 1.xlsx - Sheet1.csv" mock/source_csv/
 
-**Parâmetros:**
-- `--input-dir`: Diretório com os CSVs (padrão: `./mock/source_csv`)
-- `--output-dir`: Diretório de saída para JSONs (padrão: `./mock/data`)
-- `--dias-minimo`: Número mínimo de dias sem compra (padrão: 60)
-
-**Exemplo com dias mínimo diferente:**
-```bash
+# 2. Execute o script
 python scripts/export_mock_from_csv.py \
   --input-dir ./mock/source_csv \
   --output-dir ./mock/data \
-  --dias-minimo 90
+  --dias-minimo 60
 ```
 
-### 3. Verificar os JSONs Gerados
+**Requisitos:**
+- CSVs reais fornecidos pela Dipam
+- Python com pandas instalado
 
-O script gera dois arquivos:
+**Limitações:**
+- Pode ter pequenas diferenças em relação à query real (devido a diferenças de processamento)
 
-**`mock/data/q1_clientes_sem_compra.json`**
-- Lista completa de clientes sem compra há mais de 60 dias
-- Estrutura: array de objetos com `cliente_id`, `nome`, `dias_sem_compra`, `vendedor_nome`, `supervisor_nome`, etc.
+## ✅ Validando Consistência
 
-**`mock/data/q1_estatisticas.json`**
-- Estatísticas agregadas
-- Total de clientes
-- Distribuição por faixas (61-120, 121-180, 181-300, >300)
-
-### 4. Commitar os JSONs
+Após gerar os JSONs, valide que estão consistentes com a Q1 real:
 
 ```bash
-git add mock/data/*.json
-git commit -m "chore: atualiza dados mock Q1 a partir dos CSVs reais"
-git push
+python scripts/test_mock_q1_consistencia.py \
+  --dias 60 \
+  --data-referencia 2025-10-31 \
+  --mock-data-dir ./mock/data \
+  --tolerancia 0
 ```
 
-**Importante:** Os CSVs em `mock/source_csv/` NÃO devem ser commitados (estão no .gitignore). Apenas os JSONs gerados.
+**Validações realizadas:**
+- ✅ Total de clientes mock == total Q1 real
+- ✅ `total_clientes` no JSON stats == `len(clientes)` no JSON clientes
+- ✅ Sem duplicatas no JSON mock
+- ✅ Todos os clientes têm >= 61 dias sem compra
+- ✅ Soma das faixas == total_clientes
+- ✅ IDs de clientes idênticos entre real e mock (se tolerância = 0)
 
-## 🔄 Fluxo de Atualização
-
-Quando novos CSVs chegarem:
-
-1. **Copiar CSVs para `mock/source_csv/`**
-2. **Executar script de exportação**
-3. **Verificar JSONs gerados**
-4. **Commitar e fazer push dos JSONs**
-5. **Vercel fará redeploy automático**
-
-## 🧪 Testar Modo Mock Localmente
-
-```bash
-# Configurar variável de ambiente
-export NEXT_PUBLIC_DIPAM_ENV=mock
-
-# Iniciar servidor
-npm run dev
+**Saída esperada:**
 ```
-
-**Validar:**
-1. Fazer pergunta Q1: "Quais clientes estão com cadastro ativo, mas sem nenhuma compra por mais de 60 dias?"
-2. Verificar:
-   - ✅ Big Number mostra total do JSON
-   - ✅ Tabela lista clientes do JSON
-   - ✅ Faixas estão corretas
-   - ✅ Nenhuma chamada ao backend real (verificar Network tab)
+✅ VALIDAÇÃO PASSOU: Q1 mock está consistente com Q1 real!
+```
 
 ## 📊 Estrutura dos JSONs
 
-### q1_clientes_sem_compra.json
+### `q1_clientes_sem_compra.json`
+
+Lista de clientes (array de objetos):
 
 ```json
 [
   {
     "cliente_id": 39,
-    "nome": "MERCADO PIOVESANI DORNELLES",
-    "segmento": "",
-    "rota_id": "ROTA 51",
-    "vendedor_nome": "ROTA 51",
-    "vendedor_codigo": "",
-    "supervisor_nome": "SUPERVISÃO GPOA",
-    "supervisor_codigo": "",
-    "data_ultima_compra": "2024-09-01T00:00:00",
-    "dias_sem_compra": 61
+    "nome": "Nome do Cliente",
+    "segmento": "Segmento A",
+    "rota_id": "ROTA 301",
+    "vendedor_nome": "Vendedor Nome",
+    "vendedor_codigo": "V001",
+    "supervisor_nome": "Supervisor Nome",
+    "supervisor_codigo": "S001",
+    "data_ultima_compra": "2024-01-01",
+    "dias_sem_compra": 90
   }
 ]
 ```
 
-### q1_estatisticas.json
+**Campos obrigatórios:**
+- `cliente_id`: int (não string)
+- `dias_sem_compra`: int (não string, >= 61)
+- `nome`: string
+- `vendedor_nome`: string (pode ser rota_id se vendedor não disponível)
+- `supervisor_nome`: string
+
+### `q1_estatisticas.json`
+
+Estatísticas para Big Number e Resumo Executivo:
 
 ```json
 {
@@ -145,68 +134,134 @@ npm run dev
     "181_300": 221,
     "acima_300": 36
   },
-  "data_exportacao": "2025-01-01T12:00:00",
-  "dias_filtro": 60
+  "data_referencia": "2025-10-31",
+  "data_exportacao": "2025-01-15T10:30:00",
+  "dias_filtro": 60,
+  "fonte": "query_real_dw"
 }
 ```
 
-## 🔍 Lógica Aplicada
+**Campos obrigatórios:**
+- `total_clientes`: int (não string)
+- `faixas`: objeto com chaves `"61_120"`, `"121_180"`, `"181_300"`, `"acima_300"` (valores int)
+- `data_referencia`: string (YYYY-MM-DD)
+- `data_exportacao`: string (ISO 8601)
 
-O script replica a mesma lógica da Q1 do DW:
+## 🔧 Uso no Frontend
 
-1. **Filtra clientes ativos:**
-   - Remove clientes com "Bloquear Cliente por Inatividade" = "Sim(S)"
+O mock engine (`lib/mock/dipamMockEngine.ts`) carrega automaticamente os JSONs:
 
-2. **Calcula última compra:**
-   - Agrupa vendas por cliente
-   - Pega data máxima de compra
+1. Tenta carregar `mock/data/q1_clientes_sem_compra.json`
+2. Tenta carregar `mock/data/q1_estatisticas.json`
+3. Se não encontrar, usa dados fallback (5 clientes de exemplo)
 
-3. **Calcula dias sem compra:**
-   - `dias_sem_compra = data_referencia - data_ultima_compra`
-   - Se nunca comprou, considera 999 dias
+**Modo Mock ativo:**
+```bash
+export NEXT_PUBLIC_DIPAM_ENV=mock
+npm run dev
+```
 
-4. **Filtra por dias:**
-   - Apenas clientes com `dias_sem_compra >= 61` (mais de 60 dias)
+**Pergunta de teste:**
+```
+Quais clientes estão com cadastro ativo, mas sem nenhuma compra por mais de 60 dias?
+```
 
-5. **Associa vendedor/supervisor:**
-   - Busca rota no CSV de clientes
-   - Busca supervisor no CSV de supervisores pela rota
+## 🧪 Testes Manuais
 
-6. **Remove duplicatas:**
-   - Garante 1 linha por cliente
+### 1. Gerar Snapshot
 
-## ⚠️ Troubleshooting
+```bash
+python scripts/generate_mock_snapshot_q1.py --output-dir ./mock/data
+```
 
-### Erro: "Arquivo de clientes não encontrado"
+### 2. Verificar JSONs
 
-**Solução:** Verifique se os CSVs estão em `mock/source_csv/` com nomes que contenham:
-- "clientes" e "ativos" (para clientes)
-- "vendas" ou "detalhes" (para vendas)
-- "supervisor" (para supervisores)
+```bash
+# Ver total de clientes
+cat mock/data/q1_estatisticas.json | grep total_clientes
 
-### Erro: "Coluna de data não encontrada"
+# Ver primeiros clientes
+head -20 mock/data/q1_clientes_sem_compra.json
+```
 
-**Solução:** O script procura colunas com "data" no nome. Verifique se o CSV de vendas tem uma coluna de data.
+### 3. Validar Consistência
 
-### Dados não aparecem no modo mock
+```bash
+python scripts/test_mock_q1_consistencia.py
+```
 
-**Solução:**
-1. Verifique se os JSONs foram gerados corretamente
-2. Verifique se os JSONs estão commitados
-3. Verifique logs do servidor (Vercel) para ver se os arquivos foram carregados
-4. O mock engine tem fallback hardcoded se os arquivos não forem encontrados
+### 4. Testar Localmente
 
-### Números diferentes de produção
+```bash
+export NEXT_PUBLIC_DIPAM_ENV=mock
+npm run dev
+```
 
-**Solução:**
-1. Verifique se está usando os CSVs mais recentes
-2. Verifique se a data de referência está correta (script usa data atual por padrão)
-3. Compare com o resultado do DW de produção para validar
+### 5. Validar UI
 
-## 📝 Notas
+- ✅ Big Number mostra o total real (não "5 clientes")
+- ✅ Resumo Executivo fala em números coerentes (centenas de clientes)
+- ✅ Tabela lista clientes REAIS (nome, rota, supervisor)
+- ✅ Faixas exibidas corretamente
+- ✅ Nenhum erro no console
 
-- Os CSVs em `mock/source_csv/` estão no `.gitignore` (não são commitados)
-- Apenas os JSONs gerados em `mock/data/` são commitados
-- O script é idempotente: pode ser executado múltiplas vezes
-- A data de referência padrão é a data atual (pode ser ajustada no código se necessário)
+### 6. Build
 
+```bash
+npm run build
+```
+
+Deve passar sem erros.
+
+## 📝 Commit dos JSONs
+
+Os JSONs gerados devem ser commitados no repositório:
+
+```bash
+git add mock/data/q1_clientes_sem_compra.json
+git add mock/data/q1_estatisticas.json
+git commit -m "feat: atualiza dados mock Q1 com snapshot real da base"
+```
+
+**Importante:** Atualize os JSONs sempre que:
+- A base for atualizada com novos dados
+- A lógica da Q1 for alterada
+- Houver necessidade de atualizar a demo
+
+## 🚨 Troubleshooting
+
+### Erro: "Não foi possível inicializar conexão com banco"
+
+**Solução:** Execute o ETL primeiro:
+```bash
+python scripts/run_etl.py
+```
+
+### Erro: "Arquivo não encontrado"
+
+**Solução:** Verifique se os JSONs existem:
+```bash
+ls -la mock/data/
+```
+
+### Erro: "Validação falhou"
+
+**Solução:** 
+1. Verifique se a base está atualizada
+2. Execute o script de geração novamente
+3. Verifique os logs para identificar a divergência
+
+### Mock mostra "5 clientes" (dados fallback)
+
+**Solução:** 
+1. Verifique se os JSONs existem em `mock/data/`
+2. Verifique os logs do mock engine no console do navegador
+3. Verifique se o caminho está correto (Vercel pode ter estrutura diferente)
+
+## 📚 Referências
+
+- Query real: `src/dw/queries.py` → `get_clientes_sem_compra_ha_dias`
+- Mock engine: `lib/mock/dipamMockEngine.ts`
+- Script de geração: `scripts/generate_mock_snapshot_q1.py`
+- Script de validação: `scripts/test_mock_q1_consistencia.py`
+- Script CSV fallback: `scripts/export_mock_from_csv.py`
