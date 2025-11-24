@@ -134,13 +134,23 @@ function carregarDadosMock() {
     };
   }
   
-  // Se já carregou antes, retorna do cache
+  // Se já carregou antes, verifica se são dados reais ou fallback
+  // Se forem dados de fallback (5 clientes), tenta recarregar
   if (dadosCarregadosCache && q1ClientesDataCache && q1EstatisticasDataCache) {
-    console.log(`[dipamMockEngine] ✅ Retornando dados do cache: ${q1ClientesDataCache.length} clientes`);
-    return {
-      q1Dados: q1ClientesDataCache,
-      q1Estatisticas: q1EstatisticasDataCache,
-    };
+    // Se os dados do cache são do fallback (5 clientes), ignora o cache e tenta recarregar
+    if (q1ClientesDataCache.length === 5 && q1ClientesDataCache[0]?.nome === "Cliente Exemplo 1") {
+      console.log(`[dipamMockEngine] ⚠️  Cache contém dados de fallback, tentando recarregar...`);
+      // Limpa o cache para forçar recarregamento
+      dadosCarregadosCache = false;
+      q1ClientesDataCache = null;
+      q1EstatisticasDataCache = null;
+    } else {
+      console.log(`[dipamMockEngine] ✅ Retornando dados do cache: ${q1ClientesDataCache.length} clientes`);
+      return {
+        q1Dados: q1ClientesDataCache,
+        q1Estatisticas: q1EstatisticasDataCache,
+      };
+    }
   }
   
   try {
@@ -228,10 +238,19 @@ function carregarDadosMock() {
         // O fetch só funcionaria se estivéssemos em um contexto diferente
       }
       
-      // Se ainda não conseguiu, usa fallback
+      // Se ainda não conseguiu, usa fallback mas NÃO salva no cache
       if (!dadosCarregados || q1Dados.length === 0) {
         console.warn("[dipamMockEngine] ⚠️  Todos os métodos falharam, usando dados mock fallback.");
+        console.warn("[dipamMockEngine] ⚠️  NÃO salvando fallback no cache - será tentado novamente na próxima requisição");
         q1Dados = DADOS_MOCK_FALLBACK;
+        // NÃO salva no cache para que tente novamente na próxima vez
+        return {
+          q1Dados: DADOS_MOCK_FALLBACK,
+          q1Estatisticas: {
+            total_clientes: DADOS_MOCK_FALLBACK.length,
+            faixas: classificarPorFaixas(DADOS_MOCK_FALLBACK),
+          },
+        };
       }
     }
     
@@ -294,12 +313,15 @@ function carregarDadosMock() {
       }
     }
     
-    // Salva no cache
-    q1ClientesDataCache = q1Dados;
-    q1EstatisticasDataCache = q1Estatisticas;
-    dadosCarregadosCache = true;
-    
-    console.log(`[dipamMockEngine] ✅ Dados carregados e cacheados: ${q1Dados.length} clientes, total: ${q1Estatisticas.total_clientes}`);
+    // Só salva no cache se forem dados reais (não fallback)
+    if (q1Dados.length > 5 || (q1Dados.length > 0 && q1Dados[0]?.nome !== "Cliente Exemplo 1")) {
+      q1ClientesDataCache = q1Dados;
+      q1EstatisticasDataCache = q1Estatisticas;
+      dadosCarregadosCache = true;
+      console.log(`[dipamMockEngine] ✅ Dados REAIS carregados e cacheados: ${q1Dados.length} clientes, total: ${q1Estatisticas.total_clientes}`);
+    } else {
+      console.warn(`[dipamMockEngine] ⚠️  Dados parecem ser fallback (${q1Dados.length} clientes), NÃO salvando no cache`);
+    }
     
     return { q1Dados, q1Estatisticas };
   } catch (error) {
