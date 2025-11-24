@@ -13,11 +13,13 @@ const nextConfig = {
   // Isso cria um servidor Node.js otimizado que pode ser executado independentemente
   output: 'standalone',
   
-  // Garante que arquivos JSON em mock/data sejam incluídos no build
+  // Garante que arquivos JSON em mock/data sejam incluídos no build standalone
   // Isso é necessário para que os dados mock estejam disponíveis na Vercel
   experimental: {
     outputFileTracingIncludes: {
-      '/api/mock/**': ['./mock/data/**'],
+      '/api/mock/ask': ['./mock/data/**/*.json'],
+      '/api/mock/data': ['./mock/data/**/*.json'],
+      '*': ['./mock/data/**/*.json'], // Inclui para todas as rotas
     },
   },
   
