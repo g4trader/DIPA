@@ -1,11 +1,13 @@
 {
-  "total_clientes": 5,
+  "total_clientes": 1029,
   "faixas": {
-    "faixa_61_120": 2,
-    "faixa_121_180": 1,
-    "faixa_181_300": 1,
-    "faixa_maior_300": 1
+    "61_120": 585,
+    "121_180": 179,
+    "181_300": 229,
+    "acima_300": 36
   },
-  "data_exportacao": "2025-01-01T00:00:00",
-  "dias_filtro": 60
+  "data_referencia": "2025-11-24",
+  "data_exportacao": "2025-11-24T10:58:17.612288",
+  "dias_filtro": 60,
+  "fonte": "csv_dipam"
 }
