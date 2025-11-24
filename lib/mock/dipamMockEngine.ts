@@ -530,6 +530,10 @@ export async function executarMockAsk(payload: AskParams): Promise<AskResponse> 
 
 /**
  * Executa mock específico para Q1
+ * 
+ * IMPORTANTE: Este mock simula apenas a parte DW (dados_dw).
+ * O texto executivo é gerado localmente usando a mesma lógica do LLM,
+ * mas sem chamar o LLM (já que estamos no frontend).
  */
 function executarMockQ1(payload: AskParams): AskResponse {
   // Carrega dados mock (sempre recarrega para garantir dados atualizados)
@@ -537,13 +541,16 @@ function executarMockQ1(payload: AskParams): AskResponse {
   
   const dados = q1Dados || [];
   
-  // Debug: log dos dados carregados (sempre em desenvolvimento, também em produção para debug)
-  console.log("[MOCK][Q1] Dados carregados:", {
-    total_clientes_dados: dados.length,
-    total_clientes_json: q1Estatisticas?.total_clientes || 0,
-    faixas_json: q1Estatisticas?.faixas || {},
-    dados_sample: dados.slice(0, 2),
-  });
+  // Debug: log dos dados carregados (apenas em desenvolvimento)
+  if (process.env.NODE_ENV === "development") {
+    console.log("[Q1 MOCK] total_clientes_q1", dados.length, "linhas tabela_principal", dados.length);
+    console.log("[MOCK][Q1] Dados carregados:", {
+      total_clientes_dados: dados.length,
+      total_clientes_json: q1Estatisticas?.total_clientes || 0,
+      faixas_json: q1Estatisticas?.faixas || {},
+      dados_sample: dados.slice(0, 2),
+    });
+  }
   
   // Usa estatísticas carregadas ou calcula
   let faixas: ReturnType<typeof classificarPorFaixas>;
@@ -577,20 +584,21 @@ function executarMockQ1(payload: AskParams): AskResponse {
   
   // Monta tabela principal com título "Dados Analíticos - Consulta Geral" (mesma estrutura da Q1 real)
   // Garante que todos os valores numéricos são números válidos
+  // IMPORTANTE: Usa a mesma lógica do mapper_handler_refatorado.py (linha 261-273)
   const tabelaPrincipal = {
     titulo: "Dados Analíticos - Consulta Geral",
     colunas: ["Cliente ID", "Nome", "Dias sem Compra", "Vendedor", "Supervisor"],
     linhas: dados.map((cliente: any) => {
-      // Usa mesma lógica de fallback do mapper real
-      const vendedor = cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "—";
-      const supervisor = cliente.supervisor_nome || cliente.supervisor_codigo || "—";
+      // Usa mesma lógica de fallback do mapper real (mapper_handler_refatorado.py linha 268-269)
+      const vendedor = cliente.vendedor_nome || cliente.vendedor_codigo || cliente.rota_id || "";
+      const supervisor = cliente.supervisor_nome || cliente.supervisor_codigo || "";
       
       return [
         safeNumber(cliente.cliente_id, 0),
         String(cliente.nome || ""),
         safeNumber(cliente.dias_sem_compra, 0),
-        String(vendedor),
-        String(supervisor),
+        String(vendedor || "—"),
+        String(supervisor || "—"),
       ];
     }),
   };
@@ -637,11 +645,12 @@ function executarMockQ1(payload: AskParams): AskResponse {
   });
   
   // Monta resposta completa (mesma estrutura da Q1 real)
-  // O frontend busca tabela_principal em jsonTecnico, então precisamos estruturar assim
+  // IMPORTANTE: O mock simula apenas a parte DW, mas retorna estrutura compatível com o frontend
+  // O frontend busca tabela_principal em jsonTecnico.tabela_principal
   const resposta: AskResponse = {
     question: payload.pergunta,
     intent: "clientes_sem_compra",
-    confidence: 0.92, // Confiança fixa para mock
+    confidence: 0.92, // Confiança fixa para mock (em produção, seria calculada por _calcular_confianca_q1)
     resumoExecutivo: resumoExecutivo,
     timestamp: new Date().toISOString(),
     payload: {
@@ -653,15 +662,36 @@ function executarMockQ1(payload: AskParams): AskResponse {
     },
     structured: structured,
     // Adiciona respostaMarkdown para o frontend processar os blocos executivos
+    // Este markdown é gerado localmente usando a mesma lógica do LLM, mas sem chamar o LLM
     respostaMarkdown: respostaMarkdown,
     // Adiciona big_number explicitamente para compatibilidade
+    // IMPORTANTE: big_number = total_clientes_q1 (COUNT(DISTINCT cliente_id))
     contexto: {
-      big_number: totalClientes,
+      big_number: totalClientes, // Total de clientes únicos (mesmo que total_clientes_q1)
       total_clientes: totalClientes,
+      total_clientes_q1: totalClientes, // Adiciona campo explícito para compatibilidade
       faixas: faixas,
       // Adiciona jsonTecnico com tabela_principal (formato esperado pelo frontend)
+      // Estrutura igual ao que o mapper_handler_refatorado.py retorna
       jsonTecnico: {
-        tabela_principal: [tabelaPrincipal], // Array com a tabela (formato esperado)
+        tabela_principal: [tabelaPrincipal], // Array com a tabela (formato esperado pelo frontend)
+      },
+      // Adiciona dados_dw estruturados (mesma estrutura do orquestrador)
+      dados_dw: {
+        status: "ok",
+        mensagem: `Dados consultados com sucesso. ${totalClientes} registro(s) encontrado(s).`,
+        dados: dados, // Lista de clientes (mesma estrutura do orquestrador)
+        classificacao_faixas: {
+          total: totalClientes,
+          faixa_61_120: faixas["61_120"],
+          faixa_121_180: faixas["121_180"],
+          faixa_181_300: faixas["181_300"],
+          faixa_mais_300: faixas["acima_300"],
+          percentual_61_120: totalClientes > 0 ? (faixas["61_120"] / totalClientes) * 100 : 0,
+          percentual_121_180: totalClientes > 0 ? (faixas["121_180"] / totalClientes) * 100 : 0,
+          percentual_181_300: totalClientes > 0 ? (faixas["181_300"] / totalClientes) * 100 : 0,
+          percentual_mais_300: totalClientes > 0 ? (faixas["acima_300"] / totalClientes) * 100 : 0,
+        },
       },
     },
   };
