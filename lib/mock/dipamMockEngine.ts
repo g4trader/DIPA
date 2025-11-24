@@ -2,38 +2,17 @@ import { AskParams, AskResponse } from "@/lib/dipamApi";
 import { CopilotStructuredResponse } from "@/types/agent";
 import { safeNumber } from "@/lib/formatters";
 
-// Tenta importar JSONs diretamente (funciona no build do Next.js/Vercel)
-let q1ClientesData: any[] | null = null;
-let q1EstatisticasData: any | null = null;
-
-try {
-  // Importação direta de JSON (funciona no build do Next.js)
-  // Usa caminho relativo ao invés de alias para garantir que funcione
-  const q1ClientesModule = require("../../mock/data/q1_clientes_sem_compra.json");
-  q1ClientesData = Array.isArray(q1ClientesModule) ? q1ClientesModule : (q1ClientesModule?.default || q1ClientesModule);
-  console.log(`[dipamMockEngine] ✅ Dados Q1 importados diretamente: ${q1ClientesData?.length || 0} clientes`);
-} catch (e: any) {
-  // Se falhar, tentará carregar via readFileSync
-  console.log(`[dipamMockEngine] ⚠️  Não foi possível importar JSON diretamente: ${e.message}, tentando readFileSync...`);
-}
-
-try {
-  const q1StatsModule = require("../../mock/data/q1_estatisticas.json");
-  q1EstatisticasData = q1StatsModule?.default || q1StatsModule;
-  console.log(`[dipamMockEngine] ✅ Estatísticas Q1 importadas diretamente`);
-} catch (e: any) {
-  // Se falhar, tentará carregar via readFileSync
-  console.log(`[dipamMockEngine] ⚠️  Não foi possível importar estatísticas diretamente: ${e.message}`);
-}
-
-// APIs do Node.js - só disponíveis no servidor (fallback)
+// APIs do Node.js - só disponíveis no servidor
 let readFileSync: any;
 let join: any;
+let __dirname: any;
 
 // Carrega APIs do Node.js apenas no servidor
 if (typeof window === "undefined") {
   readFileSync = require("fs").readFileSync;
   join = require("path").join;
+  const path = require("path");
+  __dirname = path.dirname(__filename || __dirname || ".");
 }
 
 // Dados mock fallback (hardcoded) caso os arquivos não sejam encontrados
@@ -100,165 +79,10 @@ const DADOS_MOCK_FALLBACK = [
   }
 ];
 
-// Função para carregar dados mock do sistema de arquivos
-// Isso funciona tanto em desenvolvimento quanto em produção (Vercel)
-// IMPORTANTE: Só funciona no servidor (API routes), não no cliente
-function carregarDadosMock() {
-  // Se estiver no cliente, retorna fallback imediatamente
-  if (typeof window !== "undefined" || !readFileSync || !join) {
-    console.warn("[dipamMockEngine] Executando no cliente, usando fallback");
-    const faixasFallback = classificarPorFaixas(DADOS_MOCK_FALLBACK);
-    return {
-      q1Dados: DADOS_MOCK_FALLBACK,
-      q1Estatisticas: {
-        total_clientes: DADOS_MOCK_FALLBACK.length,
-        faixas: faixasFallback,
-      },
-    };
-  }
-  
-  try {
-    // Usa process.cwd() que funciona tanto em dev quanto em produção
-    const basePath = process.cwd();
-    
-    // Tenta diferentes caminhos possíveis (Vercel pode ter estrutura diferente)
-    // Prioriza q1_clientes_sem_compra.json (dados reais dos CSVs), fallback para q1_dados_dw.json
-    const caminhosPossiveis = [
-      join(basePath, "mock", "data", "q1_clientes_sem_compra.json"),
-      join(basePath, "mock", "data", "q1_dados_dw.json"), // Fallback para dados antigos
-      join(basePath, ".next", "server", "mock", "data", "q1_clientes_sem_compra.json"),
-      join(basePath, "..", "mock", "data", "q1_clientes_sem_compra.json"),
-    ];
-    
-    let q1Dados: any[] = [];
-    let q1Estatisticas: any = {
-      total_clientes: 0,
-      faixas: {
-        faixa_61_120: 0,
-        faixa_121_180: 0,
-        faixa_181_300: 0,
-        faixa_maior_300: 0,
-      },
-    };
-    
-    // Prioriza dados importados diretamente (funciona no build do Next.js/Vercel)
-    if (q1ClientesData && Array.isArray(q1ClientesData) && q1ClientesData.length > 0) {
-      q1Dados = q1ClientesData;
-      console.log(`[dipamMockEngine] ✅ Dados Q1 carregados via import direto: ${q1Dados.length} clientes`);
-    } else {
-      // Fallback: tenta carregar via readFileSync
-      let dadosCarregados = false;
-      for (const caminho of caminhosPossiveis) {
-        try {
-          const dadosRaw = readFileSync(caminho, "utf-8");
-          const dadosParsed = JSON.parse(dadosRaw);
-          q1Dados = Array.isArray(dadosParsed) ? dadosParsed : (dadosParsed?.dados || []);
-          console.log(`[dipamMockEngine] ✅ Dados Q1 carregados via readFileSync: ${q1Dados.length} clientes de ${caminho}`);
-          dadosCarregados = true;
-          break;
-        } catch (e: any) {
-          // Continua tentando próximo caminho
-          if (process.env.NODE_ENV === "development") {
-            console.log(`[dipamMockEngine] ⚠️  Não encontrado em ${caminho}: ${e.message}`);
-          }
-        }
-      }
-      
-      // Se não conseguiu carregar do arquivo, usa fallback
-      if (!dadosCarregados || q1Dados.length === 0) {
-        console.warn("[dipamMockEngine] ⚠️  Arquivo não encontrado, usando dados mock fallback.");
-        q1Dados = DADOS_MOCK_FALLBACK;
-      }
-    }
-    
-    // Prioriza estatísticas importadas diretamente
-    if (q1EstatisticasData && q1EstatisticasData.total_clientes) {
-      q1Estatisticas = q1EstatisticasData;
-      console.log(`[dipamMockEngine] ✅ Estatísticas Q1 carregadas via import direto`);
-    } else {
-      // Fallback: tenta carregar via readFileSync
-      const caminhosEstatisticas = [
-        join(basePath, "mock", "data", "q1_estatisticas.json"),
-        join(basePath, ".next", "server", "mock", "data", "q1_estatisticas.json"),
-        join(basePath, "..", "mock", "data", "q1_estatisticas.json"),
-      ];
-      
-      let statsCarregadas = false;
-      for (const caminho of caminhosEstatisticas) {
-        try {
-          const statsRaw = readFileSync(caminho, "utf-8");
-          q1Estatisticas = JSON.parse(statsRaw);
-          console.log(`[dipamMockEngine] ✅ Estatísticas Q1 carregadas via readFileSync de ${caminho}`);
-          statsCarregadas = true;
-          break;
-        } catch (e) {
-          // Continua tentando próximo caminho
-        }
-      }
-      
-      // Se não conseguiu carregar estatísticas, calcula a partir dos dados
-      if (!statsCarregadas && q1Dados.length > 0) {
-        const faixas = classificarPorFaixas(q1Dados);
-        
-        q1Estatisticas = {
-          total_clientes: q1Dados.length,
-          faixas,
-        };
-      }
-    }
-    
-    // Normaliza estrutura de faixas (compatibilidade com formato antigo e novo)
-    if (q1Estatisticas.faixas) {
-      // Se está no formato antigo (faixa_61_120), converte para novo (61_120)
-      if (q1Estatisticas.faixas.faixa_61_120 !== undefined) {
-        q1Estatisticas.faixas = {
-          "61_120": q1Estatisticas.faixas.faixa_61_120 || 0,
-          "121_180": q1Estatisticas.faixas.faixa_121_180 || 0,
-          "181_300": q1Estatisticas.faixas.faixa_181_300 || 0,
-          "acima_300": q1Estatisticas.faixas.faixa_maior_300 || q1Estatisticas.faixas.faixa_acima_300 || 0,
-        };
-      }
-    }
-    
-    return { q1Dados, q1Estatisticas };
-  } catch (error) {
-    console.error("[dipamMockEngine] ❌ Erro ao carregar dados mock, usando fallback:", error);
-    // Retorna dados fallback em caso de erro
-    const faixasFallback = classificarPorFaixas(DADOS_MOCK_FALLBACK);
-    return {
-      q1Dados: DADOS_MOCK_FALLBACK,
-      q1Estatisticas: {
-        total_clientes: DADOS_MOCK_FALLBACK.length,
-        faixas: faixasFallback,
-      },
-    };
-  }
-}
-
-// Carrega dados mock uma vez no carregamento do módulo
-const { q1Dados, q1Estatisticas } = carregarDadosMock();
-
-/**
- * Detecta se a pergunta é sobre Q1 (clientes sem compra há mais de 60 dias)
- */
-function detectarQ1(pergunta: string): boolean {
-  const perguntaLower = pergunta.toLowerCase();
-  
-  // Padrões que indicam Q1
-  const padroesQ1 = [
-    "sem compra por mais de 60 dias",
-    "sem compra há mais de 60 dias",
-    "sem nenhuma compra por mais de 60 dias",
-    "sem nenhuma compra há mais de 60 dias",
-    "clientes ativos sem compra",
-    "clientes sem compra",
-    "mais de 60 dias sem comprar",
-    "há mais de 60 dias sem comprar",
-    "60 dias sem compra",
-  ];
-  
-  return padroesQ1.some(padrao => perguntaLower.includes(padrao));
-}
+// Cache para dados carregados (evita recarregar a cada requisição)
+let q1ClientesDataCache: any[] | null = null;
+let q1EstatisticasDataCache: any | null = null;
+let dadosCarregadosCache = false;
 
 /**
  * Classifica clientes por faixas de dias sem compra
@@ -291,6 +115,198 @@ function classificarPorFaixas(dados: any[]): {
   }
   
   return faixas;
+}
+
+// Função para carregar dados mock do sistema de arquivos
+// Isso funciona tanto em desenvolvimento quanto em produção (Vercel)
+// IMPORTANTE: Só funciona no servidor (API routes), não no cliente
+function carregarDadosMock() {
+  // Se estiver no cliente, retorna fallback imediatamente
+  if (typeof window !== "undefined" || !readFileSync || !join) {
+    console.warn("[dipamMockEngine] Executando no cliente, usando fallback");
+    const faixasFallback = classificarPorFaixas(DADOS_MOCK_FALLBACK);
+    return {
+      q1Dados: DADOS_MOCK_FALLBACK,
+      q1Estatisticas: {
+        total_clientes: DADOS_MOCK_FALLBACK.length,
+        faixas: faixasFallback,
+      },
+    };
+  }
+  
+  // Se já carregou antes, retorna do cache
+  if (dadosCarregadosCache && q1ClientesDataCache && q1EstatisticasDataCache) {
+    console.log(`[dipamMockEngine] ✅ Retornando dados do cache: ${q1ClientesDataCache.length} clientes`);
+    return {
+      q1Dados: q1ClientesDataCache,
+      q1Estatisticas: q1EstatisticasDataCache,
+    };
+  }
+  
+  try {
+    // Usa process.cwd() que funciona tanto em dev quanto em produção
+    const basePath = process.cwd();
+    
+    console.log(`[dipamMockEngine] 🔍 Tentando carregar dados mock... basePath: ${basePath}`);
+    
+    // Tenta diferentes caminhos possíveis (Vercel pode ter estrutura diferente)
+    // Prioriza q1_clientes_sem_compra.json (dados reais dos CSVs), fallback para q1_dados_dw.json
+    const caminhosPossiveis = [
+      join(basePath, "mock", "data", "q1_clientes_sem_compra.json"),
+      join(basePath, "mock", "data", "q1_dados_dw.json"), // Fallback para dados antigos
+      join(basePath, ".next", "server", "mock", "data", "q1_clientes_sem_compra.json"),
+      join(basePath, "..", "mock", "data", "q1_clientes_sem_compra.json"),
+    ];
+    
+    // Se __dirname estiver disponível, tenta caminho relativo ao arquivo
+    if (__dirname) {
+      caminhosPossiveis.push(join(__dirname, "..", "..", "mock", "data", "q1_clientes_sem_compra.json"));
+    }
+    
+    let q1Dados: any[] = [];
+    let q1Estatisticas: any = {
+      total_clientes: 0,
+      faixas: {
+        "61_120": 0,
+        "121_180": 0,
+        "181_300": 0,
+        "acima_300": 0,
+      },
+    };
+    
+    // Tenta importar diretamente primeiro (funciona no build do Next.js)
+    try {
+      // Tenta caminho relativo ao arquivo atual
+      const q1ClientesModule = require("../../mock/data/q1_clientes_sem_compra.json");
+      q1Dados = Array.isArray(q1ClientesModule) ? q1ClientesModule : (q1ClientesModule?.default || q1ClientesModule);
+      console.log(`[dipamMockEngine] ✅ Dados Q1 importados via require(): ${q1Dados.length} clientes`);
+    } catch (e: any) {
+      console.log(`[dipamMockEngine] ⚠️  require() falhou: ${e.message}, tentando readFileSync...`);
+      
+      // Fallback: tenta carregar via readFileSync
+      let dadosCarregados = false;
+      for (const caminho of caminhosPossiveis) {
+        try {
+          const dadosRaw = readFileSync(caminho, "utf-8");
+          const dadosParsed = JSON.parse(dadosRaw);
+          q1Dados = Array.isArray(dadosParsed) ? dadosParsed : (dadosParsed?.dados || []);
+          console.log(`[dipamMockEngine] ✅ Dados Q1 carregados via readFileSync: ${q1Dados.length} clientes de ${caminho}`);
+          dadosCarregados = true;
+          break;
+        } catch (e2: any) {
+          // Continua tentando próximo caminho
+          console.log(`[dipamMockEngine] ⚠️  Não encontrado em ${caminho}: ${e2.message}`);
+        }
+      }
+      
+      // Se não conseguiu carregar do arquivo, usa fallback
+      if (!dadosCarregados || q1Dados.length === 0) {
+        console.warn("[dipamMockEngine] ⚠️  Arquivo não encontrado, usando dados mock fallback.");
+        q1Dados = DADOS_MOCK_FALLBACK;
+      }
+    }
+    
+    // Tenta carregar q1_estatisticas.json (dados reais dos CSVs)
+    try {
+      const q1StatsModule = require("../../mock/data/q1_estatisticas.json");
+      q1Estatisticas = q1StatsModule?.default || q1StatsModule;
+      console.log(`[dipamMockEngine] ✅ Estatísticas Q1 importadas via require()`);
+    } catch (e: any) {
+      console.log(`[dipamMockEngine] ⚠️  require() de estatísticas falhou: ${e.message}, tentando readFileSync...`);
+      
+      const caminhosEstatisticas = [
+        join(basePath, "mock", "data", "q1_estatisticas.json"),
+        join(basePath, ".next", "server", "mock", "data", "q1_estatisticas.json"),
+        join(basePath, "..", "mock", "data", "q1_estatisticas.json"),
+      ];
+      
+      if (__dirname) {
+        caminhosEstatisticas.push(join(__dirname, "..", "..", "mock", "data", "q1_estatisticas.json"));
+      }
+      
+      let statsCarregadas = false;
+      for (const caminho of caminhosEstatisticas) {
+        try {
+          const statsRaw = readFileSync(caminho, "utf-8");
+          q1Estatisticas = JSON.parse(statsRaw);
+          console.log(`[dipamMockEngine] ✅ Estatísticas Q1 carregadas via readFileSync de ${caminho}`);
+          statsCarregadas = true;
+          break;
+        } catch (e2: any) {
+          console.log(`[dipamMockEngine] ⚠️  Não encontrado em ${caminho}: ${e2.message}`);
+        }
+      }
+      
+      // Se não conseguiu carregar estatísticas, calcula a partir dos dados
+      if (!statsCarregadas && q1Dados.length > 0) {
+        const faixas = classificarPorFaixas(q1Dados);
+        
+        q1Estatisticas = {
+          total_clientes: q1Dados.length,
+          faixas,
+        };
+        console.log(`[dipamMockEngine] ✅ Estatísticas calculadas a partir dos dados`);
+      }
+    }
+    
+    // Normaliza estrutura de faixas (compatibilidade com formato antigo e novo)
+    if (q1Estatisticas.faixas) {
+      // Se está no formato antigo (faixa_61_120), converte para novo (61_120)
+      if (q1Estatisticas.faixas.faixa_61_120 !== undefined) {
+        q1Estatisticas.faixas = {
+          "61_120": q1Estatisticas.faixas.faixa_61_120 || 0,
+          "121_180": q1Estatisticas.faixas.faixa_121_180 || 0,
+          "181_300": q1Estatisticas.faixas.faixa_181_300 || 0,
+          "acima_300": q1Estatisticas.faixas.faixa_maior_300 || q1Estatisticas.faixas.faixa_acima_300 || 0,
+        };
+      }
+    }
+    
+    // Salva no cache
+    q1ClientesDataCache = q1Dados;
+    q1EstatisticasDataCache = q1Estatisticas;
+    dadosCarregadosCache = true;
+    
+    console.log(`[dipamMockEngine] ✅ Dados carregados e cacheados: ${q1Dados.length} clientes, total: ${q1Estatisticas.total_clientes}`);
+    
+    return { q1Dados, q1Estatisticas };
+  } catch (error) {
+    console.error("[dipamMockEngine] ❌ Erro ao carregar dados mock, usando fallback:", error);
+    if (error instanceof Error) {
+      console.error("[dipamMockEngine] Stack:", error.stack);
+    }
+    // Retorna dados fallback em caso de erro
+    const faixasFallback = classificarPorFaixas(DADOS_MOCK_FALLBACK);
+    return {
+      q1Dados: DADOS_MOCK_FALLBACK,
+      q1Estatisticas: {
+        total_clientes: DADOS_MOCK_FALLBACK.length,
+        faixas: faixasFallback,
+      },
+    };
+  }
+}
+
+/**
+ * Detecta se a pergunta é sobre Q1 (clientes sem compra há mais de 60 dias)
+ */
+function detectarQ1(pergunta: string): boolean {
+  const perguntaLower = pergunta.toLowerCase();
+  
+  // Padrões que indicam Q1
+  const padroesQ1 = [
+    "sem compra por mais de 60 dias",
+    "sem compra há mais de 60 dias",
+    "sem nenhuma compra por mais de 60 dias",
+    "sem nenhuma compra há mais de 60 dias",
+    "clientes ativos sem compra",
+    "clientes sem compra",
+    "mais de 60 dias sem comprar",
+    "há mais de 60 dias sem comprar",
+    "60 dias sem compra",
+  ];
+  
+  return padroesQ1.some(padrao => perguntaLower.includes(padrao));
 }
 
 /**
@@ -356,7 +372,9 @@ export async function executarMockAsk(payload: AskParams): Promise<AskResponse> 
  * Executa mock específico para Q1
  */
 function executarMockQ1(payload: AskParams): AskResponse {
-  // Lê dados mock (já normalizados no carregamento)
+  // Carrega dados mock (sempre recarrega para garantir dados atualizados)
+  const { q1Dados, q1Estatisticas } = carregarDadosMock();
+  
   const dados = q1Dados || [];
   
   // Debug: log dos dados carregados (sempre em desenvolvimento, também em produção para debug)
@@ -460,4 +478,3 @@ function executarMockQ1(payload: AskParams): AskResponse {
   
   return resposta;
 }
-
