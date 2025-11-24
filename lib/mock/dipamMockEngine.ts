@@ -2,7 +2,29 @@ import { AskParams, AskResponse } from "@/lib/dipamApi";
 import { CopilotStructuredResponse } from "@/types/agent";
 import { safeNumber } from "@/lib/formatters";
 
-// APIs do Node.js - só disponíveis no servidor
+// Tenta importar JSONs diretamente (funciona no build do Next.js/Vercel)
+let q1ClientesData: any[] | null = null;
+let q1EstatisticasData: any | null = null;
+
+try {
+  // Importação direta de JSON (funciona no build do Next.js)
+  const q1ClientesModule = require("@/mock/data/q1_clientes_sem_compra.json");
+  q1ClientesData = Array.isArray(q1ClientesModule) ? q1ClientesModule : (q1ClientesModule?.default || q1ClientesModule);
+  console.log(`[dipamMockEngine] ✅ Dados Q1 importados diretamente: ${q1ClientesData?.length || 0} clientes`);
+} catch (e) {
+  // Se falhar, tentará carregar via readFileSync
+  console.log(`[dipamMockEngine] ⚠️  Não foi possível importar JSON diretamente, tentando readFileSync...`);
+}
+
+try {
+  const q1StatsModule = require("@/mock/data/q1_estatisticas.json");
+  q1EstatisticasData = q1StatsModule?.default || q1StatsModule;
+  console.log(`[dipamMockEngine] ✅ Estatísticas Q1 importadas diretamente`);
+} catch (e) {
+  // Se falhar, tentará carregar via readFileSync
+}
+
+// APIs do Node.js - só disponíveis no servidor (fallback)
 let readFileSync: any;
 let join: any;
 
@@ -117,58 +139,70 @@ function carregarDadosMock() {
       },
     };
     
-    // Tenta carregar q1_dados_dw.json
-    let dadosCarregados = false;
-    for (const caminho of caminhosPossiveis) {
-      try {
-        const dadosRaw = readFileSync(caminho, "utf-8");
-        const dadosParsed = JSON.parse(dadosRaw);
-        q1Dados = Array.isArray(dadosParsed) ? dadosParsed : (dadosParsed?.dados || []);
-        console.log(`[dipamMockEngine] ✅ Dados Q1 carregados: ${q1Dados.length} clientes de ${caminho}`);
-        dadosCarregados = true;
-        break;
-      } catch (e: any) {
-        // Continua tentando próximo caminho
-        if (process.env.NODE_ENV === "development") {
-          console.log(`[dipamMockEngine] ⚠️  Não encontrado em ${caminho}: ${e.message}`);
+    // Prioriza dados importados diretamente (funciona no build do Next.js/Vercel)
+    if (q1ClientesData && Array.isArray(q1ClientesData) && q1ClientesData.length > 0) {
+      q1Dados = q1ClientesData;
+      console.log(`[dipamMockEngine] ✅ Dados Q1 carregados via import direto: ${q1Dados.length} clientes`);
+    } else {
+      // Fallback: tenta carregar via readFileSync
+      let dadosCarregados = false;
+      for (const caminho of caminhosPossiveis) {
+        try {
+          const dadosRaw = readFileSync(caminho, "utf-8");
+          const dadosParsed = JSON.parse(dadosRaw);
+          q1Dados = Array.isArray(dadosParsed) ? dadosParsed : (dadosParsed?.dados || []);
+          console.log(`[dipamMockEngine] ✅ Dados Q1 carregados via readFileSync: ${q1Dados.length} clientes de ${caminho}`);
+          dadosCarregados = true;
+          break;
+        } catch (e: any) {
+          // Continua tentando próximo caminho
+          if (process.env.NODE_ENV === "development") {
+            console.log(`[dipamMockEngine] ⚠️  Não encontrado em ${caminho}: ${e.message}`);
+          }
         }
       }
-    }
-    
-    // Se não conseguiu carregar do arquivo, usa fallback
-    if (!dadosCarregados || q1Dados.length === 0) {
-      console.warn("[dipamMockEngine] ⚠️  Arquivo não encontrado, usando dados mock fallback.");
-      q1Dados = DADOS_MOCK_FALLBACK;
-    }
-    
-    // Tenta carregar q1_estatisticas.json (dados reais dos CSVs)
-    const caminhosEstatisticas = [
-      join(basePath, "mock", "data", "q1_estatisticas.json"),
-      join(basePath, ".next", "server", "mock", "data", "q1_estatisticas.json"),
-      join(basePath, "..", "mock", "data", "q1_estatisticas.json"),
-    ];
-    
-    let statsCarregadas = false;
-    for (const caminho of caminhosEstatisticas) {
-      try {
-        const statsRaw = readFileSync(caminho, "utf-8");
-        q1Estatisticas = JSON.parse(statsRaw);
-        console.log(`[dipamMockEngine] ✅ Estatísticas Q1 carregadas de ${caminho}`);
-        statsCarregadas = true;
-        break;
-      } catch (e) {
-        // Continua tentando próximo caminho
+      
+      // Se não conseguiu carregar do arquivo, usa fallback
+      if (!dadosCarregados || q1Dados.length === 0) {
+        console.warn("[dipamMockEngine] ⚠️  Arquivo não encontrado, usando dados mock fallback.");
+        q1Dados = DADOS_MOCK_FALLBACK;
       }
     }
     
-    // Se não conseguiu carregar estatísticas, calcula a partir dos dados
-    if (!statsCarregadas && q1Dados.length > 0) {
-      const faixas = classificarPorFaixas(q1Dados);
+    // Prioriza estatísticas importadas diretamente
+    if (q1EstatisticasData && q1EstatisticasData.total_clientes) {
+      q1Estatisticas = q1EstatisticasData;
+      console.log(`[dipamMockEngine] ✅ Estatísticas Q1 carregadas via import direto`);
+    } else {
+      // Fallback: tenta carregar via readFileSync
+      const caminhosEstatisticas = [
+        join(basePath, "mock", "data", "q1_estatisticas.json"),
+        join(basePath, ".next", "server", "mock", "data", "q1_estatisticas.json"),
+        join(basePath, "..", "mock", "data", "q1_estatisticas.json"),
+      ];
       
-      q1Estatisticas = {
-        total_clientes: q1Dados.length,
-        faixas,
-      };
+      let statsCarregadas = false;
+      for (const caminho of caminhosEstatisticas) {
+        try {
+          const statsRaw = readFileSync(caminho, "utf-8");
+          q1Estatisticas = JSON.parse(statsRaw);
+          console.log(`[dipamMockEngine] ✅ Estatísticas Q1 carregadas via readFileSync de ${caminho}`);
+          statsCarregadas = true;
+          break;
+        } catch (e) {
+          // Continua tentando próximo caminho
+        }
+      }
+      
+      // Se não conseguiu carregar estatísticas, calcula a partir dos dados
+      if (!statsCarregadas && q1Dados.length > 0) {
+        const faixas = classificarPorFaixas(q1Dados);
+        
+        q1Estatisticas = {
+          total_clientes: q1Dados.length,
+          faixas,
+        };
+      }
     }
     
     // Normaliza estrutura de faixas (compatibilidade com formato antigo e novo)
