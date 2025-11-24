@@ -174,10 +174,63 @@ def calcular_ultima_compra_por_cliente(df_vendas: pd.DataFrame) -> Dict[int, dat
     return {int(k): v for k, v in ultima_compra.items() if pd.notna(v)}
 
 
+def criar_mapeamento_vendedor(df_vendas: pd.DataFrame) -> Dict[str, str]:
+    """
+    Cria mapeamento de rota_id (código) para vendedor_nome (nome do vendedor).
+    
+    Extrai do CSV de vendas: coluna 'Vendedor' contém o nome (ex: "ROTA 31 VD"),
+    e precisamos mapear para o código da rota (ex: "31" ou "1301").
+    
+    IMPORTANTE: O CSV de clientes tem rota_id como número simples (ex: "1301"),
+    enquanto o CSV de vendas tem "ROTA 31 VD". Precisamos extrair o número e fazer match.
+    """
+    logger.info("Criando mapeamento rota_id -> vendedor_nome...")
+    
+    col_vendedor = encontrar_coluna_por_padrao(
+        df_vendas,
+        ["vendedor", "Vendedor", "VENDEDOR"]
+    )
+    
+    if not col_vendedor:
+        logger.warning("⚠️  Coluna 'Vendedor' não encontrada no CSV de vendas")
+        return {}
+    
+    # Extrai código da rota do nome do vendedor
+    # Ex: "ROTA 31 VD" -> rota_id = "31" ou "1301" (depende do formato no CSV de clientes)
+    import re
+    mapeamento = {}
+    
+    for vendedor_nome in df_vendas[col_vendedor].dropna().unique():
+        vendedor_str = str(vendedor_nome).strip()
+        
+        # Tenta extrair número da rota do nome
+        # Padrões: "ROTA 31 VD", "ROTA 31", "31", etc.
+        match = re.search(r'(\d+)', vendedor_str)
+        if match:
+            rota_num = match.group(1)
+            # Cria múltiplas chaves possíveis para match flexível
+            # O CSV de clientes pode ter "31", "1301", "ROTA 31", etc.
+            mapeamento[rota_num] = vendedor_str  # "31" -> "ROTA 31 VD"
+            mapeamento[f"ROTA {rota_num}"] = vendedor_str  # "ROTA 31" -> "ROTA 31 VD"
+            # Também tenta com zero à esquerda (ex: "1301" pode ser "ROTA 01" ou "ROTA 301")
+            if len(rota_num) == 2:
+                mapeamento[f"1{rota_num}"] = vendedor_str  # "1301" -> "ROTA 01 VD" (se rota_num = "01")
+                mapeamento[f"{rota_num}01"] = vendedor_str  # "0101" -> "ROTA 01 VD" (se rota_num = "01")
+            mapeamento[vendedor_str] = vendedor_str  # "ROTA 31 VD" -> "ROTA 31 VD"
+    
+    logger.info(f"✅ Mapeamento criado: {len(mapeamento)} entradas")
+    # Log de exemplo
+    if mapeamento:
+        exemplo = list(mapeamento.items())[:3]
+        logger.info(f"   Exemplos: {exemplo}")
+    return mapeamento
+
+
 def processar_q1(
     df_clientes: pd.DataFrame,
     ultima_compra: Dict[int, datetime],
     df_supervisor: Optional[pd.DataFrame] = None,
+    df_vendas: Optional[pd.DataFrame] = None,
     dias_minimo: int = 60,
     data_referencia: Optional[datetime] = None
 ) -> List[Dict[str, Any]]:
@@ -212,6 +265,18 @@ def processar_q1(
         df_clientes,
         ["rca", "rota", "vendedor", "Nome RCA", "Rota"]
     )
+    
+    # ✅ CORREÇÃO: Encontra coluna "Nome RCA" que contém o nome completo da rota (ex: "ROTA 31 VD")
+    # Esta coluna será usada para fazer match com o CSV de vendas
+    col_nome_rca = encontrar_coluna_por_padrao(
+        df_clientes,
+        ["Nome RCA", "nome rca", "RCA", "Nome do RCA"]
+    )
+    
+    # Cria mapeamento rota_id -> vendedor_nome a partir do CSV de vendas
+    mapeamento_vendedor = {}
+    if df_vendas is not None:
+        mapeamento_vendedor = criar_mapeamento_vendedor(df_vendas)
     
     # Encontra campo de ativo
     col_ativo = encontrar_coluna_por_padrao(
@@ -257,6 +322,14 @@ def processar_q1(
             nome = str(row[col_nome]).strip() if pd.notna(row[col_nome]) else ""
             rota = str(row[col_rota]).strip() if col_rota and pd.notna(row[col_rota]) else ""
             
+            # ✅ CORREÇÃO: Pega nome da rota (ex: "ROTA 31 VD") da coluna "Nome RCA" para fazer match
+            # Se não tiver "Nome RCA", usa o rota_id como fallback
+            rota_nome_para_match = ""
+            if col_nome_rca and pd.notna(row.get(col_nome_rca)):
+                rota_nome_para_match = str(row[col_nome_rca]).strip()
+            else:
+                rota_nome_para_match = rota  # Fallback: usa rota_id
+            
             # Calcula dias sem compra
             data_ultima_compra = ultima_compra.get(codigo)
             
@@ -273,7 +346,17 @@ def processar_q1(
             # Busca supervisor (se disponível)
             supervisor_nome = ""
             supervisor_codigo = ""
-            vendedor_nome = rota
+            
+            # ✅ CORREÇÃO: Busca nome do vendedor no mapeamento (do CSV de vendas)
+            # O mapeamento foi criado a partir do CSV de vendas (coluna "Vendedor")
+            # Usa rota_nome_para_match (ex: "ROTA 31 VD") para fazer match com o mapeamento
+            # Prioridade: mapeamento_vendedor[rota_nome_para_match] > rota_nome_para_match > rota (fallback)
+            vendedor_nome = (
+                mapeamento_vendedor.get(rota_nome_para_match) or
+                mapeamento_vendedor.get(str(rota_nome_para_match).strip()) or
+                rota_nome_para_match or
+                rota
+            )
             vendedor_codigo = ""
             
             if df_supervisor is not None and rota:
@@ -431,7 +514,8 @@ def gerar_snapshot_q1(
     clientes_q1 = processar_q1(
         df_clientes,
         ultima_compra,
-        df_supervisor,
+        df_supervisor=df_supervisor,
+        df_vendas=df_vendas,  # ✅ Passa df_vendas para mapeamento de vendedor
         dias_minimo=dias,
         data_referencia=data_ref
     )
