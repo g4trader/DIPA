@@ -8,20 +8,22 @@ let q1EstatisticasData: any | null = null;
 
 try {
   // Importação direta de JSON (funciona no build do Next.js)
-  const q1ClientesModule = require("@/mock/data/q1_clientes_sem_compra.json");
+  // Usa caminho relativo ao invés de alias para garantir que funcione
+  const q1ClientesModule = require("../../mock/data/q1_clientes_sem_compra.json");
   q1ClientesData = Array.isArray(q1ClientesModule) ? q1ClientesModule : (q1ClientesModule?.default || q1ClientesModule);
   console.log(`[dipamMockEngine] ✅ Dados Q1 importados diretamente: ${q1ClientesData?.length || 0} clientes`);
-} catch (e) {
+} catch (e: any) {
   // Se falhar, tentará carregar via readFileSync
-  console.log(`[dipamMockEngine] ⚠️  Não foi possível importar JSON diretamente, tentando readFileSync...`);
+  console.log(`[dipamMockEngine] ⚠️  Não foi possível importar JSON diretamente: ${e.message}, tentando readFileSync...`);
 }
 
 try {
-  const q1StatsModule = require("@/mock/data/q1_estatisticas.json");
+  const q1StatsModule = require("../../mock/data/q1_estatisticas.json");
   q1EstatisticasData = q1StatsModule?.default || q1StatsModule;
   console.log(`[dipamMockEngine] ✅ Estatísticas Q1 importadas diretamente`);
-} catch (e) {
+} catch (e: any) {
   // Se falhar, tentará carregar via readFileSync
+  console.log(`[dipamMockEngine] ⚠️  Não foi possível importar estatísticas diretamente: ${e.message}`);
 }
 
 // APIs do Node.js - só disponíveis no servidor (fallback)
