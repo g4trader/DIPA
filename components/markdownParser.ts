@@ -68,10 +68,16 @@ export function parseMarkdownExecutivo(markdown: string): ParsedMarkdown {
 
     // Processa conteúdo da seção atual
     if (currentSection === "resumoExecutivo") {
-      // Resumo executivo: pega texto até encontrar próxima seção ou linha vazia dupla
-      if (line && !line.match(/^(##?|Principais|Implicações|Plano|Alvos)/i)) {
+      // Resumo executivo: pega texto até encontrar próxima seção (##)
+      // IMPORTANTE: Para na primeira linha que começa com ## (próxima seção)
+      if (line.match(/^##/)) {
+        // Próxima seção encontrada, para de coletar resumo
+        currentSection = null;
+        continue;
+      }
+      if (line && !line.match(/^(##?|Principais|Implicações|Plano|Alvos|Impactos)/i)) {
         resumoLines.push(line);
-      } else if (line.match(/^(Principais|Implicações|Plano|Alvos)/i)) {
+      } else if (line.match(/^(Principais|Implicações|Plano|Alvos|Impactos)/i)) {
         // Próxima seção encontrada, para de coletar resumo
         currentSection = null;
       }

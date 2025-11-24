@@ -485,10 +485,11 @@ A ausência de clientes inativos indica saúde da carteira neste recorte especí
   const totalRotas = rotasUnicas.size;
   const totalSupervisoes = supervisoesUnicas.size;
   
-  // Gera markdown estruturado
+  // Gera markdown estruturado (formato executivo enxuto, 3-4 linhas máximo no Resumo Executivo)
+  // IMPORTANTE: Segue exatamente o formato da produção real (llm_integration_intent.py linha 735-777)
   const markdown = `## Resumo Executivo
 
-Identificamos ${total.toLocaleString("pt-BR")} clientes ativos sem compra há mais de 60 dias. A distribuição por faixas indica que ${faixasValidas["61_120"]} clientes (${pct61_120}%) estão na faixa de 61-120 dias, representando a maior oportunidade de reativação imediata. ${faixasValidas["121_180"]} clientes (${pct121_180}%) estão entre 121-180 dias, ${faixasValidas["181_300"]} (${pct181_300}%) entre 181-300 dias e ${faixasValidas["acima_300"]} (${pctAcima300}%) com mais de 300 dias sem compra, caracterizando carteira fria de baixa probabilidade de reativação.
+Identificamos ${total.toLocaleString("pt-BR")} clientes ativos sem compra há mais de 60 dias. ${faixasValidas["61_120"]} clientes (${pct61_120}%) estão na faixa de 61-120 dias, representando a maior oportunidade de reativação imediata. ${faixasValidas["121_180"]} clientes (${pct121_180}%) estão entre 121-180 dias, ${faixasValidas["181_300"]} (${pct181_300}%) entre 181-300 dias e ${faixasValidas["acima_300"]} (${pctAcima300}%) com mais de 300 dias sem compra.
 
 ## Impactos Comerciais
 

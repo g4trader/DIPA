@@ -172,11 +172,34 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
     return null;
   }, [respostaMarkdown]);
   
+  // Type assertion segura para acessar propriedades opcionais
+  const dataAny = data as any;
+  
+  // Detecta se é Q1 (clientes_sem_compra)
+  const isQ1 = dataAny.intent === "clientes_sem_compra" || dataAny.intent_label?.toLowerCase().includes("clientes sem compra");
+  
   // Prepara KPIs para BigNumberCard (combinando kpis existentes + parsedMarkdown)
   const bigNumberKPIs = useMemo(() => {
     const kpisList: Array<{ label: string; value: string | number; icon: React.ReactNode; trend?: "up" | "down" | "neutral"; color?: "blue" | "green" | "red" | "yellow" | "orange" }> = [];
     
-    // Usa KPIs já calculados
+    // ✅ CORREÇÃO Q1: Para Q1, prioriza big_number do contexto (total de clientes)
+    // Isso garante que o Big Number mostre o total correto, não um percentual extraído do texto
+    if (isQ1 && dataAny.contexto?.big_number !== undefined) {
+      const totalClientes = Number(dataAny.contexto.big_number) || Number(dataAny.contexto.total_clientes_q1) || 0;
+      if (totalClientes > 0) {
+        kpisList.push({
+          label: "Total de Clientes",
+          value: totalClientes,
+          icon: <Users className="w-4 h-4" />,
+          trend: "neutral",
+          color: "blue",
+        });
+        // Retorna imediatamente para Q1 (não adiciona outros KPIs que podem ser percentuais)
+        return kpisList;
+      }
+    }
+    
+    // Usa KPIs já calculados (para outras intents)
     if (kpis.length > 0) {
       for (const kpi of kpis) {
         let color: "blue" | "green" | "red" | "yellow" | "orange" = "blue";
@@ -194,8 +217,8 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
       }
     }
     
-    // Adiciona KPIs do markdown parseado se disponível
-    if (parsedMarkdown?.kpis && parsedMarkdown.kpis.length > 0) {
+    // Adiciona KPIs do markdown parseado se disponível (apenas se não for Q1)
+    if (!isQ1 && parsedMarkdown?.kpis && parsedMarkdown.kpis.length > 0) {
       for (const kpi of parsedMarkdown.kpis) {
         kpisList.push({
           label: kpi.label,
@@ -207,13 +230,7 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
     }
     
     return kpisList;
-  }, [kpis, parsedMarkdown]);
-  
-  // Type assertion segura para acessar propriedades opcionais
-  const dataAny = data as any;
-  
-  // Detecta se é Q1 (clientes_sem_compra)
-  const isQ1 = dataAny.intent === "clientes_sem_compra" || dataAny.intent_label?.toLowerCase().includes("clientes sem compra");
+  }, [kpis, parsedMarkdown, isQ1, dataAny.contexto]);
   
   // Estado de paginação para tabela de clientes (Q1) e tabela geral
   const [currentPageQ1, setCurrentPageQ1] = useState(0);
@@ -418,12 +435,21 @@ export const ResponseDashboard: React.FC<Props> = ({ data, question }) => {
                         </p>
                       </div>
                     </div>
-                    {/* Coluna direita: Resumo Executivo */}
+                    {/* Coluna direita: Resumo Executivo (apenas primeira frase, curta e objetiva) */}
                     {parsedMarkdown?.resumoExecutivo && (
                       <div className="flex-1 flex items-center border-l border-white/10 pl-6">
                         <div id={generateCardId('resumo-executivo-conteudo')} className="prose prose-invert max-w-none">
-                          <p className="text-sm opacity-90 leading-relaxed whitespace-pre-line text-white/80 m-0">
-                            {parsedMarkdown.resumoExecutivo}
+                          <p className="text-sm opacity-90 leading-relaxed text-white/80 m-0">
+                            {/* Pega apenas a primeira frase (até o primeiro ponto final) */}
+                            {(() => {
+                              const texto = parsedMarkdown.resumoExecutivo.trim();
+                              const primeiraFrase = texto.split('.')[0];
+                              // Se a primeira frase for muito longa (>200 chars), pega apenas até 200 chars
+                              if (primeiraFrase.length > 200) {
+                                return primeiraFrase.substring(0, 200).trim() + '...';
+                              }
+                              return primeiraFrase + (texto.includes('.') ? '.' : '');
+                            })()}
                           </p>
                         </div>
                       </div>
