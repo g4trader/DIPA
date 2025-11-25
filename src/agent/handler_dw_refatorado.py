@@ -172,7 +172,7 @@ def processar_pergunta_com_dw(
     }
     
     # PASSO 1: LLM gera IntentSpec
-        logger.info(f"[PERF_STEP] START_GROQ_INTENT - query_id=Q1")
+    logger.info(f"[PERF_STEP] START_GROQ_INTENT - query_id=Q1")
     try:
         start_intent = time.perf_counter()
         intent_spec = gerar_intent_spec_via_llm(pergunta, papel=papel)
