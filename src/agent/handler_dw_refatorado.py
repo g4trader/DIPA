@@ -235,7 +235,8 @@ def processar_pergunta_com_dw(
     causas_detector = {}
     
     try:
-        # ✅ PERFORMANCE: Mede tempo de execução DW
+        # ✅ PERFORMANCE: Log antes de executar query DW
+        logger.info(f"[PERF_STEP] START_DW_QUERY - executar_intent_spec")
         start_dw = time.perf_counter()
         resultado_orquestrador = executar_intent_spec(
             session=session,
@@ -243,6 +244,7 @@ def processar_pergunta_com_dw(
             contexto_usuario=contexto_usuario
         )
         perf_metrics["dw_query_ms"] = int((time.perf_counter() - start_dw) * 1000)
+        logger.info(f"[PERF_STEP] END_DW_QUERY - {perf_metrics['dw_query_ms']:.2f}ms")
         
         # Extrai dados, regras aplicadas, análise de causas e causas_detector
         dados_orquestrador = resultado_orquestrador.get("dados", [])
@@ -338,6 +340,7 @@ def processar_pergunta_com_dw(
         }
     
     # PASSO 3: Pós-processador estrutura resposta
+    logger.info(f"[PERF_STEP] START_POST_PROCESSOR - processar_resposta")
     try:
         # Behavior Memory já foi aplicado no orquestrador, usa regras que vieram de lá
         # Não precisa chamar aplicar_regras_ao_intent novamente aqui
@@ -352,6 +355,7 @@ def processar_pergunta_com_dw(
             behavior_rules_aplicadas=regras_behavior_aplicadas  # Usa regras do orquestrador
         )
         perf_metrics["post_processor_ms"] = int((time.perf_counter() - start_post) * 1000)
+        logger.info(f"[PERF_STEP] END_POST_PROCESSOR - {perf_metrics['post_processor_ms']:.2f}ms")
         
         # LOG: Verifica texto do post_processor
         texto_post_processor = resposta_estruturada.get("texto", "")
