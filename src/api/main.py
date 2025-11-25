@@ -8,6 +8,7 @@ permitindo interação em linguagem natural com os dados da empresa.
 from fastapi import FastAPI, HTTPException, Depends, Query, Path as FastAPIPath, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -59,6 +60,9 @@ if config.environment == "development":
         "http://localhost:8080",
         "http://127.0.0.1:8080",
     ])
+
+# ✅ PERFORMANCE: Compressão HTTP (gzip) para reduzir tamanho de payloads
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # Comprime respostas > 1KB
 
 # CORSMiddleware padrão (primeira camada)
 app.add_middleware(
@@ -1388,6 +1392,9 @@ async def ask_question(
         import time
         start_time = time.perf_counter()
         
+        # ✅ PERFORMANCE: Log início da requisição
+        logger.info(f"[PERF_ASK] Iniciando processamento de pergunta")
+        
         # ✅ CORREÇÃO: Sanitiza pergunta antes de processar
         # Limita tamanho da pergunta para evitar problemas com GROQ
         from src.api.groq_client import truncate_prompt
@@ -1416,6 +1423,17 @@ async def ask_question(
             papel=request.papel
         )
         
+        # ✅ PERFORMANCE: Extrai métricas do handler
+        perf_metrics = resposta_handler.get("contexto", {}).get("performance_metrics", {})
+        if perf_metrics:
+            logger.info(
+                f"[PERF_ASK] Métricas do handler: "
+                f"intent_spec={perf_metrics.get('intent_spec_ms', 0)}ms, "
+                f"dw={perf_metrics.get('dw_query_ms', 0)}ms, "
+                f"llm={perf_metrics.get('llm_resposta_ms', 0)}ms, "
+                f"total={perf_metrics.get('total_ms', 0)}ms"
+            )
+        
         # Converte para formato AskResponse (usa pergunta original para resposta, mas sanitizada foi usada no processamento)
         dados_estruturados = map_handler_refatorado_to_ask_response(
             resposta_handler=resposta_handler,
@@ -1440,6 +1458,12 @@ async def ask_question(
         
         # Calcula tempo de processamento
         tempo_processamento_ms = int((time.perf_counter() - start_time) * 1000)
+        
+        # ✅ PERFORMANCE: Log final com tempo total
+        logger.info(
+            f"[PERF_ASK] Processamento completo: {tempo_processamento_ms}ms "
+            f"(handler: {perf_metrics.get('total_ms', 0)}ms)"
+        )
         
         # FASE 4: Registra interação com todos os metadados necessários
         try:

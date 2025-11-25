@@ -13,8 +13,12 @@ ARQUITETURA:
 """
 
 import logging
+import time
+import hashlib
+import json
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
+from datetime import datetime
 
 from src.agent.intent_spec import IntentSpec
 from src.agent.query_executor import executar_consulta_dw
@@ -34,6 +38,79 @@ from src.llm_integration_intent import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ✅ PERFORMANCE: Cache em memória para respostas completas Q1
+_q1_response_cache: Dict[str, Dict[str, Any]] = {}
+_Q1_CACHE_TTL_SECONDS = 600  # 10 minutos
+
+
+def _make_q1_cache_key(pergunta: str, papel: Optional[str] = None) -> str:
+    """
+    Cria chave de cache para Q1 baseada na pergunta normalizada.
+    
+    Para Q1, perguntas canônicas como "Quais clientes estão sem compra há mais de 60 dias?"
+    devem gerar a mesma chave independente da formulação.
+    """
+    # Normaliza pergunta (lowercase, remove pontuação extra)
+    pergunta_normalizada = pergunta.lower().strip()
+    
+    # Detecta padrões Q1 comuns
+    q1_patterns = [
+        "clientes.*sem.*compra.*60.*dias",
+        "clientes.*sem.*compra.*mais.*60.*dias",
+        "clientes.*ativos.*sem.*compra",
+        "quais.*clientes.*sem.*compra"
+    ]
+    
+    import re
+    is_q1 = any(re.search(pattern, pergunta_normalizada) for pattern in q1_patterns)
+    
+    if is_q1:
+        # Para Q1, usa chave fixa (pergunta canônica)
+        cache_data = {
+            "tipo": "q1_canonica",
+            "papel": papel or "diretor"
+        }
+    else:
+        # Para outras perguntas, usa hash da pergunta
+        cache_data = {
+            "pergunta": pergunta_normalizada,
+            "papel": papel or "diretor"
+        }
+    
+    key_str = json.dumps(cache_data, sort_keys=True)
+    return hashlib.md5(key_str.encode()).hexdigest()
+
+
+def _get_q1_cached_response(cache_key: str) -> Optional[Dict[str, Any]]:
+    """Retorna resposta Q1 do cache se válida."""
+    if cache_key not in _q1_response_cache:
+        return None
+    
+    cache_entry = _q1_response_cache[cache_key]
+    cache_age = time.time() - cache_entry["created_at"]
+    
+    if cache_age < _Q1_CACHE_TTL_SECONDS:
+        logger.info(
+            f"[PERF_Q1] Cache HIT: idade={cache_age:.1f}s, "
+            f"tempo_salvo={cache_entry.get('tempo_total_ms', 0)}ms"
+        )
+        return cache_entry["response"]
+    else:
+        # Cache expirado
+        del _q1_response_cache[cache_key]
+        logger.debug(f"[PERF_Q1] Cache expirado: {cache_key}")
+        return None
+
+
+def _set_q1_cached_response(cache_key: str, response: Dict[str, Any], tempo_total_ms: int):
+    """Armazena resposta Q1 no cache."""
+    _q1_response_cache[cache_key] = {
+        "response": response,
+        "created_at": time.time(),
+        "tempo_total_ms": tempo_total_ms
+    }
+    logger.info(f"[PERF_Q1] Resposta cacheada: tempo={tempo_total_ms}ms")
 
 
 def processar_pergunta_com_dw(
@@ -68,13 +145,42 @@ def processar_pergunta_com_dw(
     """
     logger.info(f"[processar_pergunta_com_dw] Processando pergunta: {pergunta[:100]}...")
     
+    # ✅ PERFORMANCE: Verifica cache para Q1 antes de processar
+    cache_key = _make_q1_cache_key(pergunta, papel)
+    cached_response = _get_q1_cached_response(cache_key)
+    if cached_response:
+        # Adiciona flag de cache hit
+        cached_response["contexto"] = cached_response.get("contexto", {})
+        cached_response["contexto"]["q1_cached"] = True
+        cached_response["contexto"]["q1_cache_age_seconds"] = int(
+            time.time() - _q1_response_cache[cache_key]["created_at"]
+        )
+        logger.info(
+            f"[PERF_Q1] ✅ Retornando resposta do cache (idade: "
+            f"{cached_response['contexto']['q1_cache_age_seconds']}s)"
+        )
+        return cached_response
+    
+    # ✅ PERFORMANCE: Inicia medição de tempo total
+    start_time_total = time.perf_counter()
+    perf_metrics = {
+        "intent_spec_ms": 0,
+        "dw_query_ms": 0,
+        "post_processor_ms": 0,
+        "llm_resposta_ms": 0,
+        "total_ms": 0
+    }
+    
     # PASSO 1: LLM gera IntentSpec
     try:
+        start_intent = time.perf_counter()
         intent_spec = gerar_intent_spec_via_llm(pergunta, papel=papel)
+        perf_metrics["intent_spec_ms"] = int((time.perf_counter() - start_intent) * 1000)
         logger.info(
             f"[processar_pergunta_com_dw] IntentSpec gerado: "
             f"tipo={intent_spec.tipo}, "
-            f"periodo={intent_spec.periodo_inicio} a {intent_spec.periodo_fim}"
+            f"periodo={intent_spec.periodo_inicio} a {intent_spec.periodo_fim}, "
+            f"tempo={perf_metrics['intent_spec_ms']}ms"
         )
     except Exception as e:
         logger.error(f"[processar_pergunta_com_dw] Erro ao gerar IntentSpec: {e}")
@@ -127,14 +233,24 @@ def processar_pergunta_com_dw(
     causas_detector = {}
     
     try:
+        # ✅ PERFORMANCE: Mede tempo de execução DW
+        start_dw = time.perf_counter()
         resultado_orquestrador = executar_intent_spec(
             session=session,
             intent_spec=intent_spec,
             contexto_usuario=contexto_usuario
         )
+        perf_metrics["dw_query_ms"] = int((time.perf_counter() - start_dw) * 1000)
         
         # Extrai dados, regras aplicadas, análise de causas e causas_detector
         dados_orquestrador = resultado_orquestrador.get("dados", [])
+        
+        # ✅ PERFORMANCE: Log específico para Q1
+        if intent_spec.tipo == "clientes_sem_compra":
+            logger.info(
+                f"[PERF_Q1] DW executado: {perf_metrics['dw_query_ms']}ms, "
+                f"registros={len(dados_orquestrador)}"
+            )
         
         # ✅ LOG CRÍTICO: Para Q1, loga quantidade de dados do orquestrador
         if intent_spec.tipo == "clientes_sem_compra":
@@ -224,6 +340,8 @@ def processar_pergunta_com_dw(
         # Behavior Memory já foi aplicado no orquestrador, usa regras que vieram de lá
         # Não precisa chamar aplicar_regras_ao_intent novamente aqui
         
+        # ✅ PERFORMANCE: Mede tempo de pós-processamento
+        start_post = time.perf_counter()
         # Processa resposta usando post_processor
         resposta_estruturada = processar_resposta(
             intent_spec=intent_spec.to_dict() if hasattr(intent_spec, 'to_dict') else intent_spec,
@@ -231,6 +349,7 @@ def processar_pergunta_com_dw(
             causas_detector=causas_detector,
             behavior_rules_aplicadas=regras_behavior_aplicadas  # Usa regras do orquestrador
         )
+        perf_metrics["post_processor_ms"] = int((time.perf_counter() - start_post) * 1000)
         
         # LOG: Verifica texto do post_processor
         texto_post_processor = resposta_estruturada.get("texto", "")
@@ -239,6 +358,8 @@ def processar_pergunta_com_dw(
             logger.debug(f"[processar_pergunta_com_dw] Primeiras 200 chars: {texto_post_processor[:200]}")
         
         # PASSO 4: LLM gera resposta executiva com dados estruturados
+        # ✅ PERFORMANCE: Mede tempo de LLM
+        start_llm = time.perf_counter()
         resposta_executiva = gerar_resposta_executiva_com_dados_dw(
             pergunta=pergunta,
             intent_spec=intent_spec,
@@ -248,6 +369,13 @@ def processar_pergunta_com_dw(
             analise_causas=analise_causas,
             resposta_estruturada=resposta_estruturada  # Passa resposta estruturada para LLM
         )
+        perf_metrics["llm_resposta_ms"] = int((time.perf_counter() - start_llm) * 1000)
+        
+        # ✅ PERFORMANCE: Log específico para Q1
+        if intent_spec.tipo == "clientes_sem_compra":
+            logger.info(
+                f"[PERF_Q1] LLM executado: {perf_metrics['llm_resposta_ms']}ms"
+            )
         
         # CRÍTICO: Preserva o texto completo do post_processor no resposta_executiva
         # O LLM pode ter gerado um resumo_executivo diferente, mas o texto completo deve vir do post_processor
@@ -317,10 +445,35 @@ def processar_pergunta_com_dw(
             "query_executada": f"DW Query para tipo={intent_spec.tipo}, dimensao={intent_spec.dimensao_principal}"
         }
     
+    # ✅ PERFORMANCE: Calcula tempo total e adiciona métricas à resposta
+    perf_metrics["total_ms"] = int((time.perf_counter() - start_time_total) * 1000)
+    
     logger.info(
         f"[processar_pergunta_com_dw] Resposta executiva gerada: "
-        f"resumo={len(resposta_executiva.get('resumo_executivo', ''))} chars"
+        f"resumo={len(resposta_executiva.get('resumo_executivo', ''))} chars, "
+        f"tempo_total={perf_metrics['total_ms']}ms"
     )
+    
+    # ✅ PERFORMANCE: Log detalhado de métricas (especialmente para Q1)
+    if intent_spec.tipo == "clientes_sem_compra":
+        logger.info(
+            f"[PERF_Q1] Métricas completas: "
+            f"intent_spec={perf_metrics['intent_spec_ms']}ms, "
+            f"dw={perf_metrics['dw_query_ms']}ms, "
+            f"post_processor={perf_metrics['post_processor_ms']}ms, "
+            f"llm={perf_metrics['llm_resposta_ms']}ms, "
+            f"total={perf_metrics['total_ms']}ms"
+        )
+    
+    # Adiciona métricas de performance ao contexto da resposta
+    if "contexto" not in resposta_executiva:
+        resposta_executiva["contexto"] = {}
+    resposta_executiva["contexto"]["performance_metrics"] = perf_metrics
+    
+    # ✅ PERFORMANCE: Cacheia resposta Q1 completa
+    if intent_spec.tipo == "clientes_sem_compra":
+        _set_q1_cached_response(cache_key, resposta_executiva, perf_metrics["total_ms"])
+        resposta_executiva["contexto"]["q1_cached"] = False  # Esta resposta foi calculada, não veio do cache
     
     # LOG CRÍTICO: Verifica se texto_completo_post_processor está presente
     texto_completo = resposta_executiva.get("texto_completo_post_processor", "")

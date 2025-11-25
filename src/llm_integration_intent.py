@@ -375,23 +375,36 @@ def gerar_resposta_executiva_com_dados_dw(
         "fim": intent_spec.periodo_fim
     }
     
-    # ✅ CORREÇÃO: Condensa dados_dw antes de enviar para GROQ
-    # Não envia tabelas completas, apenas resumo e top N registros
-    dados_dw_condensado = _condensar_dados_dw(dados_dw)
-    
-    # ✅ NOVO: Para Q1, adiciona classificação por faixas
+    # ✅ PERFORMANCE: Para Q1, otimiza payload enviado ao LLM
+    # Envia apenas estatísticas resumidas, não a tabela completa
     if intent_spec.tipo == "clientes_sem_compra":
-        dados_lista = dados_dw_condensado.get("dados", [])
+        dados_lista = dados_dw.get("dados", [])
         if isinstance(dados_lista, list) and len(dados_lista) > 0:
+            # Calcula classificação por faixas
             classificacao_faixas = _classificar_clientes_por_faixa(dados_lista)
-            dados_dw_condensado["classificacao_faixas"] = classificacao_faixas
+            
+            # ✅ OTIMIZAÇÃO: Para Q1, cria payload mínimo com apenas estatísticas
+            # Não envia tabela completa, apenas resumo estatístico
+            dados_dw_condensado = {
+                "tem_dados": True,
+                "total_registros": len(dados_lista),
+                "classificacao_faixas": classificacao_faixas,
+                # Adiciona apenas top 5 clientes como exemplo (não toda a tabela)
+                "dados": dados_lista[:5] if len(dados_lista) > 5 else dados_lista,
+                "_nota": f"[Apenas top 5 de {len(dados_lista)} clientes mostrados. Tabela completa será montada no backend.]"
+            }
+            
             logger.info(
-                f"[gerar_resposta_executiva_com_dados_dw] Q1 - Classificação por faixas: "
-                f"61-120: {classificacao_faixas['faixa_61_120']}, "
-                f"121-180: {classificacao_faixas['faixa_121_180']}, "
-                f"181-300: {classificacao_faixas['faixa_181_300']}, "
-                f">300: {classificacao_faixas['faixa_mais_300']}"
+                f"[PERF_Q1] Payload LLM otimizado: "
+                f"total={len(dados_lista)} clientes, "
+                f"enviado={len(dados_dw_condensado.get('dados', []))} exemplos, "
+                f"faixas={classificacao_faixas}"
             )
+        else:
+            dados_dw_condensado = _condensar_dados_dw(dados_dw)
+    else:
+        # Para outros tipos, usa condensação padrão
+        dados_dw_condensado = _condensar_dados_dw(dados_dw)
     
     # Prepara contexto completo para o LLM (condensado)
     contexto_completo = {

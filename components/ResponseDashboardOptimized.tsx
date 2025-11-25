@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useEffect, useRef } from "react";
+import React, { useMemo, useEffect, useRef, useState } from "react";
 import { CopilotStructuredResponse } from "@/types/agent";
 import { LayoutResposta } from "./dashboard/LayoutResposta";
 import { BigNumber } from "./dashboard/BigNumber";
@@ -196,16 +196,50 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     }
   }, [isDataReady, tabelaPrincipal, loadingState]);
 
+  // ✅ PERFORMANCE: Estado de "processando detalhes" se demorar mais de 7s
+  const [showProcessingMessage, setShowProcessingMessage] = React.useState(false);
+  
+  useEffect(() => {
+    if (isLoading && !isDataReady) {
+      // Mostra mensagem após 7 segundos se ainda estiver carregando
+      const timer = setTimeout(() => {
+        setShowProcessingMessage(true);
+      }, 7000);
+      
+      return () => clearTimeout(timer);
+    } else {
+      setShowProcessingMessage(false);
+    }
+  }, [isLoading, isDataReady]);
+  
   // ✅ CORREÇÃO: Loading state - prioriza isDataReady sobre loadingState.isLoading
   // Se os dados estão prontos, não mostra skeleton mesmo que loadingState.isLoading seja true
-  if (isLoading) {
-    return <DashboardSkeleton />;
+  if (isLoading && !isDataReady) {
+    return (
+      <>
+        <DashboardSkeleton />
+        {showProcessingMessage && (
+          <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-300 text-sm">
+            ⏳ Ainda estou processando detalhes adicionais, mas você já pode trabalhar com os clientes prioritários.
+          </div>
+        )}
+      </>
+    );
   }
   
   // Se não há dados prontos E o loading state ainda está ativo, mostra skeleton
   // Mas se há dados prontos, mostra o conteúdo mesmo que loadingState.isLoading seja true
   if (!isDataReady && loadingState.isLoading) {
-    return <DashboardSkeleton />;
+    return (
+      <>
+        <DashboardSkeleton />
+        {showProcessingMessage && (
+          <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-300 text-sm">
+            ⏳ Ainda estou processando detalhes adicionais, mas você já pode trabalhar com os clientes prioritários.
+          </div>
+        )}
+      </>
+    );
   }
 
   // Error state

@@ -108,17 +108,13 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
 
         {/* Conteúdo principal - Dashboard estruturado */}
         <div id="dipam-card-content" className="px-6 pt-4 pb-6">
-          {/* Renderiza dashboard estruturado (pergunta removida - já aparece no chat) */}
-          {/* Usa versão otimizada se disponível, senão usa versão antiga */}
-          {process.env.NEXT_PUBLIC_USE_OPTIMIZED_DASHBOARD === "true" ? (
-            <ResponseDashboardOptimized
-              data={structuredWithMarkdown}
-              question={question}
-              isLoading={false}
-            />
-          ) : (
-            <ResponseDashboard data={structuredWithMarkdown} question={question} />
-          )}
+          {/* ✅ PERFORMANCE: Sempre usa versão otimizada para renderização progressiva */}
+          {/* Renderiza Big Number → Resumo Executivo → Tabela (primeira página) imediatamente */}
+          <ResponseDashboardOptimized
+            data={structuredWithMarkdown}
+            question={question}
+            isLoading={false}
+          />
         </div>
       </div>
     );
