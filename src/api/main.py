@@ -630,11 +630,28 @@ async def health_check():
         if not app.state.db_available or not app.state.openai_available:
             status = "degraded"  # Funciona, mas com limitações
         
+        # Tenta obter commit hash se disponível
+        import subprocess
+        commit_hash = "unknown"
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            )
+            if result.returncode == 0:
+                commit_hash = result.stdout.strip()
+        except Exception:
+            pass  # Mantém "unknown" se não conseguir obter
+        
         health_data = {
             "status": status,
             "timestamp": datetime.utcnow().isoformat(),
             "environment": environment,
             "version": "1.0.0",
+            "commit": commit_hash,
             "database": config.database.db_type,
             "components": {
                 "database": "available" if app.state.db_available else "unavailable",
@@ -1440,7 +1457,7 @@ async def ask_question(
             )
         
         # ✅ PERFORMANCE: Log antes de mapear resposta
-        logger.info(f"[PERF_STEP] START_MAP_RESPONSE - map_handler_refatorado_to_ask_response")
+        logger.info(f"[PERF_STEP] START_MAP_RESPONSE")
         map_start = time.perf_counter()
         
         # Converte para formato AskResponse (usa pergunta original para resposta, mas sanitizada foi usada no processamento)
@@ -1450,16 +1467,16 @@ async def ask_question(
         )
         
         map_duration = (time.perf_counter() - map_start) * 1000
-        logger.info(f"[PERF_STEP] END_MAP_RESPONSE - {map_duration:.2f}ms")
+        logger.info(f"[PERF_STEP] END_MAP_RESPONSE - duration={map_duration:.2f}ms")
         
         # ✅ PERFORMANCE: Log antes de criar AskResponse
-        logger.info(f"[PERF_STEP] START_CREATE_RESPONSE - AskResponse(**dados_estruturados)")
+        logger.info(f"[PERF_STEP] START_CREATE_RESPONSE")
         create_start = time.perf_counter()
         
         response = AskResponse(**dados_estruturados)
         
         create_duration = (time.perf_counter() - create_start) * 1000
-        logger.info(f"[PERF_STEP] END_CREATE_RESPONSE - {create_duration:.2f}ms")
+        logger.info(f"[PERF_STEP] END_CREATE_RESPONSE - duration={create_duration:.2f}ms")
         
         # Prepara resultado para registro de interação (formato compatível)
         intent_spec = resposta_handler.get("intent_spec")
@@ -1485,7 +1502,7 @@ async def ask_question(
         )
         
         # ✅ PERFORMANCE: Log antes de serializar e retornar resposta
-        logger.info(f"[PERF_STEP] START_SERIALIZE_RESPONSE - preparando retorno")
+        logger.info(f"[PERF_STEP] START_SERIALIZE_RESPONSE")
         serialize_start = time.perf_counter()
         
         # FASE 4: Registra interação com todos os metadados necessários
@@ -1564,8 +1581,8 @@ async def ask_question(
         
         # ✅ PERFORMANCE: Log após serialização (FastAPI serializa automaticamente)
         serialize_duration = (time.perf_counter() - serialize_start) * 1000
-        logger.info(f"[PERF_STEP] END_SERIALIZE_RESPONSE - {serialize_duration:.2f}ms")
-        logger.info(f"[PERF_STEP] RETURNING_RESPONSE - total: {tempo_processamento_ms}ms")
+        logger.info(f"[PERF_STEP] END_SERIALIZE_RESPONSE - duration={serialize_duration:.2f}ms")
+        logger.info(f"[PERF_STEP] RETURNING_RESPONSE - total_duration={tempo_processamento_ms}ms")
         
         return response
     

@@ -172,12 +172,12 @@ def processar_pergunta_com_dw(
     }
     
     # PASSO 1: LLM gera IntentSpec
-    logger.info(f"[PERF_STEP] START_GROQ_INTENT - gerar_intent_spec_via_llm")
+        logger.info(f"[PERF_STEP] START_GROQ_INTENT - query_id=Q1")
     try:
         start_intent = time.perf_counter()
         intent_spec = gerar_intent_spec_via_llm(pergunta, papel=papel)
         perf_metrics["intent_spec_ms"] = int((time.perf_counter() - start_intent) * 1000)
-        logger.info(f"[PERF_STEP] END_GROQ_INTENT - {perf_metrics['intent_spec_ms']:.2f}ms")
+        logger.info(f"[PERF_STEP] END_GROQ_INTENT - query_id=Q1, duration={perf_metrics['intent_spec_ms']:.2f}ms")
         logger.info(
             f"[processar_pergunta_com_dw] IntentSpec gerado: "
             f"tipo={intent_spec.tipo}, "
@@ -236,7 +236,7 @@ def processar_pergunta_com_dw(
     
     try:
         # ✅ PERFORMANCE: Log antes de executar query DW
-        logger.info(f"[PERF_STEP] START_DW_QUERY - executar_intent_spec")
+        logger.info(f"[PERF_STEP] START_DW_QUERY - query_id=Q1")
         start_dw = time.perf_counter()
         
         try:
@@ -246,10 +246,10 @@ def processar_pergunta_com_dw(
                 contexto_usuario=contexto_usuario
             )
             perf_metrics["dw_query_ms"] = int((time.perf_counter() - start_dw) * 1000)
-            logger.info(f"[PERF_STEP] END_DW_QUERY - status=ok, duration={perf_metrics['dw_query_ms']:.2f}ms")
+            logger.info(f"[PERF_STEP] END_DW_QUERY - query_id=Q1, status=ok, duration={perf_metrics['dw_query_ms']:.2f}ms")
         except Exception as e:
             perf_metrics["dw_query_ms"] = int((time.perf_counter() - start_dw) * 1000)
-            logger.error(f"[PERF_STEP] END_DW_QUERY - status=error, duration={perf_metrics['dw_query_ms']:.2f}ms, error={str(e)}")
+            logger.error(f"[PERF_STEP] END_DW_QUERY - query_id=Q1, status=error, duration={perf_metrics['dw_query_ms']:.2f}ms, error={str(e)}")
             raise
         
         # Extrai dados, regras aplicadas, análise de causas e causas_detector
@@ -346,7 +346,7 @@ def processar_pergunta_com_dw(
         }
     
     # PASSO 3: Pós-processador estrutura resposta
-    logger.info(f"[PERF_STEP] START_POST_PROCESSOR - processar_resposta")
+        logger.info(f"[PERF_STEP] START_POST_PROCESSOR - query_id=Q1")
     try:
         # Behavior Memory já foi aplicado no orquestrador, usa regras que vieram de lá
         # Não precisa chamar aplicar_regras_ao_intent novamente aqui
@@ -361,7 +361,7 @@ def processar_pergunta_com_dw(
             behavior_rules_aplicadas=regras_behavior_aplicadas  # Usa regras do orquestrador
         )
         perf_metrics["post_processor_ms"] = int((time.perf_counter() - start_post) * 1000)
-        logger.info(f"[PERF_STEP] END_POST_PROCESSOR - {perf_metrics['post_processor_ms']:.2f}ms")
+        logger.info(f"[PERF_STEP] END_POST_PROCESSOR - query_id=Q1, duration={perf_metrics['post_processor_ms']:.2f}ms")
         
         # LOG: Verifica texto do post_processor
         texto_post_processor = resposta_estruturada.get("texto", "")
@@ -371,7 +371,7 @@ def processar_pergunta_com_dw(
         
         # PASSO 4: LLM gera resposta executiva com dados estruturados
         # ✅ PERFORMANCE: Mede tempo de LLM
-        logger.info(f"[PERF_STEP] START_GROQ_EXECUTIVE - gerar_resposta_executiva_com_dados_dw")
+        logger.info(f"[PERF_STEP] START_GROQ_EXECUTIVE - query_id=Q1")
         start_llm = time.perf_counter()
         try:
             resposta_executiva = gerar_resposta_executiva_com_dados_dw(
@@ -384,10 +384,10 @@ def processar_pergunta_com_dw(
                 resposta_estruturada=resposta_estruturada  # Passa resposta estruturada para LLM
             )
             perf_metrics["llm_resposta_ms"] = int((time.perf_counter() - start_llm) * 1000)
-            logger.info(f"[PERF_STEP] END_GROQ_EXECUTIVE - {perf_metrics['llm_resposta_ms']:.2f}ms")
+            logger.info(f"[PERF_STEP] END_GROQ_EXECUTIVE - query_id=Q1, duration={perf_metrics['llm_resposta_ms']:.2f}ms")
         except Exception as e:
             perf_metrics["llm_resposta_ms"] = int((time.perf_counter() - start_llm) * 1000)
-            logger.error(f"[PERF_STEP] END_GROQ_EXECUTIVE - ERROR após {perf_metrics['llm_resposta_ms']:.2f}ms: {e}")
+            logger.error(f"[PERF_STEP] END_GROQ_EXECUTIVE - query_id=Q1, status=error, duration={perf_metrics['llm_resposta_ms']:.2f}ms, error={str(e)}")
             raise
         
         # ✅ PERFORMANCE: Log específico para Q1
@@ -403,7 +403,7 @@ def processar_pergunta_com_dw(
             logger.info(f"[processar_pergunta_com_dw] Texto completo preservado: {len(texto_post_processor)} chars")
         
         # ✅ PERFORMANCE: Log antes de montar resposta final
-        logger.info(f"[PERF_STEP] START_ASSEMBLY - montagem resposta final")
+        logger.info(f"[PERF_STEP] START_ASSEMBLY - query_id=Q1")
         assembly_start = time.perf_counter()
         
         # Para Q1 (clientes_sem_compra), monta tabela_principal com estrutura correta
@@ -470,7 +470,7 @@ def processar_pergunta_com_dw(
     
         # ✅ PERFORMANCE: Log após montagem da resposta
         assembly_duration = (time.perf_counter() - assembly_start) * 1000
-        logger.info(f"[PERF_STEP] END_ASSEMBLY - {assembly_duration:.2f}ms")
+        logger.info(f"[PERF_STEP] END_ASSEMBLY - query_id=Q1, duration={assembly_duration:.2f}ms")
     
     # ✅ PERFORMANCE: Calcula tempo total e adiciona métricas à resposta
     perf_metrics["total_ms"] = int((time.perf_counter() - start_time_total) * 1000)

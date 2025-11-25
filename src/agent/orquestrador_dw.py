@@ -710,8 +710,7 @@ def executar_intent_spec(
                 kwargs["query_id"] = "Q1"
                 logger.info(
                     f"[Q1_ORQ] Executando Q1 com timeout de 20s. "
-                    f"Função: {funcao_dw.__name__ if funcao_dw else 'None'}, "
-                    f"kwargs: {kwargs}"
+                    f"Função: {funcao_dw.__name__ if funcao_dw else 'None'}"
                 )
                 
                 # Executa query com timeout e logging completo

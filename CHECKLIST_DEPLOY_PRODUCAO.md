@@ -12,31 +12,50 @@
 - [x] Logging completo implementado
 - [x] Commits pushados para `main`
 
-## 2. Build da Imagem Docker
+## 2. Build e Deploy (Automático)
 
-### Comando de Build
+### Opção Recomendada: Script de Deploy
 
+Use o script automatizado que faz build e deploy em um único comando:
+
+```bash
+./scripts/deploy_producao.sh [TAG]
+```
+
+**Exemplo:**
+```bash
+# Usa tag padrão: v-prod-perf-cors-timeout
+./scripts/deploy_producao.sh
+
+# Ou especifica tag customizada
+./scripts/deploy_producao.sh v-prod-perf-cors-timeout-v2
+```
+
+**O que o script faz:**
+1. ✅ Verifica se gcloud está instalado e autenticado
+2. ✅ Solicita confirmação antes de fazer deploy
+3. ✅ Faz build da imagem Docker
+4. ✅ Faz deploy no Cloud Run
+5. ✅ Valida pós-deploy (health check, CORS)
+
+**Verificações:**
+- [ ] Script executado com sucesso
+- [ ] Build completa sem erros
+- [ ] Deploy concluído sem erros
+- [ ] Health check passou
+- [ ] CORS funcionando
+
+### Opção Manual: Comandos Individuais
+
+Se preferir executar manualmente:
+
+**Build:**
 ```bash
 gcloud builds submit --tag gcr.io/trivihair/dipam-ai-backend:v-prod-perf-cors-timeout \
   --timeout=20m
 ```
 
-**Verificações:**
-- [ ] Build completa sem erros
-- [ ] Imagem taggeada corretamente
-- [ ] Tamanho da imagem razoável
-
-### Alternativa: Build via Cloud Build (se configurado)
-
-Se houver `cloudbuild.yaml` configurado:
-```bash
-gcloud builds submit --config cloudbuild.yaml
-```
-
-## 3. Deploy no Cloud Run
-
-### Comando de Deploy
-
+**Deploy:**
 ```bash
 gcloud run deploy dipam-ai-backend \
   --image gcr.io/trivihair/dipam-ai-backend:v-prod-perf-cors-timeout \
