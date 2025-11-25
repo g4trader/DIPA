@@ -1616,7 +1616,7 @@ async def ask_question(
             content={
                 "status": "erro_interno",
                 "mensagem": "Ocorreu um erro ao processar sua pergunta. Por favor, tente novamente.",
-                "erro_tecnico": str(e) if os.getenv("ENVIRONMENT") == "development" or config.environment == "development" else None
+                "erro_tecnico": str(e) if os.getenv("ENVIRONMENT") == "development" or config.environment == "development" else None,
                 "timestamp": datetime.utcnow().isoformat(),
             }
         )
