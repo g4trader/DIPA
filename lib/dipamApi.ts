@@ -213,6 +213,11 @@ export type PreviewVendedorResponse = {
  * Classe de erro customizada para erros da API do Dipam AI
  */
 export class DipamApiError extends Error {
+  /** Tipo do erro: "timeout_dw", "erro_interno", ou undefined para erros genéricos */
+  tipo?: "timeout_dw" | "erro_interno";
+  /** Hint adicional para o usuário (especialmente útil para timeout_dw) */
+  hint?: string;
+  
   constructor(
     message: string,
     public statusCode?: number,
@@ -289,6 +294,29 @@ export async function askDipamAgent(
       try {
         const body = await response.json();
         errorData = body;
+        
+        // ✅ TRATAMENTO ESPECÍFICO: Erro de timeout de DW
+        if (body?.erro_dw?.error_type === "DW_TIMEOUT") {
+          errorMessage = 
+            "Sua pergunta exige uma consulta muito pesada no data warehouse e passou do tempo máximo de 20 segundos. " +
+            "Tente reduzir o período ou deixar a pergunta mais específica (por exemplo, foque em um fornecedor, linha ou mês).";
+          // Cria erro especial com tipo timeout_dw para tratamento na UI
+          const timeoutError = new DipamApiError(errorMessage, response.status, errorData);
+          (timeoutError as any).tipo = "timeout_dw";
+          (timeoutError as any).hint = body.erro_dw?.hint || "Tente ajustar o período ou refazer a pergunta.";
+          throw timeoutError;
+        }
+        
+        // ✅ TRATAMENTO: Outros erros internos
+        if (body?.status === "erro_interno") {
+          errorMessage = body?.mensagem || 
+            "O Dipam AI encontrou um erro interno ao processar sua pergunta. Tente novamente em instantes.";
+          const internalError = new DipamApiError(errorMessage, response.status, errorData);
+          (internalError as any).tipo = "erro_interno";
+          throw internalError;
+        }
+        
+        // Tratamento genérico de erro
         if (body?.detail || body?.message || body?.error) {
           // Extrai mensagem de erro legível
           const detail = body.detail || body.message || body.error;
@@ -299,7 +327,11 @@ export async function askDipamAgent(
             errorMessage = detail.message || detail.error || JSON.stringify(detail);
           }
         }
-      } catch {
+      } catch (error) {
+        // Se já foi lançado um erro customizado (timeout_dw ou erro_interno), re-lança
+        if (error instanceof DipamApiError) {
+          throw error;
+        }
         // Se não conseguir parsear JSON, tenta texto
         try {
           const text = await response.text();

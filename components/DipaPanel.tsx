@@ -1417,17 +1417,38 @@ export default function DipaPanel() {
     } catch (error) {
       console.error("Erro ao chamar API do Dipam AI:", error);
       
-      const errorMessage = error instanceof DipamApiError 
-        ? error.message 
-        : "Erro ao conectar com o agente. Verifique se a API está rodando.";
+      let errorMessage: string;
+      let errorType: "timeout_dw" | "erro_interno" | "erro_generico" = "erro_generico";
+      
+      if (error instanceof DipamApiError) {
+        // ✅ TRATAMENTO ESPECÍFICO: Erro de timeout de DW
+        if (error.tipo === "timeout_dw") {
+          errorMessage = error.message; // Já contém mensagem amigável
+          errorType = "timeout_dw";
+        } 
+        // ✅ TRATAMENTO: Outros erros internos
+        else if (error.tipo === "erro_interno") {
+          errorMessage = error.message; // Já contém mensagem amigável
+          errorType = "erro_interno";
+        }
+        // Erro genérico da API
+        else {
+          errorMessage = error.message;
+        }
+      } else {
+        errorMessage = "Erro ao conectar com o agente. Verifique se a API está rodando.";
+      }
       
       setError(errorMessage);
       
       // Adiciona mensagem de erro como resposta do agente
+      // Para timeout_dw, usa mensagem mais amigável sem emoji de erro
       const errorAgentMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: `❌ ${errorMessage}`
+        content: errorType === "timeout_dw" 
+          ? `⏱️ ${errorMessage}` // Usa emoji de relógio para timeout
+          : `❌ ${errorMessage}` // Usa emoji de erro para outros erros
       };
       
       setMessages((msgs) => [...msgs, errorAgentMessage]);
