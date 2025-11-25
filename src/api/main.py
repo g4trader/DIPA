@@ -1620,7 +1620,6 @@ async def ask_question(
                 "timestamp": datetime.utcnow().isoformat(),
             }
         )
-        raise error_response
 
 
 @app.get("/preview/vendedor/{vendedor}/{mes_ano}", response_model=PreviewVendedorResponse)
