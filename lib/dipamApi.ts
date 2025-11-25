@@ -8,40 +8,47 @@
 import { CopilotStructuredResponse } from "@/types/agent";
 
 /**
+ * Detecta o ambiente atual (mock ou produção)
+ * 
+ * @returns "mock" se NEXT_PUBLIC_DIPAM_ENV === "mock", caso contrário "prod"
+ */
+const ENV = process.env.NEXT_PUBLIC_DIPAM_ENV || "prod";
+
+/**
  * URL base da API do Dipam AI
  * 
- * Lê da variável de ambiente NEXT_PUBLIC_BACKEND_URL (padrão) ou
- * NEXT_PUBLIC_API_BASE_URL (compatibilidade).
- * 
  * IMPORTANTE: 
- * - Em produção, a variável DEVE estar configurada no Vercel
- * - Fallback padrão: URL oficial do Cloud Run (trivihair)
+ * - Em modo MOCK: não usa backend real, retorna "/api/mock" para endpoints locais
+ * - Em modo PROD: usa backend real no Cloud Run
  * - Remove barras no final para evitar URLs duplicadas (ex: ...run.app//ask)
  * - URL oficial: https://dipam-ai-backend-642830139828.us-central1.run.app
  * 
  * ⚠️ NUNCA usar a URL antiga: https://dipam-ai-backend-6arhlm3mha-uc.a.run.app
  */
 const BASE_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "https://dipam-ai-backend-642830139828.us-central1.run.app";
+  ENV === "mock"
+    ? "/api/mock" // Mock usa endpoints locais
+    : process.env.NEXT_PUBLIC_DIPAM_API_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      "https://dipam-ai-backend-642830139828.us-central1.run.app";
 
 // Remove barra extra no final, se houver
 const cleanedUrl = BASE_URL.replace(/\/+$/, "");
 
 // Debug apenas em desenvolvimento
 if (process.env.NODE_ENV === "development") {
-  console.log("🔧 BACKEND_URL:", cleanedUrl);
+  console.log(`🔧 [DIPAM API] Ambiente: ${ENV}, BACKEND_URL: ${cleanedUrl}`);
 }
 
-// Validação: em produção, a URL DEVE estar configurada
-if (!cleanedUrl && process.env.NODE_ENV === "production") {
+// Validação: em produção, a URL DEVE estar configurada (apenas se não for mock)
+if (ENV !== "mock" && !cleanedUrl && process.env.NODE_ENV === "production") {
   console.error(
-    "❌ ERRO CRÍTICO: NEXT_PUBLIC_BACKEND_URL não está configurada no Vercel!",
-    "Configure a variável de ambiente: NEXT_PUBLIC_BACKEND_URL=https://dipam-ai-backend-642830139828.us-central1.run.app"
+    "❌ ERRO CRÍTICO: NEXT_PUBLIC_DIPAM_API_URL não está configurada no Vercel!",
+    "Configure a variável de ambiente: NEXT_PUBLIC_DIPAM_API_URL=https://dipam-ai-backend-642830139828.us-central1.run.app"
   );
   throw new Error(
-    "NEXT_PUBLIC_BACKEND_URL não está configurada. Configure no Vercel: NEXT_PUBLIC_BACKEND_URL=https://dipam-ai-backend-642830139828.us-central1.run.app"
+    "NEXT_PUBLIC_DIPAM_API_URL não está configurada. Configure no Vercel: NEXT_PUBLIC_DIPAM_API_URL=https://dipam-ai-backend-642830139828.us-central1.run.app"
   );
 }
 
@@ -53,7 +60,7 @@ export const DIPAM_API_BASE_URL = cleanedUrl;
  * @returns true se NEXT_PUBLIC_DIPAM_ENV === "mock"
  */
 function isMockEnv(): boolean {
-  return process.env.NEXT_PUBLIC_DIPAM_ENV === "mock";
+  return ENV === "mock";
 }
 
 /**
@@ -66,10 +73,17 @@ function isMockEnv(): boolean {
  */
 function buildUrl(path: string): string {
   // Se estiver em modo mock, retorna endpoint local
-  if (isMockEnv() && path === "/ask") {
-    return "/api/mock/ask";
+  if (isMockEnv()) {
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    // Para mock, sempre usa endpoint local
+    if (normalizedPath === "/ask") {
+      return "/api/mock/ask";
+    }
+    // Para outros endpoints em mock, também usa /api/mock
+    return `/api/mock${normalizedPath}`;
   }
   
+  // Em produção, usa backend real
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${DIPAM_API_BASE_URL}${normalizedPath}`;
 }
@@ -216,6 +230,9 @@ export class DipamApiError extends Error {
  * Envia uma pergunta ao agente inteligente e retorna a resposta estruturada
  * com intent, contexto e nível de confiança.
  * 
+ * IMPORTANTE: Em modo MOCK, chama diretamente o mock engine sem fazer fetch.
+ * Em modo PROD, faz requisição HTTP para o backend real.
+ * 
  * @param params - Parâmetros da pergunta incluindo pergunta, usuarioId e papel
  * @returns Promise com a resposta do agente
  * @throws DipamApiError em caso de erro de rede ou status HTTP != 200
@@ -233,6 +250,24 @@ export class DipamApiError extends Error {
 export async function askDipamAgent(
   params: AskParams
 ): Promise<AskResponse> {
+  // Se estiver em modo mock, usa o mock engine diretamente (sem fetch)
+  if (isMockEnv()) {
+    console.log("[DIPAM MOCK] Usando snapshot local.");
+    try {
+      const { executarMockAsk } = await import("@/lib/mock/dipamMockEngine");
+      return await executarMockAsk(params);
+    } catch (error) {
+      console.error("[DIPAM MOCK] Erro ao carregar mock engine:", error);
+      throw new DipamApiError(
+        "Erro ao processar requisição mock. Verifique se os dados mock estão disponíveis.",
+        undefined,
+        error
+      );
+    }
+  }
+
+  // Em produção, faz requisição HTTP para o backend real
+  console.log("[DIPAM PROD] Enviando requisição para backend real.");
   const url = buildUrl("/ask");
   try {
     const response = await fetch(url, {

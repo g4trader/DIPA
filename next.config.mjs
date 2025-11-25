@@ -5,6 +5,26 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// 🔒 GUARDRAIL: Bloqueia uso de mock em produção na Vercel
+// Este check impede que alguém faça deploy do mock por engano na instância de produção
+// IMPORTANTE: Só bloqueia se estiver rodando na Vercel (VERCEL=true) e for projeto de produção
+if (process.env.NEXT_PUBLIC_DIPAM_ENV === "mock" && process.env.NODE_ENV === "production" && process.env.VERCEL === "1") {
+  // Permite mock apenas se for explicitamente o projeto mock da Vercel
+  // Verifica se é o projeto dipam-vercel (mock) ou dipam-smartiasolutions (prod)
+  const vercelProjectName = process.env.VERCEL_PROJECT_NAME || "";
+  const isMockProject = vercelProjectName === "dipam-vercel";
+  
+  if (!isMockProject) {
+    throw new Error(
+      "❌ Build abortado: mock não pode ser usado em produção.\n" +
+      "O ambiente NEXT_PUBLIC_DIPAM_ENV=mock só é permitido no projeto dipam-vercel.\n" +
+      "Para produção (dipam-smartiasolutions), configure NEXT_PUBLIC_DIPAM_ENV=prod"
+    );
+  }
+  
+  console.log("✅ [GUARDRAIL] Mock permitido no projeto dipam-vercel (ambiente de laboratório)");
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -25,7 +45,11 @@ const nextConfig = {
   
   // Configura variáveis de ambiente públicas (acessíveis no navegador)
   env: {
+    NEXT_PUBLIC_DIPAM_ENV: process.env.NEXT_PUBLIC_DIPAM_ENV || "prod",
+    NEXT_PUBLIC_DIPAM_API_URL: process.env.NEXT_PUBLIC_DIPAM_API_URL,
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_DIPAM_API_URL,
+    NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_DIPAM_API_URL,
+    NEXT_PUBLIC_PROJECT_ENV: process.env.NEXT_PUBLIC_PROJECT_ENV || (process.env.NEXT_PUBLIC_DIPAM_ENV === "mock" ? "mock" : "production"),
   },
   
   // Configuração explícita de path aliases para garantir compatibilidade com Vercel
