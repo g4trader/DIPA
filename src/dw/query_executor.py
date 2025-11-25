@@ -82,89 +82,22 @@ def run_dw_query_q1(
             except Exception as e:
                 logger.warning(f"[run_dw_query_q1] Não foi possível configurar statement_timeout: {e}")
         
-        # Executa query com timeout usando threading (fallback para signal.SIGALRM)
-        import threading
-        from queue import Queue
+        # Executa query diretamente (timeout será tratado pelo performance_guard)
+        # Para PostgreSQL, statement_timeout já foi configurado acima
+        # Para SQLite, confiamos no performance_guard que usa signal.SIGALRM
+        result = query_func(session=session, **params)
         
-        result_queue = Queue()
-        error_queue = Queue()
-        
-        def execute_query():
-            try:
-                result = query_func(session=session, **params)
-                result_queue.put(("success", result))
-            except Exception as e:
-                error_queue.put(e)
-        
-        # Inicia thread para executar query
-        query_thread = threading.Thread(target=execute_query, daemon=True)
-        query_thread.start()
-        query_thread.join(timeout=DW_QUERY_TIMEOUT_SECONDS)
-        
-        # Verifica se thread terminou
-        if query_thread.is_alive():
-            # Thread ainda está rodando = timeout
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                f"[PERF_STEP] END_DW_QUERY - status=timeout, "
-                f"query_id={query_id}, duration={duration_ms:.2f}ms"
-            )
-            
-            return {
-                "status": "timeout",
-                "data": None,
-                "error": "A consulta de dados demorou mais do que o tempo máximo configurado (20s).",
-                "error_type": "DW_TIMEOUT",
-                "hint": "Sugira no front ao usuário ajustar o período ou refazer a pergunta.",
-                "duration_ms": int(duration_ms)
-            }
-        
-        # Verifica se houve erro
-        if not error_queue.empty():
-            error = error_queue.get()
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                f"[PERF_STEP] END_DW_QUERY - status=error, "
-                f"query_id={query_id}, duration={duration_ms:.2f}ms, error={str(error)}"
-            )
-            
-            return {
-                "status": "error",
-                "data": None,
-                "error": str(error),
-                "error_type": "DW_ERROR",
-                "duration_ms": int(duration_ms)
-            }
-        
-        # Verifica se houve resultado
-        if not result_queue.empty():
-            status, result = result_queue.get()
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.info(
-                f"[PERF_STEP] END_DW_QUERY - status=ok, "
-                f"query_id={query_id}, duration={duration_ms:.2f}ms, "
-                f"records={len(result) if isinstance(result, list) else 0}"
-            )
-            
-            return {
-                "status": "ok",
-                "data": result,
-                "error": None,
-                "duration_ms": int(duration_ms)
-            }
-        
-        # Caso inesperado: thread terminou mas não há resultado nem erro
         duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.error(
-            f"[PERF_STEP] END_DW_QUERY - status=unknown, "
-            f"query_id={query_id}, duration={duration_ms:.2f}ms"
+        logger.info(
+            f"[PERF_STEP] END_DW_QUERY - status=ok, "
+            f"query_id={query_id}, duration={duration_ms:.2f}ms, "
+            f"records={len(result) if isinstance(result, list) else 0}"
         )
         
         return {
-            "status": "error",
-            "data": None,
-            "error": "Erro inesperado na execução da query.",
-            "error_type": "DW_UNKNOWN_ERROR",
+            "status": "ok",
+            "data": result,
+            "error": None,
             "duration_ms": int(duration_ms)
         }
         
