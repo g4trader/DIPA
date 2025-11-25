@@ -700,16 +700,73 @@ def executar_intent_spec(
                         filtros_behavior["excluir_segmentos"] = intent_spec.filtros.get("excluir_segmentos", [])
                 kwargs["filtros_behavior"] = filtros_behavior if filtros_behavior else None
             
-            # ✅ CORREÇÃO CRÍTICA Q1: Para Q1, bypassa cache para garantir resultado correto
+            # ✅ CORREÇÃO CRÍTICA Q1: Para Q1, usa executor com timeout
             if intent_spec.tipo == "clientes_sem_compra":
+                # FUTURO: aqui podemos enfileirar a execução de Q1 como job assíncrono
+                # e retornar apenas um job_id para o frontend.
+                from src.dw.query_executor import run_dw_query_q1
+                
                 kwargs["bypass_cache"] = True
+                kwargs["query_id"] = "Q1"
                 logger.info(
-                    f"[Q1_ORQ] Bypassando cache para garantir resultado correto. "
+                    f"[Q1_ORQ] Executando Q1 com timeout de 20s. "
                     f"Função: {funcao_dw.__name__ if funcao_dw else 'None'}, "
                     f"kwargs: {kwargs}"
                 )
-            
-            resultado = funcao_dw(session, **kwargs)
+                
+                # Executa query com timeout e logging completo
+                query_result = run_dw_query_q1(
+                    session=session,
+                    params=kwargs,
+                    query_func=funcao_dw
+                )
+                
+                # Verifica se houve timeout ou erro
+                if query_result["status"] == "timeout":
+                    logger.error(
+                        f"[Q1_ORQ] ❌ Timeout na query Q1 após {query_result['duration_ms']}ms"
+                    )
+                    return {
+                        "status": "erro_interno",
+                        "mensagem": query_result.get("error", "Timeout na consulta de dados."),
+                        "intent": intent_spec.to_dict(),
+                        "periodo_analisado": {
+                            "inicio": intent_spec.periodo_inicio,
+                            "fim": intent_spec.periodo_fim
+                        },
+                        "dados": [],
+                        "erro_dw": {
+                            "error_type": query_result.get("error_type", "DW_TIMEOUT"),
+                            "hint": query_result.get("hint", "Tente ajustar o período ou refazer a pergunta.")
+                        }
+                    }
+                elif query_result["status"] == "error":
+                    logger.error(
+                        f"[Q1_ORQ] ❌ Erro na query Q1: {query_result.get('error', 'Erro desconhecido')}"
+                    )
+                    return {
+                        "status": "erro_interno",
+                        "mensagem": query_result.get("error", "Erro na consulta de dados."),
+                        "intent": intent_spec.to_dict(),
+                        "periodo_analisado": {
+                            "inicio": intent_spec.periodo_inicio,
+                            "fim": intent_spec.periodo_fim
+                        },
+                        "dados": [],
+                        "erro_dw": {
+                            "error_type": query_result.get("error_type", "DW_ERROR"),
+                            "hint": "Verifique os logs do servidor para mais detalhes."
+                        }
+                    }
+                
+                # Sucesso: usa dados retornados
+                resultado = query_result.get("data", [])
+                logger.info(
+                    f"[Q1_ORQ] ✅ Query Q1 executada com sucesso: {len(resultado) if isinstance(resultado, list) else 0} registros"
+                )
+            else:
+                # Para outras queries, executa normalmente (sem timeout wrapper)
+                resultado = funcao_dw(session, **kwargs)
             
             # ✅ LOG CRÍTICO: Para Q1, loga tipo e tamanho do resultado
             if intent_spec.tipo == "clientes_sem_compra":

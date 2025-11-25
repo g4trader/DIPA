@@ -116,6 +116,11 @@ async def add_cors_headers(request: Request, call_next):
         if origin in allowed_origins:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            
+            # ✅ PERFORMANCE: Log origem da request para debug
+            logger.info(f"[PERF_STEP] CORS origin={origin}")
             
             # Garante que caches respeitem origem
             vary = response.headers.get("Vary")
@@ -1575,9 +1580,10 @@ async def ask_question(
         import traceback
         logger.error(traceback.format_exc())
         
+        # ✅ CORS: Garante que erro também tem headers CORS
         # Levanta HTTPException ao invés de retornar JSONResponse diretamente
         # Isso garante que o CORSMiddleware adicione os headers CORS corretamente
-        raise HTTPException(
+        error_response = HTTPException(
             status_code=500,
             detail={
                 "error": "Erro interno do servidor",
@@ -1586,6 +1592,7 @@ async def ask_question(
                 "timestamp": datetime.utcnow().isoformat(),
             }
         )
+        raise error_response
 
 
 @app.get("/preview/vendedor/{vendedor}/{mes_ano}", response_model=PreviewVendedorResponse)

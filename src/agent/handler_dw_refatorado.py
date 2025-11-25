@@ -238,13 +238,19 @@ def processar_pergunta_com_dw(
         # ✅ PERFORMANCE: Log antes de executar query DW
         logger.info(f"[PERF_STEP] START_DW_QUERY - executar_intent_spec")
         start_dw = time.perf_counter()
-        resultado_orquestrador = executar_intent_spec(
-            session=session,
-            intent_spec=intent_spec,
-            contexto_usuario=contexto_usuario
-        )
-        perf_metrics["dw_query_ms"] = int((time.perf_counter() - start_dw) * 1000)
-        logger.info(f"[PERF_STEP] END_DW_QUERY - {perf_metrics['dw_query_ms']:.2f}ms")
+        
+        try:
+            resultado_orquestrador = executar_intent_spec(
+                session=session,
+                intent_spec=intent_spec,
+                contexto_usuario=contexto_usuario
+            )
+            perf_metrics["dw_query_ms"] = int((time.perf_counter() - start_dw) * 1000)
+            logger.info(f"[PERF_STEP] END_DW_QUERY - status=ok, duration={perf_metrics['dw_query_ms']:.2f}ms")
+        except Exception as e:
+            perf_metrics["dw_query_ms"] = int((time.perf_counter() - start_dw) * 1000)
+            logger.error(f"[PERF_STEP] END_DW_QUERY - status=error, duration={perf_metrics['dw_query_ms']:.2f}ms, error={str(e)}")
+            raise
         
         # Extrai dados, regras aplicadas, análise de causas e causas_detector
         dados_orquestrador = resultado_orquestrador.get("dados", [])
