@@ -6,11 +6,21 @@
 
 ## Status da Validação
 
-### ⚠️ Observação Importante
+### ⚠️ Problema Identificado: Timeout de 32s
 
-O serviço de produção está passando por reinicializações frequentes durante o período de validação. Requisições à API `/ask` estão retornando `503 Service Unavailable` durante esses períodos.
+O serviço está retornando `503 Service Unavailable` após aproximadamente 32 segundos de processamento. Isso impede a validação completa de performance e cache.
 
-**Recomendação:** Aguardar 10-15 minutos após deploy para estabilização completa antes de executar validações finais de performance.
+**Observações:**
+- Query DW está executando (1234 clientes únicos detectados)
+- Logs `[PERF_ASK]` sendo gerados
+- Timeout ocorre antes da conclusão (possivelmente durante LLM ou montagem da resposta)
+
+**Tempos observados:**
+- Timeout: ~32-36 segundos
+- Query DW: Executando (4-5 segundos baseado nos logs)
+- LLM: Não completou (timeout antes)
+
+**Recomendação:** Investigar e corrigir timeout antes de validar performance completa.
 
 ## Validações Realizadas
 

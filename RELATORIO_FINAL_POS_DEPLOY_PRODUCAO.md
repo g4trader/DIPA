@@ -16,8 +16,8 @@ O deploy da versão otimizada de performance foi concluído com sucesso. O servi
 | Frontend (Vercel) | ✅ Deployado | Build `ef0347f` sem erros |
 | Health Check | ✅ Operacional | Endpoint `/health` respondendo |
 | Logs de Performance | ✅ Ativos | `[PERF_ASK]` sendo gerados |
-| Query Q1 | ✅ Executando | SQL sendo gerado corretamente |
-| Estabilização | ⏳ Em andamento | Reinicializações frequentes |
+| Query Q1 | ✅ Executando | SQL sendo gerado corretamente (1234 clientes únicos) |
+| Timeout | ⚠️ Problema | Retornando 503 após ~32s |
 
 ## 1. Validação de Dados
 
@@ -123,18 +123,33 @@ O deploy da versão otimizada de performance foi concluído com sucesso. O servi
 
 ## 5. Observações Técnicas
 
-### Reinicializações Frequentes
+### ⚠️ Problema Crítico: Timeout de 32s
 
-O serviço está reiniciando frequentemente durante o período de validação. Possíveis causas:
-- Cold start do Cloud Run
-- Timeout durante processamento de queries longas
-- Inicialização de componentes (AgentService)
+O serviço está retornando `503 Service Unavailable` após aproximadamente 32 segundos de processamento. Isso impede a validação completa.
+
+**Observações dos logs:**
+- Query DW executando corretamente (1234 clientes únicos detectados)
+- Logs `[PERF_ASK]` sendo gerados
+- Cache bypass funcionando
+- Timeout ocorre antes da conclusão completa
+
+**Possíveis causas:**
+1. Timeout do gunicorn/uvicorn worker (pode ter timeout menor que 300s)
+2. Timeout durante chamada ao LLM (GROQ)
+3. Timeout do Cloud Run (mesmo configurado para 300s, pode haver timeout intermediário)
+4. Processamento muito longo da montagem da resposta
+
+**Configuração atual:**
+- Cloud Run timeout: 300s
+- Gunicorn timeout: 300s (configurado no Dockerfile)
+- Memory: 4Gi
+- CPU: 2
 
 **Recomendações:**
-1. Aguardar 10-15 minutos após deploy para estabilização completa
-2. Monitorar métricas do Cloud Run
-3. Considerar aumentar `min-instances` para 2 se necessário
-4. Verificar se há queries muito lentas ou memory leaks
+1. Verificar logs completos para identificar onde ocorre o timeout
+2. Aumentar timeout do gunicorn se necessário
+3. Verificar se há timeout na chamada ao GROQ
+4. Considerar otimizar montagem da resposta se for muito lenta
 
 ### AgentService Unavailable
 
@@ -267,9 +282,34 @@ O componente `agent_service` está marcado como "unavailable" no health check. I
 
 ## Status Final
 
-**✅ DEPLOY CONCLUÍDO - AGUARDANDO ESTABILIZAÇÃO PARA VALIDAÇÃO COMPLETA**
+### ⚠️ PROBLEMA IDENTIFICADO: TIMEOUT DE 32s
 
-Todas as otimizações foram implementadas e estão ativas. O serviço está operacional, mas requer período de estabilização antes de executar validações finais de dados e performance.
+**Status:** Deploy concluído, mas há problema de timeout que impede validação completa.
 
-**Próxima ação:** Executar validações novamente após 10-15 minutos de estabilização do serviço.
+**Observações:**
+- ✅ Todas as otimizações implementadas
+- ✅ Logs de performance ativos
+- ✅ Query Q1 executando corretamente
+- ⚠️ Timeout após ~32s impedindo conclusão
+
+**Próximas ações:**
+1. **Investigar timeout:**
+   - Verificar logs completos do Cloud Run
+   - Identificar onde ocorre o timeout (DW, LLM, montagem)
+   - Verificar configurações de timeout do gunicorn/uvicorn
+   - Verificar timeout da chamada ao GROQ
+
+2. **Correções possíveis:**
+   - Aumentar timeout do gunicorn se necessário
+   - Otimizar chamada ao LLM se for muito lenta
+   - Otimizar montagem da resposta se for muito lenta
+   - Verificar se há memory leaks ou queries muito lentas
+
+3. **Após correção:**
+   - Executar validações completas novamente
+   - Validar performance e cache
+   - Confirmar headers de compressão
+   - Validar dados completos
+
+**Status:** ⚠️ **DEPLOY CONCLUÍDO - REQUER CORREÇÃO DE TIMEOUT PARA VALIDAÇÃO COMPLETA**
 

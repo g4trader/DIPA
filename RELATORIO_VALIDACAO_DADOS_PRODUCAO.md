@@ -6,14 +6,23 @@
 
 ## Status da Validação
 
-### ⚠️ Observação Importante
+### ⚠️ Problema Identificado: Timeout de 32s
 
-O serviço de produção está passando por reinicializações frequentes durante o período de validação. Isso pode estar relacionado a:
-- Cold start do Cloud Run
-- Timeout durante processamento de queries longas
-- Inicialização de componentes (AgentService)
+O serviço está retornando `503 Service Unavailable` após aproximadamente 32 segundos de processamento. Isso indica um timeout antes da conclusão da requisição.
 
-**Recomendação:** Aguardar 10-15 minutos após deploy para estabilização completa antes de executar validações finais.
+**Observações dos logs:**
+- Query Q1 está executando corretamente (1234 clientes únicos detectados)
+- Logs `[PERF_ASK]` sendo gerados
+- Cache bypass está funcionando
+- Timeout ocorre antes da conclusão do processamento completo
+
+**Possíveis causas:**
+1. Timeout do Cloud Run (configurado para 300s, mas pode haver timeout intermediário)
+2. Timeout do gunicorn/uvicorn worker
+3. Timeout durante chamada ao LLM (GROQ)
+4. Processamento muito longo da query DW
+
+**Recomendação:** Investigar timeout e ajustar configurações se necessário.
 
 ## Validações Realizadas
 
