@@ -14,6 +14,7 @@ ARQUITETURA:
 
 import logging
 import json
+import time
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from calendar import monthrange
@@ -480,6 +481,10 @@ IMPORTANTE PARA Q1 (clientes_sem_compra):
 Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações adicionais."""
 
     try:
+        # ✅ PERFORMANCE: Log antes de chamar LLM
+        llm_start_time = time.perf_counter()
+        logger.info(f"[PERF_STEP] LLM_START - gerar_resposta_executiva_com_dados_dw")
+        
         # ✅ CORREÇÃO: Usa GROQ Guard se disponível, senão usa cliente padrão
         if GROQ_GUARD_AVAILABLE:
             try:
@@ -500,6 +505,10 @@ Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações a
             prompt_truncated = truncate_prompt(prompt, max_chars=8000)
             resposta_llm = call_openai_llm(prompt_truncated, system_prompt=system_prompt)
         
+        # ✅ PERFORMANCE: Log após chamada LLM
+        llm_duration = (time.perf_counter() - llm_start_time) * 1000
+        logger.info(f"[PERF_STEP] LLM_END - {llm_duration:.2f}ms")
+        
         # Limpa a resposta (remove markdown code blocks se houver)
         resposta_limpa = resposta_llm.strip()
         if resposta_limpa.startswith("```json"):
@@ -509,6 +518,10 @@ Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações a
         if resposta_limpa.endswith("```"):
             resposta_limpa = resposta_limpa[:-3]
         resposta_limpa = resposta_limpa.strip()
+        
+        # ✅ PERFORMANCE: Log antes de montar resposta
+        assembly_start_time = time.perf_counter()
+        logger.info(f"[PERF_STEP] ASSEMBLY_START")
         
         # Parse JSON
         resposta_dict = json.loads(resposta_limpa)
@@ -535,6 +548,10 @@ Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações a
                 logger.warning(
                     f"[gerar_resposta_executiva_com_dados_dw] Q1 - Palavras proibidas encontradas: {palavras_encontradas}"
                 )
+        
+        # ✅ PERFORMANCE: Log após montagem da resposta
+        assembly_duration = (time.perf_counter() - assembly_start_time) * 1000
+        logger.info(f"[PERF_STEP] ASSEMBLY_END - {assembly_duration:.2f}ms")
         
         logger.info(
             f"[gerar_resposta_executiva_com_dados_dw] Resposta gerada: "

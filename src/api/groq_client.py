@@ -11,6 +11,7 @@ Este módulo implementa:
 
 import os
 import logging
+import time
 from typing import Optional, Dict, Any
 import requests
 from requests.exceptions import RequestException, Timeout
@@ -211,13 +212,25 @@ def call_groq_model(
     )
     
     try:
+        # ✅ CORREÇÃO TIMEOUT: Aumentado para 60s para Q1 (respostas executivas podem demorar mais)
+        # Timeout configurável via variável de ambiente GROQ_TIMEOUT (padrão: 60s)
+        groq_timeout = int(os.getenv("GROQ_TIMEOUT", "60"))
+        logger.info(f"[GROQ] Timeout configurado: {groq_timeout}s, prompt_length={len(prompt_truncated)}")
+        
+        # ✅ PERFORMANCE: Log antes de chamar GROQ
+        groq_call_start = time.time()
+        
         # Faz requisição HTTP
         response = requests.post(
             url,
             json=payload,
             headers=headers,
-            timeout=30
+            timeout=groq_timeout
         )
+        
+        # ✅ PERFORMANCE: Log após chamada GROQ
+        groq_call_duration = time.time() - groq_call_start
+        logger.info(f"[PERF_STEP] GROQ_CALL_END - {groq_call_duration:.2f}s")
         
         # Verifica status da resposta
         if response.status_code == 400:
@@ -309,14 +322,17 @@ def call_groq_model(
     except GroqError:
         raise
     except Timeout:
+        # ✅ CORREÇÃO: garante que groq_timeout está definido mesmo em caso de erro
+        timeout_val = groq_timeout if 'groq_timeout' in locals() else 60
         logger.error(
-            "Timeout ao chamar GROQ API",
+            f"Timeout ao chamar GROQ API após {timeout_val} segundos",
             extra={
                 "event": "groq_timeout",
                 "contexto": contexto,
+                "timeout_seconds": timeout_val,
             }
         )
-        raise GroqError("Timeout ao chamar GROQ API após 30 segundos")
+        raise GroqError(f"Timeout ao chamar GROQ API após {timeout_val} segundos")
     except RequestException as e:
         logger.error(
             f"Erro de rede ao chamar GROQ API: {str(e)}",
