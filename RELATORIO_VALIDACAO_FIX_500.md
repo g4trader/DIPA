@@ -163,9 +163,15 @@ gcloud run services logs read dipam-ai-backend \
 
 ## ✅ Conclusão
 
-O erro 500 foi **totalmente corrigido e validado**. O endpoint `/ask` está funcionando corretamente em produção, retornando respostas JSON estruturadas sem erros. Todos os critérios de aceitação foram atendidos.
+O **erro 500 foi totalmente corrigido**. O endpoint `/ask` não retorna mais erro 500 por causa de `IndentationError`. O processo inicia corretamente e os logs `[PERF_STEP]` aparecem normalmente.
 
-**Status Final:** ✅ **CORREÇÃO VALIDADA E APROVADA**
+**Observação:** Ainda há timeout na query DW (503 após ~44s), mas isso é um problema separado relacionado à performance da query, não ao erro 500 de sintaxe que foi corrigido.
+
+**Status Final:** ✅ **ERRO 500 CORRIGIDO E VALIDADO**
+
+**Próximos passos (opcional):**
+- Investigar e otimizar a query DW para reduzir tempo de execução
+- Validar se o timeout de 20s está sendo aplicado corretamente
 
 ---
 
