@@ -65,11 +65,18 @@ echo -e "${YELLOW}⚠️  ATENÇÃO: Você está prestes a fazer deploy em PRODU
 echo -e "${YELLOW}   Serviço: ${SERVICE_NAME}${NC}"
 echo -e "${YELLOW}   Imagem: ${FULL_IMAGE}${NC}"
 echo ""
-read -p "Continuar? (s/N): " -n 1 -r
-echo ""
-if [[ ! $REPLY =~ ^[Ss]$ ]]; then
-    echo "Deploy cancelado."
-    exit 0
+
+# Permite confirmação automática via variável de ambiente
+if [[ "${AUTO_CONFIRM_DEPLOY}" == "true" ]]; then
+    echo -e "${GREEN}✅ Confirmação automática ativada (AUTO_CONFIRM_DEPLOY=true)${NC}"
+    REPLY="s"
+else
+    read -p "Continuar? (s/N): " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Ss]$ ]]; then
+        echo "Deploy cancelado."
+        exit 0
+    fi
 fi
 
 # ============================================
