@@ -74,7 +74,7 @@ def _current_date(session: Session):
 # Q1: CLIENTES SEM COMPRA HÁ DIAS
 # ============================================================================
 
-@performance_guard(timeout_seconds=12.0)
+@performance_guard(timeout_seconds=20.0)  # ✅ TIMEOUT: Aumentado para 20s para Q1
 @query_cache(ttl_seconds=600, query_id="Q1")  # ✅ PERFORMANCE: TTL aumentado para 10 minutos (era 5)
 @profile_query("Q1")
 def get_clientes_sem_compra_ha_dias(
