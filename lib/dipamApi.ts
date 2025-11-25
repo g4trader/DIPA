@@ -213,7 +213,7 @@ export type PreviewVendedorResponse = {
  * Classe de erro customizada para erros da API do Dipam AI
  */
 export class DipamApiError extends Error {
-  /** Tipo do erro: "timeout_dw", "erro_interno", ou undefined para erros genéricos */
+  /** Tipo do erro: "timeout_dw" (inclui ASK_TIMEOUT), "erro_interno", ou undefined para erros genéricos */
   tipo?: "timeout_dw" | "erro_interno";
   /** Hint adicional para o usuário (especialmente útil para timeout_dw) */
   hint?: string;
@@ -295,7 +295,19 @@ export async function askDipamAgent(
         const body = await response.json();
         errorData = body;
         
-        // ✅ TRATAMENTO ESPECÍFICO: Erro de timeout de DW
+        // ✅ TRATAMENTO ESPECÍFICO: Erro de timeout geral (ASK_TIMEOUT)
+        if (body?.codigo === "ASK_TIMEOUT" || body?.status === "timeout") {
+          errorMessage = body?.mensagem || 
+            "A sua pergunta levou mais tempo do que o limite configurado para análise. Tente novamente em alguns instantes ou refine o escopo da consulta.";
+          const timeoutError = new DipamApiError(errorMessage, response.status, errorData);
+          (timeoutError as any).tipo = "timeout_dw"; // Reutiliza tipo existente para UI
+          (timeoutError as any).hint = body?.detalhes?.fase 
+            ? `Timeout ocorreu na fase: ${body.detalhes.fase}. Tente refinar o escopo da pergunta.`
+            : "Tente novamente em alguns instantes ou refine o escopo da consulta.";
+          throw timeoutError;
+        }
+        
+        // ✅ TRATAMENTO ESPECÍFICO: Erro de timeout de DW (legado)
         if (body?.erro_dw?.error_type === "DW_TIMEOUT") {
           errorMessage = 
             "Sua pergunta exige uma consulta muito pesada no data warehouse e passou do tempo máximo de 20 segundos. " +
@@ -347,6 +359,21 @@ export async function askDipamAgent(
     }
 
     const data = (await response.json()) as AskResponse;
+    
+    // ✅ TRATAMENTO: Verifica se a resposta contém erro de timeout mesmo com status 200
+    if (data && typeof data === 'object' && 'codigo' in data && data.codigo === "ASK_TIMEOUT") {
+      const timeoutError = new DipamApiError(
+        data.mensagem || "A sua pergunta levou mais tempo do que o limite configurado para análise. Tente novamente em alguns instantes ou refine o escopo da consulta.",
+        response.status,
+        data
+      );
+      (timeoutError as any).tipo = "timeout_dw";
+      (timeoutError as any).hint = (data as any).detalhes?.fase 
+        ? `Timeout ocorreu na fase: ${(data as any).detalhes.fase}. Tente refinar o escopo da pergunta.`
+        : "Tente novamente em alguns instantes ou refine o escopo da consulta.";
+      throw timeoutError;
+    }
+    
     return data;
   } catch (error) {
     if (error instanceof DipamApiError) {

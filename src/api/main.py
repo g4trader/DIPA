@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Depends, Query, Path as FastAPIPath,
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -16,6 +17,8 @@ from pathlib import Path
 import logging
 import os
 import re
+import asyncio
+import signal
 
 from src.config import config
 from src.dw.connection import init_db, get_db_session, get_db_engine
@@ -135,6 +138,47 @@ async def add_cors_headers(request: Request, call_next):
         # Se não há origin header, pode ser uma requisição same-origin ou sem CORS
         # Não adiciona headers CORS neste caso
         pass
+    
+    return response
+
+# ✅ TIMEOUT: Error handler global para garantir CORS em TODAS as exceções
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Error handler global que captura TODAS as exceções não tratadas
+    e garante que sempre retornamos JSON estruturado com CORS.
+    """
+    import traceback
+    error_traceback = traceback.format_exc()
+    logger.error(f"[GLOBAL_ERROR_HANDLER] Exceção não tratada: {type(exc).__name__}: {str(exc)}")
+    logger.error(f"[GLOBAL_ERROR_HANDLER] Traceback:\n{error_traceback}")
+    
+    # Determina status code baseado no tipo de exceção
+    status_code = 500
+    if isinstance(exc, HTTPException):
+        status_code = exc.status_code
+    elif isinstance(exc, RequestValidationError):
+        status_code = 422
+    
+    # Cria resposta JSON com CORS
+    origin = request.headers.get("origin")
+    response = JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "erro_interno",
+            "mensagem": "Ocorreu um erro ao processar sua requisição. Por favor, tente novamente.",
+            "erro_tecnico": str(exc) if os.getenv("ENVIRONMENT") == "development" or config.environment == "development" else None,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+    
+    # Adiciona headers CORS se origem for permitida
+    if origin and origin in allowed_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Vary"] = "Origin"
     
     return response
 
@@ -1410,12 +1454,15 @@ async def ask_question(
             "papel": "supervisor"
         }
     """
+    # ✅ TIMEOUT: Timeout total configurável via env (padrão: 18s)
+    ASK_TOTAL_TIMEOUT = int(os.getenv("ASK_TOTAL_TIMEOUT", "18"))
+    
     try:
         import time
         start_time = time.perf_counter()
         
         # ✅ PERFORMANCE: Log início da requisição
-        logger.info(f"[PERF_ASK] Iniciando processamento de pergunta")
+        logger.info(f"[PERF_ASK] Iniciando processamento de pergunta (timeout: {ASK_TOTAL_TIMEOUT}s)")
         
         # ✅ CORREÇÃO: Sanitiza pergunta antes de processar
         # Limita tamanho da pergunta para evitar problemas com GROQ
@@ -1438,12 +1485,68 @@ async def ask_question(
         from src.agent.handler_dw_refatorado import processar_pergunta_com_dw
         from src.api.mapper_handler_refatorado import map_handler_refatorado_to_ask_response
         
-        # Processa pergunta usando novo fluxo (usa pergunta sanitizada)
-        resposta_handler = processar_pergunta_com_dw(
-            pergunta=pergunta_sanitizada,
-            session=session,
-            papel=request.papel
-        )
+        # ✅ TIMEOUT: Processa pergunta com timeout interno de aplicação
+        # Usa concurrent.futures para controlar timeout total do fluxo
+        import concurrent.futures
+        
+        def processar_sincrono():
+            """Wrapper síncrono para processar pergunta"""
+            return processar_pergunta_com_dw(
+                pergunta=pergunta_sanitizada,
+                session=session,
+                papel=request.papel
+            )
+        
+        # Executa processamento com timeout usando ThreadPoolExecutor
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(processar_sincrono)
+                try:
+                    resposta_handler = future.result(timeout=ASK_TOTAL_TIMEOUT)
+                except concurrent.futures.TimeoutError:
+                    # Cancela a execução se possível
+                    future.cancel()
+                    raise TimeoutError(f"Processamento excedeu {ASK_TOTAL_TIMEOUT}s")
+        except TimeoutError as e:
+            # ✅ TIMEOUT: Retorna erro estruturado com CORS
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            logger.warning(f"[ASK_TIMEOUT] Processamento excedeu {ASK_TOTAL_TIMEOUT}s após {elapsed_ms}ms")
+            
+            # Determina fase onde timeout ocorreu (baseado em logs ou heurística)
+            fase = "DESCONHECIDA"
+            if elapsed_ms < 2000:
+                fase = "GROQ_INTENT"
+            elif elapsed_ms < 10000:
+                fase = "DW_QUERY"
+            else:
+                fase = "LLM_EXECUTIVE"
+            
+            # Retorna JSON estruturado com CORS
+            origin = request.headers.get("origin")
+            response = JSONResponse(
+                status_code=503,
+                content={
+                    "status": "timeout",
+                    "mensagem": "O tempo máximo de processamento da sua pergunta foi excedido. Tente novamente em alguns instantes ou refine o escopo da pergunta.",
+                    "codigo": "ASK_TIMEOUT",
+                    "detalhes": {
+                        "timeout_segundos": ASK_TOTAL_TIMEOUT,
+                        "tempo_decorrido_ms": elapsed_ms,
+                        "fase": fase
+                    },
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+            
+            # Adiciona headers CORS
+            if origin and origin in allowed_origins:
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+                response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+                response.headers["Vary"] = "Origin"
+            
+            return response
         
         # ✅ PERFORMANCE: Extrai métricas do handler
         perf_metrics = resposta_handler.get("contexto", {}).get("performance_metrics", {})
