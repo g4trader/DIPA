@@ -1434,13 +1434,27 @@ async def ask_question(
                 f"total={perf_metrics.get('total_ms', 0)}ms"
             )
         
+        # ✅ PERFORMANCE: Log antes de mapear resposta
+        logger.info(f"[PERF_STEP] START_MAP_RESPONSE - map_handler_refatorado_to_ask_response")
+        map_start = time.perf_counter()
+        
         # Converte para formato AskResponse (usa pergunta original para resposta, mas sanitizada foi usada no processamento)
         dados_estruturados = map_handler_refatorado_to_ask_response(
             resposta_handler=resposta_handler,
             pergunta=request.pergunta  # Mantém pergunta original na resposta
         )
         
+        map_duration = (time.perf_counter() - map_start) * 1000
+        logger.info(f"[PERF_STEP] END_MAP_RESPONSE - {map_duration:.2f}ms")
+        
+        # ✅ PERFORMANCE: Log antes de criar AskResponse
+        logger.info(f"[PERF_STEP] START_CREATE_RESPONSE - AskResponse(**dados_estruturados)")
+        create_start = time.perf_counter()
+        
         response = AskResponse(**dados_estruturados)
+        
+        create_duration = (time.perf_counter() - create_start) * 1000
+        logger.info(f"[PERF_STEP] END_CREATE_RESPONSE - {create_duration:.2f}ms")
         
         # Prepara resultado para registro de interação (formato compatível)
         intent_spec = resposta_handler.get("intent_spec")
@@ -1464,6 +1478,10 @@ async def ask_question(
             f"[PERF_ASK] Processamento completo: {tempo_processamento_ms}ms "
             f"(handler: {perf_metrics.get('total_ms', 0)}ms)"
         )
+        
+        # ✅ PERFORMANCE: Log antes de serializar e retornar resposta
+        logger.info(f"[PERF_STEP] START_SERIALIZE_RESPONSE - preparando retorno")
+        serialize_start = time.perf_counter()
         
         # FASE 4: Registra interação com todos os metadados necessários
         try:
@@ -1538,6 +1556,11 @@ async def ask_question(
             logger.warning(f"⚠️  Erro ao registrar interação (não bloqueia resposta): {str(e)}")
             import traceback
             logger.debug(traceback.format_exc())
+        
+        # ✅ PERFORMANCE: Log após serialização (FastAPI serializa automaticamente)
+        serialize_duration = (time.perf_counter() - serialize_start) * 1000
+        logger.info(f"[PERF_STEP] END_SERIALIZE_RESPONSE - {serialize_duration:.2f}ms")
+        logger.info(f"[PERF_STEP] RETURNING_RESPONSE - total: {tempo_processamento_ms}ms")
         
         return response
     
