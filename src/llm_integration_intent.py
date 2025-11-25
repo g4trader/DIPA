@@ -483,7 +483,7 @@ Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações a
     try:
         # ✅ PERFORMANCE: Log antes de chamar LLM
         llm_start_time = time.perf_counter()
-            logger.info(f"[PERF_STEP] LLM_START - query_id=Q1")
+        logger.info(f"[PERF_STEP] LLM_START - query_id=Q1")
         
         # ✅ CORREÇÃO: Usa GROQ Guard se disponível, senão usa cliente padrão
         if GROQ_GUARD_AVAILABLE:
@@ -507,7 +507,7 @@ Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações a
         
         # ✅ PERFORMANCE: Log após chamada LLM
         llm_duration = (time.perf_counter() - llm_start_time) * 1000
-            logger.info(f"[PERF_STEP] LLM_END - query_id=Q1, duration={llm_duration:.2f}ms")
+        logger.info(f"[PERF_STEP] LLM_END - query_id=Q1, duration={llm_duration:.2f}ms")
         
         # Limpa a resposta (remove markdown code blocks se houver)
         resposta_limpa = resposta_llm.strip()
@@ -521,7 +521,7 @@ Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações a
         
         # ✅ PERFORMANCE: Log antes de montar resposta
         assembly_start_time = time.perf_counter()
-            logger.info(f"[PERF_STEP] ASSEMBLY_START - query_id=Q1")
+        logger.info(f"[PERF_STEP] ASSEMBLY_START - query_id=Q1")
         
         # Parse JSON
         resposta_dict = json.loads(resposta_limpa)
@@ -551,7 +551,7 @@ Retorne APENAS um JSON válido com a estrutura obrigatória, sem explicações a
         
         # ✅ PERFORMANCE: Log após montagem da resposta
         assembly_duration = (time.perf_counter() - assembly_start_time) * 1000
-            logger.info(f"[PERF_STEP] ASSEMBLY_END - query_id=Q1, duration={assembly_duration:.2f}ms")
+        logger.info(f"[PERF_STEP] ASSEMBLY_END - query_id=Q1, duration={assembly_duration:.2f}ms")
         
         logger.info(
             f"[gerar_resposta_executiva_com_dados_dw] Resposta gerada: "

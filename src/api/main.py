@@ -1591,21 +1591,32 @@ async def ask_question(
         raise
     except Exception as e:
         # IMPORTANTE: Captura TODAS as exceções para garantir que sempre retornamos uma resposta com CORS
-        # Usa HTTPException ao invés de JSONResponse para garantir que passa pelo CORSMiddleware
-        # HTTPException sempre passa pelo pipeline do FastAPI, incluindo middlewares de CORS
-        logger.error(f"❌ Erro ao processar pergunta: {str(e)}")
+        # Usa JSONResponse para garantir formato estruturado e passar pelo CORSMiddleware
         import traceback
-        logger.error(traceback.format_exc())
+        error_traceback = traceback.format_exc()
+        logger.error(f"[ASK_ERROR_FATAL] ❌ Erro ao processar pergunta: {str(e)}")
+        logger.error(f"[ASK_ERROR_FATAL] Traceback completo:\n{error_traceback}")
+        
+        # Retorna JSON estruturado com erro amigável
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "erro_interno",
+                "mensagem": "Ocorreu um erro ao processar sua pergunta. Por favor, tente novamente.",
+                "erro_tecnico": str(e) if os.getenv("ENVIRONMENT") == "development" else None
+            }
+        )
         
         # ✅ CORS: Garante que erro também tem headers CORS
-        # Levanta HTTPException ao invés de retornar JSONResponse diretamente
-        # Isso garante que o CORSMiddleware adicione os headers CORS corretamente
-        error_response = HTTPException(
+        # Retorna JSONResponse diretamente para garantir formato estruturado
+        # O CORSMiddleware já adiciona headers CORS automaticamente em todas as respostas
+        return JSONResponse(
             status_code=500,
-            detail={
-                "error": "Erro interno do servidor",
-                "message": "Ocorreu um erro ao processar sua pergunta. Por favor, tente novamente.",
-                "detail": str(e) if config.environment == "development" else "Erro interno do servidor",
+            content={
+                "status": "erro_interno",
+                "mensagem": "Ocorreu um erro ao processar sua pergunta. Por favor, tente novamente.",
+                "erro_tecnico": str(e) if os.getenv("ENVIRONMENT") == "development" or config.environment == "development" else None
                 "timestamp": datetime.utcnow().isoformat(),
             }
         )
