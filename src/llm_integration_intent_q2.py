@@ -407,7 +407,7 @@ def executar_q2_via_orquestrador(
         - intent_spec: IntentSpec usado
     """
     # Importa dentro da função para permitir mock nos testes
-    from src.agent.orquestrador_dw import executar_intent as _executar_intent
+    from src.agent.orquestrador_dw import executar_intent_spec as _executar_intent_spec
     
     # Gera IntentSpec se não fornecido
     if intent_spec is None:
@@ -415,7 +415,7 @@ def executar_q2_via_orquestrador(
     
     # Executa via orquestrador
     try:
-        resultado_dw = _executar_intent(intent_spec)
+        resultado_dw = _executar_intent_spec(intent_spec)
         
         # Extrai parâmetros de período do IntentSpec
         periodo = {
