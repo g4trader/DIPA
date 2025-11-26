@@ -96,60 +96,28 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     };
   }, [data, isQ1]);
 
-  // Calcula total de clientes para Big Number
-  // ✅ Q1 LIGHT MODE: Prioriza metrics.total_clientes (fonte oficial do backend)
-  // Em modo LIGHT, metrics.total_clientes (932) pode ser diferente de rows.length (100)
-  // Isso é esperado e não deve gerar warning
-  const totalClientes = useMemo(() => {
-    const dataAny = data as any;
-    
-    // Verifica se é modo LIGHT/partial (esperado ter mismatch)
-    const isLightMode = 
-      dataAny.contexto?.dw_mode === "LIGHT" || 
-      dataAny.contexto?.is_partial === true ||
-      dataAny.jsonTecnico?.contexto?.dw_mode === "LIGHT" ||
-      dataAny.jsonTecnico?.contexto?.is_partial === true;
-    
-    // 1. Prioridade: metrics.total_clientes (campo explícito do backend)
-    // ✅ SEMPRE usa este valor quando presente, mesmo que diferente de rows.length
-    if (dataAny.metrics?.total_clientes !== undefined && dataAny.metrics?.total_clientes !== null) {
-      const totalMetrics = dataAny.metrics.total_clientes;
-      
-      // ✅ T4: Só emite warning se NÃO for modo LIGHT/partial
-      if (tabelaPrincipal && tabelaPrincipal.rows.length !== totalMetrics && !isLightMode) {
-        console.warn(
-          `⚠️  INCONSISTÊNCIA DETECTADA: metrics.total_clientes (${totalMetrics}) != tabelaPrincipal.rows.length (${tabelaPrincipal.rows.length})`
-        );
-      }
-      
-      // ✅ T1: Sempre retorna metrics.total_clientes quando presente
-      return totalMetrics;
-    }
-    
-    // 2. Fallback: tabelaPrincipal.rows.length
-    if (tabelaPrincipal) {
-      return tabelaPrincipal.rows.length;
-    }
-    
-    // 3. Fallback: detalhe_tabela
-    const detalheTabela = data.detalhe_tabela || dataAny.detalheTabela;
-    if (detalheTabela?.linhas) {
-      return detalheTabela.linhas.length;
-    }
-    
-    // 4. Fallback: jsonTecnico.total_clientes_unicos
-    const jsonTecnico = dataAny.jsonTecnico || dataAny.structured?.jsonTecnico;
-    if (jsonTecnico?.total_clientes_unicos !== undefined && jsonTecnico?.total_clientes_unicos !== null) {
-      return jsonTecnico.total_clientes_unicos;
-    }
-    
-    return 0;
-  }, [tabelaPrincipal, data]);
+  // ✅ Calcula números antes dos useMemos (para uso em detecção e resumo)
+  const dataAny = data as any;
+  const metricsTotal = typeof dataAny.metrics?.total_clientes === "number" 
+    ? dataAny.metrics.total_clientes 
+    : null;
   
-  // ✅ T1: Calcula total exibido (rows.length) separadamente
-  const totalExibidos = useMemo(() => {
-    return tabelaPrincipal?.rows.length || 0;
-  }, [tabelaPrincipal]);
+  const totalClientes = metricsTotal ?? (tabelaPrincipal?.rows.length || 0);
+  const totalExibidos = tabelaPrincipal?.rows.length || 0;
+  
+  // ✅ Verifica se é modo LIGHT/partial (para warnings)
+  const isLightMode = 
+    dataAny.contexto?.dw_mode === "LIGHT" || 
+    dataAny.contexto?.is_partial === true ||
+    dataAny.jsonTecnico?.contexto?.dw_mode === "LIGHT" ||
+    dataAny.jsonTecnico?.contexto?.is_partial === true;
+  
+  // ✅ T4: Só emite warning se NÃO for modo LIGHT/partial
+  if (metricsTotal !== null && tabelaPrincipal && tabelaPrincipal.rows.length !== metricsTotal && !isLightMode) {
+    console.warn(
+      `⚠️  INCONSISTÊNCIA DETECTADA: metrics.total_clientes (${metricsTotal}) != tabelaPrincipal.rows.length (${tabelaPrincipal.rows.length})`
+    );
+  }
   
   // ✅ Helper: Normaliza string (minúsculas, sem acentos, trim)
   const normalizar = (str: string): string => {
@@ -161,30 +129,25 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
   };
   
   // ✅ Detecção de Q1-light mode baseada em dados (não IDs)
+  // Usa os números já calculados acima
   const isQ1LightMode = useMemo(() => {
-    const dataAny = data as any;
-    const metricsTotal = dataAny.metrics?.total_clientes;
-    
-    // Verifica condições para Q1-light
     if (
-      typeof metricsTotal === "number" &&
-      metricsTotal > 0 &&
-      tabelaPrincipal &&
-      tabelaPrincipal.rows.length > 0 &&
-      metricsTotal > tabelaPrincipal.rows.length
+      totalClientes > 0 &&
+      totalExibidos > 0 &&
+      totalClientes > totalExibidos &&
+      tabelaPrincipal?.columns &&
+      Array.isArray(tabelaPrincipal.columns)
     ) {
       // Verifica se há coluna de "dias sem compra"
-      if (tabelaPrincipal.columns && Array.isArray(tabelaPrincipal.columns)) {
-        const hasDiasSemCompraColumn = tabelaPrincipal.columns.some((col: string) => {
-          const normalized = normalizar(col);
-          return normalized.includes("dias") && normalized.includes("compra");
-        });
-        return hasDiasSemCompraColumn;
-      }
+      const hasDiasSemCompraColumn = tabelaPrincipal.columns.some((col: string) => {
+        const normalized = normalizar(col);
+        return normalized.includes("dias") && normalized.includes("compra");
+      });
+      return hasDiasSemCompraColumn;
     }
     
     return false;
-  }, [data, tabelaPrincipal]);
+  }, [totalClientes, totalExibidos, tabelaPrincipal]);
   
   // ✅ T2: Calcula texto "Mostrando X de Y clientes em foco" para Q1
   const tabelaSubtitle = useMemo(() => {
@@ -198,14 +161,14 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     return undefined;
   }, [isQ1LightMode, tabelaPrincipal, totalClientes, totalExibidos]);
 
-  // Resumo executivo
+  // Resumo executivo dinâmico
   // ✅ Q1 LIGHT MODE: Ajusta resumo para mencionar total real (932) e amostra (100)
   // Detecta Q1-light baseado em dados (não IDs), concatena com resumo do LLM removendo duplicatas
-  const resumoExecutivo = useMemo(() => {
+  const dynamicResumoExecutivo = useMemo(() => {
     const resumoLLM = (data.resumo_executivo || data.resumoExecutivo || "").trim();
     
     // Se for Q1-light mode, substitui o cabeçalho e concatena com o restante do LLM
-    if (isQ1LightMode && totalClientes > 0 && totalExibidos > 0) {
+    if (isQ1LightMode) {
       const cabecalho = `Foram identificados ${formatNumberBR(totalClientes)} clientes ativos que não compram há mais de 60 dias. Nesta visão executiva, você está visualizando os ${formatNumberBR(totalExibidos)} clientes mais quentes, com maior potencial de negócios e prioridade de reativação.`;
       
       if (!resumoLLM) {
@@ -213,20 +176,20 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
       }
       
       // Remove frases que começam com "Foram identificados" do resumo do LLM para evitar duplicação
-      const resumoSemCabecalhoDuplicado = resumoLLM.replace(
+      const resumoSemDuplicado = resumoLLM.replace(
         /^Foram identificados.*?\.\s*/i,
         ""
       ).trim();
       
       // Concatena cabeçalho com o restante do resumo do LLM
-      return resumoSemCabecalhoDuplicado 
-        ? `${cabecalho} ${resumoSemCabecalhoDuplicado}`
+      return resumoSemDuplicado 
+        ? `${cabecalho} ${resumoSemDuplicado}`.trim()
         : cabecalho;
     }
     
-    // Para outras intents, mantém o resumo original do LLM
+    // Outras intents: mantém o resumo original do LLM
     return resumoLLM;
-  }, [data, isQ1LightMode, totalClientes, totalExibidos]);
+  }, [isQ1LightMode, totalClientes, totalExibidos, data.resumo_executivo, data.resumoExecutivo]);
 
   // Blocos complementares (insights, etc.) - ✅ CORREÇÃO: Renderização defensiva
   const blocosComplementares = useMemo(() => {
@@ -266,7 +229,8 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     if (tabelaPrincipal && tabelaPrincipal.rows.length > 0) return true;
     
     // Se houver resumo executivo, dados estão prontos
-    if (resumoExecutivo && resumoExecutivo.trim().length > 0) return true;
+    const resumoCheck = data.resumo_executivo || dataAny.resumoExecutivo || "";
+    if (resumoCheck && resumoCheck.trim().length > 0) return true;
     
     // Se houver insights, dados estão prontos
     if (data.insightsRecomendacoes && data.insightsRecomendacoes.length > 0) return true;
@@ -278,7 +242,7 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     if (data.detalhe_tabela || dataAny.detalheTabela) return true;
     
     return false;
-  }, [isLoading, data, tabelaPrincipal, resumoExecutivo]);
+  }, [isLoading, data, tabelaPrincipal]);
 
   // Telemetria: Big Number
   useEffect(() => {
@@ -381,9 +345,9 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
         ) : null
       }
       resumoExecutivo={
-        resumoExecutivo ? (
+        dynamicResumoExecutivo ? (
           <ResumoExecutivo
-            content={resumoExecutivo}
+            content={dynamicResumoExecutivo}
             id="resumo-executivo"
           />
         ) : null
