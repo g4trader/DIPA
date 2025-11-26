@@ -254,7 +254,13 @@ TIPOS LEGADOS (para compatibilidade):
 
 TIPOS DW OFICIAIS (Q1-Q13 do ENGINEERING_QUERIES.md - USE ESTES QUANDO APLICÁVEL):
 - "clientes_sem_compra": clientes ativos sem compras há N dias (use dimensao_principal = "cliente", filtros: {{"dias": N}}).
-- "queda_faturamento": queda de faturamento ano contra ano (use dimensao_principal = "cliente", filtros: {{"ano_base": YYYY, "ano_comparado": YYYY}}).
+- "queda_faturamento": queda de faturamento ano contra ano OU comparação de meses (use dimensao_principal = "cliente").
+  * Se a pergunta mencionar comparação de ANOS (ex.: "2025 x 2024", "ano de 2025 vs 2024"): use filtros {{"ano_base": YYYY, "ano_comparado": YYYY}}.
+  * Se a pergunta mencionar comparação de MESES (ex.: "setembro 2025 x outubro 2025", "set/25 x out/25", "setembro x outubro de 2025"): 
+    - Extraia o mês anterior (primeiro mês mencionado) e o mês atual (segundo mês mencionado)
+    - Use filtros {{"mes_ano_anterior": "YYYY-MM", "mes_ano_atual": "YYYY-MM"}} (ex.: {{"mes_ano_anterior": "2025-09", "mes_ano_atual": "2025-10"}})
+    - Defina periodo_inicio como primeiro dia do mês anterior e periodo_fim como último dia do mês atual
+    - Se o ano não estiver explícito em uma das partes, assuma o mesmo ano da outra parte ou o ano atual
 - "meta_departamento": indústrias/departamentos com mais vendedores fora da meta (use dimensao_principal = "nenhuma").
 - "positivacao": rotas com melhor/pior positivação de indústria OU clientes que não tiveram positivação de SKU em P12 (use dimensao_principal = "rota" ou "cliente", filtros: {{"industria": "Mars"|"Nissin"|etc, "sku": "..."}}).
 - "mix": análise de mix de produtos (use dimensao_principal = "produto" ou "sku").
@@ -278,6 +284,20 @@ Pergunta: "Quais clientes não tiveram positivação de M&Ms Choco 40g em P12?"
 tipo: "positivacao"
 dimensao_principal: "cliente"
 filtros: {{"sku": "M&Ms Choco 40g", "periodo": "P12"}}
+
+Pergunta: "Quais os clientes com maior queda de faturamento de setembro 2025 x outubro 2025?"
+tipo: "queda_faturamento"
+dimensao_principal: "cliente"
+periodo_inicio: "2025-09-01"
+periodo_fim: "2025-10-31"
+filtros: {{"mes_ano_anterior": "2025-09", "mes_ano_atual": "2025-10", "top_n": 50}}
+
+Pergunta: "Quais os clientes com maior queda de faturamento de set/25 x out/25?"
+tipo: "queda_faturamento"
+dimensao_principal: "cliente"
+periodo_inicio: "2025-09-01"
+periodo_fim: "2025-10-31"
+filtros: {{"mes_ano_anterior": "2025-09", "mes_ano_atual": "2025-10", "top_n": 50}}
 
 IMPORTANTE: Use os tipos DW oficiais quando a pergunta corresponder exatamente. Não converta para tipos legados ou use fallback "outros" para perguntas Q1-Q13.
 

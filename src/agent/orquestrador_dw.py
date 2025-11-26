@@ -273,6 +273,57 @@ def _normalizar_resultado_dw(resultado: Any) -> List[Dict[str, Any]]:
 
 
 # ============================================================================
+# FUNÇÕES AUXILIARES PARA Q2 (QUEDA DE FATURAMENTO)
+# ============================================================================
+
+def _get_funcao_queda_faturamento(intent_spec: IntentSpec) -> Optional[Callable]:
+    """
+    Retorna a função DW apropriada para queda de faturamento.
+    
+    Se os filtros contiverem mes_ano_anterior e mes_ano_atual, usa get_clientes_com_queda.
+    Caso contrário, usa get_clientes_queda_faturamento_ano_contra_ano.
+    """
+    filtros = intent_spec.filtros
+    
+    # Verifica se é comparação de meses
+    if filtros.get("mes_ano_anterior") and filtros.get("mes_ano_atual"):
+        # Usa get_clientes_com_queda para comparação de meses
+        if get_clientes_com_queda:
+            return get_clientes_com_queda
+        else:
+            logger.warning("[orquestrador_dw] get_clientes_com_queda não disponível, usando fallback")
+            return get_clientes_queda_faturamento_ano_contra_ano if get_clientes_queda_faturamento_ano_contra_ano else None
+    
+    # Usa get_clientes_queda_faturamento_ano_contra_ano para comparação de anos
+    return get_clientes_queda_faturamento_ano_contra_ano if get_clientes_queda_faturamento_ano_contra_ano else None
+
+
+def _get_kwargs_queda_faturamento(intent_spec: IntentSpec) -> Dict[str, Any]:
+    """
+    Retorna os kwargs apropriados para a função de queda de faturamento.
+    
+    Se for comparação de meses, retorna kwargs para get_clientes_com_queda.
+    Caso contrário, retorna kwargs para get_clientes_queda_faturamento_ano_contra_ano.
+    """
+    filtros = intent_spec.filtros
+    
+    # Verifica se é comparação de meses
+    if filtros.get("mes_ano_anterior") and filtros.get("mes_ano_atual"):
+        return {
+            "mes_ano_atual": filtros.get("mes_ano_atual"),
+            "mes_ano_anterior": filtros.get("mes_ano_anterior"),
+            "limite": filtros.get("top_n", 50)
+        }
+    
+    # Comparação de anos
+    return {
+        "ano_base": filtros.get("ano_base", 2024),
+        "ano_comparado": filtros.get("ano_comparado", 2025),
+        "top_n": filtros.get("top_n", 50)
+    }
+
+
+# ============================================================================
 # MAPEAMENTO IntentSpec → FUNÇÃO DW
 # ============================================================================
 
@@ -380,33 +431,10 @@ def _mapear_para_funcao_dw(
         # Q2: Queda de faturamento entre períodos (mês a mês)
         # Detecta se há dois períodos distintos (ex: set/25 e out/25)
         ("queda_faturamento", "cliente"): (
-            get_clientes_queda_faturamento_periodo,
-            {
-                "data_ini_mes_anterior": intent_spec.filtros.get("data_ini_mes_anterior") or (
-                    intent_spec.periodo_inicio if intent_spec.periodo_inicio else "2025-09-01"
-                ),
-                "data_fim_mes_anterior": intent_spec.filtros.get("data_fim_mes_anterior") or (
-                    intent_spec.periodo_inicio if intent_spec.periodo_inicio else "2025-09-30"
-                ),
-                "data_ini_mes_atual": intent_spec.filtros.get("data_ini_mes_atual") or (
-                    intent_spec.periodo_fim if intent_spec.periodo_fim else "2025-10-01"
-                ),
-                "data_fim_mes_atual": intent_spec.filtros.get("data_fim_mes_atual") or (
-                    intent_spec.periodo_fim if intent_spec.periodo_fim else "2025-10-31"
-                ),
-                "min_faturamento_mes_anterior": intent_spec.filtros.get("min_faturamento_mes_anterior", 500.0),
-                "min_queda_percentual": intent_spec.filtros.get("min_queda_percentual", 10.0),
-                "limit": intent_spec.filtros.get("limit", 100)
-            }
-        ) if get_clientes_queda_faturamento_periodo else (
-            # Fallback para ano contra ano se período não disponível
-            get_clientes_queda_faturamento_ano_contra_ano,
-            {
-                "ano_base": intent_spec.filtros.get("ano_base", 2024),
-                "ano_comparado": intent_spec.filtros.get("ano_comparado", 2025),
-                "top_n": intent_spec.filtros.get("top_n", 50)
-            }
-        ) if get_clientes_queda_faturamento_ano_contra_ano else None,
+            # Detecta se é comparação de meses ou de anos
+            _get_funcao_queda_faturamento(intent_spec),
+            _get_kwargs_queda_faturamento(intent_spec)
+        ),
         
         ("meta_departamento", "nenhuma"): (
             get_industrias_com_mais_vendedores_fora_meta,
@@ -707,6 +735,17 @@ def executar_intent_spec(
                 periodo,
                 limite=limite_kwarg or 10,
                 excluir_totais=excluir_totais_kwarg
+            )
+        # get_clientes_com_queda(session, mes_ano_atual, mes_ano_anterior=None, limite=20, variacao_minima_pct=-10.0)
+        elif funcao_dw == get_clientes_com_queda:
+            mes_ano_atual = kwargs.get("mes_ano_atual")
+            mes_ano_anterior = kwargs.get("mes_ano_anterior")
+            limite = kwargs.get("limite", 50)
+            resultado = funcao_dw(
+                session,
+                mes_ano_atual,
+                mes_ano_anterior=mes_ano_anterior,
+                limite=limite
             )
         else:
             # Fallback: tenta chamar com session + kwargs
