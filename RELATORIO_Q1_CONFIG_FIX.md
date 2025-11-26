@@ -96,13 +96,38 @@ curl -i -X POST "https://dipam-ai-backend-642830139828.us-central1.run.app/ask" 
   }'
 ```
 
+### Resultados da Validação
+
+**Status da Resposta:**
+- ✅ HTTP 200 (resposta JSON estruturada)
+- ✅ `contexto.is_partial: true`
+- ✅ `contexto.dw_mode: "LIGHT"`
+- ✅ `contexto.total_estimado: 932`
+- ✅ `tabela_principal[0].linhas.length: 100` (amostra de clientes real)
+- ✅ `tem_dados: true`
+
+**Logs do Cloud Run:**
+```
+[Q1_ORQ] Executando Q1 em modo LIGHT (Q1_EXECUTION_MODE=light). Pulando query completa, usando versão light diretamente.
+[get_clientes_sem_compra_ha_dias_light] Query light retornou 100 registros (limit=100, dias=60, data_referencia=2025-11-30)
+[Q1_MODE] q1_execution_mode=light dw_mode=LIGHT status=partial total_estimado=932 registros=100 duration=7130ms
+[PERF_Q1] DW executado: 7215ms, registros=100
+[processar_pergunta_com_dw] Montando tabela Q1: registros=100, is_partial=True, dw_mode=LIGHT
+[PERF_Q1] Resposta parcial marcada no handler: dw_mode=LIGHT, total_estimado=932, registros=100
+```
+
+**Tempo de Resposta:**
+- Tempo total: ~9.8 segundos
+- DW Query: ~7.2 segundos
+- LLM + Assembly: ~2.6 segundos
+
 ### Critérios de Aceitação
 
 - ✅ Sem `ImportError` nem `AttributeError` nos logs
 - ✅ HTTP 200 (resposta JSON estruturada)
 - ✅ `status: "partial"` e `dw_mode: "LIGHT"`
 - ✅ `total_estimado ≈ 932`
-- ✅ `tabela_principal[0].linhas.length > 0` (amostra de clientes real)
+- ✅ `tabela_principal[0].linhas.length = 100` (amostra de clientes real)
 - ✅ Log `[Q1_MODE] q1_execution_mode=light dw_mode=LIGHT ...` nos logs do Cloud Run
 
 ## Próximos Passos
