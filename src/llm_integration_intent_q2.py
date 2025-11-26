@@ -143,7 +143,32 @@ def parse_periodo_queda_faturamento(texto_usuario: str) -> Dict[str, Any]:
         "ano": ano_atual
     }
     
-    # Padrão 1: "de [mês] para [mês]" ou "de [mês] x [mês]"
+    # Padrão 1: "de [mês] para [mês]" ou "de [mês] x [mês]" ou "[mês] [ano] x [mês] [ano]"
+    # Primeiro tenta padrão com "x" explícito (mais específico)
+    padrao_mes_ano_x = re.search(
+        r"(\w+)\s+(\d{4})\s*[x×]\s*(\w+)\s+(\d{4})",
+        texto_usuario,
+        re.IGNORECASE
+    )
+    if padrao_mes_ano_x:
+        mes1_str = padrao_mes_ano_x.group(1)
+        ano1 = int(padrao_mes_ano_x.group(2))
+        mes2_str = padrao_mes_ano_x.group(3)
+        ano2 = int(padrao_mes_ano_x.group(4))
+        
+        mes1 = _parse_mes(mes1_str, ano1)
+        mes2 = _parse_mes(mes2_str, ano2)
+        
+        if mes1 and mes2:
+            resultado["data_ini_mes_anterior"] = f"{ano1}-{mes1:02d}-01"
+            resultado["data_fim_mes_anterior"] = f"{ano1}-{mes1:02d}-{monthrange(ano1, mes1)[1]}"
+            resultado["data_ini_mes_atual"] = f"{ano2}-{mes2:02d}-01"
+            resultado["data_fim_mes_atual"] = f"{ano2}-{mes2:02d}-{monthrange(ano2, mes2)[1]}"
+            resultado["ano"] = ano1
+            logger.info(f"[parse_periodo_queda_faturamento] Padrão 'mês ano x mês ano': {mes1}/{ano1} → {mes2}/{ano2}")
+            return resultado
+    
+    # Padrão 1b: "de [mês] para [mês]" ou "de [mês] x [mês]"
     padrao_de_para = re.search(
         r"de\s+(\w+)\s+(?:para|x|e)\s+(\w+)",
         texto_lower
