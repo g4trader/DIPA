@@ -416,8 +416,11 @@ def executar_q2_via_orquestrador(
     
     # Executa via orquestrador (cria sessão DB)
     try:
-        with get_db_session() as session:
+        session = next(get_db_session())
+        try:
             resultado_dw = _executar_intent_spec(session, intent_spec)
+        finally:
+            session.close()
         
         # Extrai parâmetros de período do IntentSpec
         periodo = {
