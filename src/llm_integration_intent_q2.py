@@ -408,14 +408,16 @@ def executar_q2_via_orquestrador(
     """
     # Importa dentro da função para permitir mock nos testes
     from src.agent.orquestrador_dw import executar_intent_spec as _executar_intent_spec
+    from src.dw.connection import get_db_session
     
     # Gera IntentSpec se não fornecido
     if intent_spec is None:
         intent_spec = gerar_intent_spec_q2(pergunta)
     
-    # Executa via orquestrador
+    # Executa via orquestrador (cria sessão DB)
     try:
-        resultado_dw = _executar_intent_spec(intent_spec)
+        with get_db_session() as session:
+            resultado_dw = _executar_intent_spec(session, intent_spec)
         
         # Extrai parâmetros de período do IntentSpec
         periodo = {
