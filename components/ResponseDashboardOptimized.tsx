@@ -10,6 +10,7 @@ import { DashboardSkeleton } from "./skeletons/DashboardSkeleton";
 import { useDashboardLoading } from "@/hooks/useDashboardLoading";
 import { trackBigNumberRender, trackTableRender } from "@/lib/telemetry";
 import { InsightsBlock } from "./InsightsBlock";
+import { formatNumberBR } from "@/lib/formatters";
 
 type Props = {
   data: CopilotStructuredResponse;
@@ -37,6 +38,17 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
   const bigNumberRendered = useRef(false);
   const tableRendered = useRef(false);
 
+  // ✅ T3: Detecta se é Q1 (clientes sem compra)
+  const isQ1 = useMemo(() => {
+    const dataAny = data as any;
+    return (
+      dataAny.intent === "clientes_sem_compra" ||
+      dataAny.intent_label?.toLowerCase().includes("clientes sem compra") ||
+      dataAny.jsonTecnico?.intent === "clientes_sem_compra" ||
+      dataAny.jsonTecnico?.contexto?.intent === "clientes_sem_compra"
+    );
+  }, [data]);
+
   // Extrai tabela principal do jsonTecnico
   const tabelaPrincipal = useMemo(() => {
     const dataAny = data as any;
@@ -52,7 +64,7 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     if (!primeiraTabela.colunas || !primeiraTabela.linhas) return null;
     
     // Converte para formato DataTable
-    const rows = primeiraTabela.linhas.map((linha: any[]) => {
+    let rows = primeiraTabela.linhas.map((linha: any[]) => {
       const row: Record<string, any> = {};
       primeiraTabela.colunas.forEach((col: string, idx: number) => {
         row[col] = linha[idx];
@@ -60,34 +72,62 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
       return row;
     });
     
+    // ✅ T3: Para Q1, ordena em ordem crescente de "DIAS SEM COMPRA"
+    if (isQ1) {
+      // Encontra o índice da coluna "DIAS SEM COMPRA" (pode ter variações no nome)
+      const diasColName = primeiraTabela.colunas.find((col: string) => 
+        col.toLowerCase().includes("dias") && col.toLowerCase().includes("compra")
+      ) || primeiraTabela.colunas.find((col: string) => 
+        col.toLowerCase().includes("dias")
+      );
+      
+      if (diasColName) {
+        rows = [...rows].sort((a, b) => {
+          const diasA = Number(a[diasColName] ?? 0);
+          const diasB = Number(b[diasColName] ?? 0);
+          // Ordem crescente (menor primeiro)
+          return diasA - diasB;
+        });
+      }
+    }
+    
     return {
       rows,
       title: primeiraTabela.titulo || "Dados Analíticos — Consulta Geral",
     };
-  }, [data]);
+  }, [data, isQ1]);
 
   // Calcula total de clientes para Big Number
-  // ✅ CORREÇÃO: Prioriza metrics.total_clientes (fonte oficial do backend)
-  // Depois usa tabelaPrincipal.rows.length (deve ser igual)
-  // Fallback para detalhe_tabela
+  // ✅ Q1 LIGHT MODE: Prioriza metrics.total_clientes (fonte oficial do backend)
+  // Em modo LIGHT, metrics.total_clientes (932) pode ser diferente de rows.length (100)
+  // Isso é esperado e não deve gerar warning
   const totalClientes = useMemo(() => {
     const dataAny = data as any;
     
+    // Verifica se é modo LIGHT/partial (esperado ter mismatch)
+    const isLightMode = 
+      dataAny.contexto?.dw_mode === "LIGHT" || 
+      dataAny.contexto?.is_partial === true ||
+      dataAny.jsonTecnico?.contexto?.dw_mode === "LIGHT" ||
+      dataAny.jsonTecnico?.contexto?.is_partial === true;
+    
     // 1. Prioridade: metrics.total_clientes (campo explícito do backend)
+    // ✅ SEMPRE usa este valor quando presente, mesmo que diferente de rows.length
     if (dataAny.metrics?.total_clientes !== undefined && dataAny.metrics?.total_clientes !== null) {
       const totalMetrics = dataAny.metrics.total_clientes;
-      // Validação: garante que metrics.total_clientes == tabelaPrincipal.rows.length
-      if (tabelaPrincipal && tabelaPrincipal.rows.length !== totalMetrics) {
+      
+      // ✅ T4: Só emite warning se NÃO for modo LIGHT/partial
+      if (tabelaPrincipal && tabelaPrincipal.rows.length !== totalMetrics && !isLightMode) {
         console.warn(
           `⚠️  INCONSISTÊNCIA DETECTADA: metrics.total_clientes (${totalMetrics}) != tabelaPrincipal.rows.length (${tabelaPrincipal.rows.length})`
         );
-        // Usa o valor da tabela (mais confiável, já deduplicado)
-        return tabelaPrincipal.rows.length;
       }
+      
+      // ✅ T1: Sempre retorna metrics.total_clientes quando presente
       return totalMetrics;
     }
     
-    // 2. Fallback: tabelaPrincipal.rows.length (deve ser igual ao metrics)
+    // 2. Fallback: tabelaPrincipal.rows.length
     if (tabelaPrincipal) {
       return tabelaPrincipal.rows.length;
     }
@@ -106,6 +146,23 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     
     return 0;
   }, [tabelaPrincipal, data]);
+  
+  // ✅ T1: Calcula total exibido (rows.length) separadamente
+  const totalExibidos = useMemo(() => {
+    return tabelaPrincipal?.rows.length || 0;
+  }, [tabelaPrincipal]);
+  
+  // ✅ T2: Calcula texto "Mostrando X de Y clientes em foco" para Q1
+  const tabelaSubtitle = useMemo(() => {
+    if (!isQ1 || !tabelaPrincipal) return undefined;
+    
+    // Só mostra se totalClientes > totalExibidos (modo LIGHT/partial)
+    if (totalClientes > totalExibidos && totalExibidos > 0) {
+      return `Mostrando ${formatNumberBR(totalExibidos)} de ${formatNumberBR(totalClientes)} clientes em foco`;
+    }
+    
+    return undefined;
+  }, [isQ1, tabelaPrincipal, totalClientes, totalExibidos]);
 
   // Resumo executivo
   const resumoExecutivo = useMemo(() => {
@@ -278,6 +335,7 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
             <DataTable
               rows={tabelaPrincipal.rows}
               title={tabelaPrincipal.title}
+              subtitle={tabelaSubtitle}
               id="tabela-dados-analiticos"
               itemsPerPage={20}
             />

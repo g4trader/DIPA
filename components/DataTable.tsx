@@ -6,6 +6,7 @@ import { formatNumberBR } from "@/lib/formatters";
 type DataTableProps = {
   rows: Array<Record<string, any>>;
   title?: string;
+  subtitle?: string; // ✅ T2: Texto adicional abaixo do título (ex: "Mostrando 100 de 932 clientes em foco")
   highlightFirstColumn?: boolean;
   id?: string;
   itemsPerPage?: number; // Padrão: 20
@@ -23,6 +24,7 @@ type DataTableProps = {
 export function DataTable({
   rows,
   title,
+  subtitle,
   highlightFirstColumn = true,
   id,
   itemsPerPage = 20, // Fixo em 20 conforme especificação
@@ -101,6 +103,9 @@ export function DataTable({
       {title && (
         <div className="px-6 py-4 border-b border-white/5">
           <h3 className="text-white font-semibold text-xl mb-0">{title}</h3>
+          {subtitle && (
+            <p className="text-sm text-white/60 mt-2">{subtitle}</p>
+          )}
         </div>
       )}
       <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">

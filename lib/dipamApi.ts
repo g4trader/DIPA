@@ -358,7 +358,7 @@ export async function askDipamAgent(
       throw new DipamApiError(errorMessage, response.status, errorData);
     }
 
-    const data = (await response.json()) as AskResponse;
+    const data = (await response.json()) as AskResponse & { codigo?: string; mensagem?: string };
     
     // ✅ TRATAMENTO: Verifica se a resposta contém erro de timeout mesmo com status 200
     if (data && typeof data === 'object' && 'codigo' in data && data.codigo === "ASK_TIMEOUT") {
