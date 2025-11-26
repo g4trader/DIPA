@@ -113,6 +113,7 @@ DEPLOY_CMD="gcloud run deploy ${SERVICE_NAME} \
   --cpu 2 \
   --timeout=300 \
   --port 8080 \
+  --set-env-vars COMMIT_SHA=$(git rev-parse HEAD),Q1_EXECUTION_MODE=light \
   --project=${PROJECT_ID}"
 
 if eval "${DEPLOY_CMD}"; then
