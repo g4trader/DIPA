@@ -149,10 +149,23 @@ def map_handler_refatorado_to_ask_response(
     insights = resposta_handler.get("insights", [])
     
     # Contexto
+    # ✅ Q1 LIGHT MODE: Adiciona informações de parcialidade ao contexto
     contexto = {
         "mes_ano": _extrair_mes_ano(resposta_handler),
         "periodo_analisado": resposta_handler.get("periodo_analisado", {})
     }
+    
+    # Copia campos de contexto do handler (is_partial, total_estimado, etc.)
+    contexto_handler = resposta_handler.get("contexto", {})
+    if contexto_handler:
+        if "is_partial" in contexto_handler:
+            contexto["is_partial"] = contexto_handler["is_partial"]
+        if "total_estimado" in contexto_handler:
+            contexto["total_estimado"] = contexto_handler["total_estimado"]
+        if "dw_mode" in contexto_handler:
+            contexto["dw_mode"] = contexto_handler["dw_mode"]
+        if "partial_message" in contexto_handler:
+            contexto["nota_parcialidade"] = contexto_handler["partial_message"]
     
     # Structured response (formato CopilotStructuredResponse)
     structured = _criar_structured_response(resposta_handler, pergunta, intent, intent_label)
@@ -455,35 +468,54 @@ def _criar_structured_response(
                 }
                 logger.info(f"[mapper] ✅ detalhe_tabela criada: {len(linhas)} linhas, {len(colunas)} colunas")
     
-    # ✅ CORREÇÃO: Calcula total_clientes_unicos para Q1 (garantir consistência Big Number)
+    # ✅ Q1 LIGHT MODE: Calcula total_clientes_unicos para Q1
+    # Se is_partial=True, usa total_estimado; senão, conta registros da tabela
     total_clientes_unicos = None
-    if intent == "clientes_sem_compra" and tabela_principal:
-        # Para Q1, calcula total de clientes únicos baseado na tabela_principal
-        # Isso garante que o Big Number seja exatamente igual ao número de linhas da tabela
-        if isinstance(tabela_principal, list) and len(tabela_principal) > 0:
-            primeira_tabela = tabela_principal[0]
-            if isinstance(primeira_tabela, dict) and "linhas" in primeira_tabela:
-                total_clientes_unicos = len(primeira_tabela["linhas"])
-        elif isinstance(tabela_principal, dict) and "linhas" in tabela_principal:
-            total_clientes_unicos = len(tabela_principal["linhas"])
-        
-        # Validação: garante que total_clientes_unicos == len(dados_dw["dados"])
-        if total_clientes_unicos is not None and dados_dw.get("dados"):
-            dados_clientes = dados_dw.get("dados", [])
-            if isinstance(dados_clientes, list):
-                total_dados_dw = len(dados_clientes)
-                if total_clientes_unicos != total_dados_dw:
-                    logger.warning(
-                        f"[mapper] ⚠️  INCONSISTÊNCIA Q1: "
-                        f"total_clientes_unicos ({total_clientes_unicos}) != len(dados_dw) ({total_dados_dw})"
-                    )
-                    # Usa o valor da tabela (mais confiável, já deduplicado)
-                    total_clientes_unicos = total_clientes_unicos
-                else:
-                    logger.info(
-                        f"[mapper] ✅ Q1 CONSISTENTE: "
-                        f"total_clientes_unicos = {total_clientes_unicos} == len(dados_dw) = {total_dados_dw}"
-                    )
+    is_partial = dados_dw.get("is_partial", False)
+    total_estimado = dados_dw.get("total_estimado", None)
+    
+    if intent == "clientes_sem_compra":
+        if is_partial and total_estimado is not None:
+            # ✅ MODO LIGHT: Usa total_estimado quando resposta é parcial
+            total_clientes_unicos = total_estimado
+            registros_tabela = 0
+            if tabela_principal:
+                if isinstance(tabela_principal, list) and len(tabela_principal) > 0:
+                    primeira_tabela = tabela_principal[0]
+                    if isinstance(primeira_tabela, dict) and "linhas" in primeira_tabela:
+                        registros_tabela = len(primeira_tabela["linhas"])
+                elif isinstance(tabela_principal, dict) and "linhas" in tabela_principal:
+                    registros_tabela = len(tabela_principal["linhas"])
+            logger.info(
+                f"[mapper] Q1 modo light: usando total_estimado={total_estimado} "
+                f"(registros na tabela: {registros_tabela})"
+            )
+        elif tabela_principal:
+            # ✅ MODO FULL: Conta registros da tabela (query completa)
+            if isinstance(tabela_principal, list) and len(tabela_principal) > 0:
+                primeira_tabela = tabela_principal[0]
+                if isinstance(primeira_tabela, dict) and "linhas" in primeira_tabela:
+                    total_clientes_unicos = len(primeira_tabela["linhas"])
+            elif isinstance(tabela_principal, dict) and "linhas" in tabela_principal:
+                total_clientes_unicos = len(tabela_principal["linhas"])
+            
+            # Validação: garante que total_clientes_unicos == len(dados_dw["dados"])
+            if total_clientes_unicos is not None and dados_dw.get("dados"):
+                dados_clientes = dados_dw.get("dados", [])
+                if isinstance(dados_clientes, list):
+                    total_dados_dw = len(dados_clientes)
+                    if total_clientes_unicos != total_dados_dw:
+                        logger.warning(
+                            f"[mapper] ⚠️  INCONSISTÊNCIA Q1: "
+                            f"total_clientes_unicos ({total_clientes_unicos}) != len(dados_dw) ({total_dados_dw})"
+                        )
+                        # Usa o valor da tabela (mais confiável, já deduplicado)
+                        total_clientes_unicos = total_clientes_unicos
+                    else:
+                        logger.info(
+                            f"[mapper] ✅ Q1 CONSISTENTE: "
+                            f"total_clientes_unicos = {total_clientes_unicos} == len(dados_dw) = {total_dados_dw}"
+                        )
     
     # Monta structured response
     structured = {

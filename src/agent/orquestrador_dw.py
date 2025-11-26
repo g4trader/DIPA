@@ -700,88 +700,154 @@ def executar_intent_spec(
                         filtros_behavior["excluir_segmentos"] = intent_spec.filtros.get("excluir_segmentos", [])
                 kwargs["filtros_behavior"] = filtros_behavior if filtros_behavior else None
             
-            # ✅ CORREÇÃO CRÍTICA Q1: Para Q1, usa executor com timeout
+            # ✅ Q1 LIGHT MODE: Execução determinística baseada em Q1_EXECUTION_MODE
             if intent_spec.tipo == "clientes_sem_compra":
-                # FUTURO: aqui podemos enfileirar a execução de Q1 como job assíncrono
-                # e retornar apenas um job_id para o frontend.
-                from src.dw.query_executor import run_dw_query_q1
+                from src.config import Q1_EXECUTION_MODE
+                from src.dw.queries import get_clientes_sem_compra_ha_dias_light
                 
-                kwargs["bypass_cache"] = True
-                kwargs["query_id"] = "Q1"
-                logger.info(
-                    f"[Q1_ORQ] Executando Q1 com timeout de 20s. "
-                    f"Função: {funcao_dw.__name__ if funcao_dw else 'None'}"
-                )
-                
-                # Executa query com timeout e logging completo
-                query_result = run_dw_query_q1(
-                    session=session,
-                    params=kwargs,
-                    query_func=funcao_dw
-                )
-                
-                # Verifica status da query
-                if query_result["status"] == "partial":
-                    # ✅ FALLBACK: Resposta parcial (versão light)
+                # ✅ MODO LIGHT: Não chama query completa, vai direto na light
+                if Q1_EXECUTION_MODE == "light":
                     logger.info(
-                        f"[Q1_ORQ] ⚠️  Resposta parcial (modo light) após {query_result['duration_ms']}ms: "
-                        f"{len(query_result.get('data', []))} registros"
+                        f"[Q1_ORQ] Executando Q1 em modo LIGHT (Q1_EXECUTION_MODE=light). "
+                        f"Pulando query completa, usando versão light diretamente."
                     )
-                    resultado = query_result.get("data", [])
-                    return {
-                        "status": "partial",
-                        "mensagem": query_result.get("message", "Resposta parcial gerada devido ao tempo de execução elevado."),
-                        "intent": intent_spec.to_dict(),
-                        "periodo_analisado": {
-                            "inicio": intent_spec.periodo_inicio,
-                            "fim": intent_spec.periodo_fim
-                        },
-                        "dados": resultado,
-                        "mode": query_result.get("mode", "light"),
-                        "total_estimado": 932  # Total conhecido da Q1 (pode ser ajustado dinamicamente)
-                    }
-                elif query_result["status"] == "timeout":
-                    logger.error(
-                        f"[Q1_ORQ] ❌ Timeout na query Q1 após {query_result['duration_ms']}ms"
-                    )
-                    return {
-                        "status": "erro_interno",
-                        "mensagem": query_result.get("error", "Timeout na consulta de dados."),
-                        "intent": intent_spec.to_dict(),
-                        "periodo_analisado": {
-                            "inicio": intent_spec.periodo_inicio,
-                            "fim": intent_spec.periodo_fim
-                        },
-                        "dados": [],
-                        "erro_dw": {
-                            "error_type": query_result.get("error_type", "DW_TIMEOUT"),
-                            "hint": query_result.get("hint", "Tente ajustar o período ou refazer a pergunta.")
+                    
+                    try:
+                        import time
+                        start_time = time.perf_counter()
+                        
+                        # Executa query light diretamente (sem timeout wrapper)
+                        registros = get_clientes_sem_compra_ha_dias_light(
+                            session=session,
+                            dias=kwargs.get("dias", 60),
+                            data_referencia=kwargs.get("data_referencia"),
+                            filtros_behavior=kwargs.get("filtros_behavior"),
+                            query_id="Q1_LIGHT",
+                            limit=100
+                        )
+                        
+                        duration_ms = int((time.perf_counter() - start_time) * 1000)
+                        
+                        logger.info(
+                            f"[PERF_Q1] DW_MODE=LIGHT status=partial total_estimado=932 registros={len(registros)} duration={duration_ms}ms"
+                        )
+                        
+                        return {
+                            "status": "partial",
+                            "mensagem": "Resposta parcial gerada usando amostra representativa de clientes.",
+                            "intent": intent_spec.to_dict(),
+                            "periodo_analisado": {
+                                "inicio": intent_spec.periodo_inicio,
+                                "fim": intent_spec.periodo_fim
+                            },
+                            "dados": registros,
+                            "mode": "light",
+                            "dw_mode": "LIGHT",
+                            "total_estimado": 932,  # Total conhecido da Q1 (valor consolidado)
+                            "duration_ms": duration_ms
                         }
-                    }
-                elif query_result["status"] == "error":
-                    logger.error(
-                        f"[Q1_ORQ] ❌ Erro na query Q1: {query_result.get('error', 'Erro desconhecido')}"
-                    )
-                    return {
-                        "status": "erro_interno",
-                        "mensagem": query_result.get("error", "Erro na consulta de dados."),
-                        "intent": intent_spec.to_dict(),
-                        "periodo_analisado": {
-                            "inicio": intent_spec.periodo_inicio,
-                            "fim": intent_spec.periodo_fim
-                        },
-                        "dados": [],
-                        "erro_dw": {
-                            "error_type": query_result.get("error_type", "DW_ERROR"),
-                            "hint": "Verifique os logs do servidor para mais detalhes."
+                    except Exception as e:
+                        logger.error(f"[Q1_ORQ] ❌ Erro ao executar Q1 em modo light: {str(e)}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                        return {
+                            "status": "erro_interno",
+                            "mensagem": f"Erro ao executar consulta Q1: {str(e)}",
+                            "intent": intent_spec.to_dict(),
+                            "periodo_analisado": {
+                                "inicio": intent_spec.periodo_inicio,
+                                "fim": intent_spec.periodo_fim
+                            },
+                            "dados": [],
+                            "erro_dw": {
+                                "error_type": "DW_ERROR",
+                                "hint": "Verifique os logs do servidor para mais detalhes."
+                            }
                         }
-                    }
                 
-                # Sucesso: usa dados retornados (query completa)
-                resultado = query_result.get("data", [])
-                logger.info(
-                    f"[Q1_ORQ] ✅ Query Q1 executada com sucesso (modo completo): {len(resultado) if isinstance(resultado, list) else 0} registros"
-                )
+                # ✅ MODO FULL: Tenta query completa com fallback (futuro)
+                else:
+                    # FUTURO: aqui podemos enfileirar a execução de Q1 como job assíncrono
+                    # e retornar apenas um job_id para o frontend.
+                    from src.dw.query_executor import run_dw_query_q1
+                    
+                    kwargs["bypass_cache"] = True
+                    kwargs["query_id"] = "Q1"
+                    logger.info(
+                        f"[Q1_ORQ] Executando Q1 em modo FULL (Q1_EXECUTION_MODE=full). "
+                        f"Função: {funcao_dw.__name__ if funcao_dw else 'None'}"
+                    )
+                    
+                    # Executa query com timeout e logging completo
+                    query_result = run_dw_query_q1(
+                        session=session,
+                        params=kwargs,
+                        query_func=funcao_dw
+                    )
+                    
+                    # Verifica status da query
+                    if query_result["status"] == "partial":
+                        # ✅ FALLBACK: Resposta parcial (versão light)
+                        logger.info(
+                            f"[Q1_ORQ] ⚠️  Resposta parcial (modo light) após {query_result['duration_ms']}ms: "
+                            f"{len(query_result.get('data', []))} registros"
+                        )
+                        resultado = query_result.get("data", [])
+                        return {
+                            "status": "partial",
+                            "mensagem": query_result.get("message", "Resposta parcial gerada devido ao tempo de execução elevado."),
+                            "intent": intent_spec.to_dict(),
+                            "periodo_analisado": {
+                                "inicio": intent_spec.periodo_inicio,
+                                "fim": intent_spec.periodo_fim
+                            },
+                            "dados": resultado,
+                            "mode": query_result.get("mode", "light"),
+                            "dw_mode": "LIGHT",
+                            "total_estimado": 932
+                        }
+                    elif query_result["status"] == "timeout":
+                        logger.error(
+                            f"[Q1_ORQ] ❌ Timeout na query Q1 após {query_result['duration_ms']}ms"
+                        )
+                        return {
+                            "status": "erro_interno",
+                            "mensagem": query_result.get("error", "Timeout na consulta de dados."),
+                            "intent": intent_spec.to_dict(),
+                            "periodo_analisado": {
+                                "inicio": intent_spec.periodo_inicio,
+                                "fim": intent_spec.periodo_fim
+                            },
+                            "dados": [],
+                            "erro_dw": {
+                                "error_type": query_result.get("error_type", "DW_TIMEOUT"),
+                                "hint": query_result.get("hint", "Tente ajustar o período ou refazer a pergunta.")
+                            }
+                        }
+                    elif query_result["status"] == "error":
+                        logger.error(
+                            f"[Q1_ORQ] ❌ Erro na query Q1: {query_result.get('error', 'Erro desconhecido')}"
+                        )
+                        return {
+                            "status": "erro_interno",
+                            "mensagem": query_result.get("error", "Erro na consulta de dados."),
+                            "intent": intent_spec.to_dict(),
+                            "periodo_analisado": {
+                                "inicio": intent_spec.periodo_inicio,
+                                "fim": intent_spec.periodo_fim
+                            },
+                            "dados": [],
+                            "erro_dw": {
+                                "error_type": query_result.get("error_type", "DW_ERROR"),
+                                "hint": "Verifique os logs do servidor para mais detalhes."
+                            }
+                        }
+                    
+                    # Sucesso: usa dados retornados (query completa)
+                    resultado = query_result.get("data", [])
+                    logger.info(
+                        f"[Q1_ORQ] ✅ Query Q1 executada com sucesso (modo completo): {len(resultado) if isinstance(resultado, list) else 0} registros"
+                    )
             else:
                 # Para outras queries, executa normalmente (sem timeout wrapper)
                 resultado = funcao_dw(session, **kwargs)

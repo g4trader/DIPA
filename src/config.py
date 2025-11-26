@@ -17,6 +17,11 @@ from dotenv import load_dotenv
 # Carrega variáveis de ambiente do arquivo .env
 load_dotenv()
 
+# ✅ Q1 EXECUTION MODE: Configuração para modo de execução da Q1
+# "light" = sempre usa query light (LIMIT 100) - recomendado para produção
+# "full" = tenta query completa com fallback (futuro)
+Q1_EXECUTION_MODE = os.getenv("Q1_EXECUTION_MODE", "light").lower()
+
 
 @dataclass
 class DatabaseConfig:

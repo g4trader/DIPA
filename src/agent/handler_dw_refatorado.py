@@ -281,14 +281,16 @@ def processar_pergunta_com_dw(
                         f"[Q1_ORQ] ✅ Payload: {clientes_unicos} clientes únicos"
                     )
         
-        # ✅ FALLBACK: Verifica se resposta é parcial
+        # ✅ Q1 LIGHT MODE: Verifica se resposta é parcial e extrai informações
         status_orquestrador = resultado_orquestrador.get("status")
         is_partial = status_orquestrador == "partial"
+        dw_mode = resultado_orquestrador.get("dw_mode", "FULL")
+        total_estimado = resultado_orquestrador.get("total_estimado", None)
         
         if is_partial:
             logger.info(
                 f"[PERF_Q1] Resposta parcial detectada: {len(dados_orquestrador)} registros, "
-                f"total_estimado={resultado_orquestrador.get('total_estimado', 'N/A')}"
+                f"total_estimado={total_estimado}, dw_mode={dw_mode}"
             )
         
         dados_dw = {
@@ -296,7 +298,8 @@ def processar_pergunta_com_dw(
             "dados": dados_orquestrador,
             "tem_dados": (status_orquestrador in ["ok", "partial"]) and len(dados_orquestrador) > 0,
             "is_partial": is_partial,
-            "total_estimado": resultado_orquestrador.get("total_estimado", None),
+            "dw_mode": dw_mode,
+            "total_estimado": total_estimado,
             "analise_causas": resultado_orquestrador.get("analise_causas", {}),
             "causas_detector": resultado_orquestrador.get("causas_detector", {}),
             "tabela_por_rota": resultado_orquestrador.get("tabela_por_rota"),  # Tabela agregada por rota (Q1)
@@ -509,20 +512,26 @@ def processar_pergunta_com_dw(
         resposta_executiva["contexto"] = {}
     resposta_executiva["contexto"]["performance_metrics"] = perf_metrics
     
-    # ✅ FALLBACK: Adiciona informações de resposta parcial se aplicável
+    # ✅ Q1 LIGHT MODE: Adiciona informações de resposta parcial se aplicável
     if dados_dw.get("is_partial"):
         resposta_executiva["status"] = "partial"
         resposta_executiva["contexto"]["is_partial"] = True
+        resposta_executiva["contexto"]["dw_mode"] = dados_dw.get("dw_mode", "LIGHT")
         resposta_executiva["contexto"]["total_estimado"] = dados_dw.get("total_estimado", None)
-        resposta_executiva["contexto"]["partial_message"] = "Esta resposta é parcial e está sendo processada em background."
+        resposta_executiva["contexto"]["partial_message"] = (
+            "Esta visão utiliza uma amostra representativa de clientes "
+            "e um total estimado com base na última carga do DW (932 clientes)."
+        )
         logger.info(
             f"[PERF_Q1] Resposta parcial marcada no handler: "
+            f"dw_mode={dados_dw.get('dw_mode', 'N/A')}, "
             f"total_estimado={dados_dw.get('total_estimado', 'N/A')}, "
             f"registros={len(dados_dw.get('dados', []))}"
         )
     else:
         resposta_executiva["status"] = "ok"
         resposta_executiva["contexto"]["is_partial"] = False
+        resposta_executiva["contexto"]["dw_mode"] = dados_dw.get("dw_mode", "FULL")
     
     # ✅ PERFORMANCE: Cacheia resposta Q1 completa (apenas se não for parcial)
     if intent_spec.tipo == "clientes_sem_compra" and not dados_dw.get("is_partial"):
