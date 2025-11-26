@@ -370,12 +370,27 @@ def gerar_intent_spec_q2(pergunta: str) -> IntentSpec:
     # Parseia período
     periodo_params = parse_periodo_queda_faturamento(pergunta)
     
+    # Adicionar campos mes_ano_anterior e mes_ano_atual no formato YYYY-MM
+    # Esses campos são necessários para o orquestrador mapear corretamente os kwargs
+    # para a função DW get_clientes_com_queda()
+    if "data_ini_mes_anterior" in periodo_params and periodo_params["data_ini_mes_anterior"]:
+        mes_ano_anterior = periodo_params["data_ini_mes_anterior"][:7]  # ex: "2025-09-01" -> "2025-09"
+    else:
+        mes_ano_anterior = None
+    
+    if "data_ini_mes_atual" in periodo_params and periodo_params["data_ini_mes_atual"]:
+        mes_ano_atual = periodo_params["data_ini_mes_atual"][:7]  # ex: "2025-10-01" -> "2025-10"
+    else:
+        mes_ano_atual = None
+    
     # Monta filtros
     filtros = {
         "data_ini_mes_anterior": periodo_params["data_ini_mes_anterior"],
         "data_fim_mes_anterior": periodo_params["data_fim_mes_anterior"],
         "data_ini_mes_atual": periodo_params["data_ini_mes_atual"],
         "data_fim_mes_atual": periodo_params["data_fim_mes_atual"],
+        "mes_ano_anterior": mes_ano_anterior,  # ✅ Campo necessário para mapeamento DW
+        "mes_ano_atual": mes_ano_atual,        # ✅ Campo necessário para mapeamento DW
         "min_faturamento_mes_anterior": 500.0,
         "min_queda_percentual": 10.0,
         "limit": 100
@@ -386,6 +401,9 @@ def gerar_intent_spec_q2(pergunta: str) -> IntentSpec:
     if top_match:
         top_n = int(top_match.group(1) or top_match.group(2))
         filtros["limit"] = top_n
+        filtros["top_n"] = top_n  # Também adiciona top_n para compatibilidade com orquestrador
+    else:
+        filtros["top_n"] = filtros["limit"]  # Garante que top_n existe mesmo sem "top N" na pergunta
     
     # Cria IntentSpec
     intent_spec = IntentSpec(
@@ -399,6 +417,7 @@ def gerar_intent_spec_q2(pergunta: str) -> IntentSpec:
     logger.info(
         f"[gerar_intent_spec_q2] IntentSpec Q2 criado: "
         f"periodo={periodo_params['data_ini_mes_anterior']} → {periodo_params['data_fim_mes_atual']}, "
+        f"mes_ano_anterior={mes_ano_anterior}, mes_ano_atual={mes_ano_atual}, "
         f"limit={filtros['limit']}"
     )
     
