@@ -28,13 +28,23 @@ if os.path.exists(_config_py_path):
         # (config.py tem: config = Config() na linha 167)
         config = config_module.config
         
+        # ✅ ALIAS: settings é um alias de config para padronização
+        settings = config
+        
+        # ✅ Q1 EXECUTION MODE: Constante para backwards compatibility
+        Q1_EXECUTION_MODE = getattr(config_module, 'Q1_EXECUTION_MODE', config.q1_execution_mode if hasattr(config, 'q1_execution_mode') else 'full')
+        
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Erro ao importar config.py: {str(e)}")
         config = None
+        settings = None
+        Q1_EXECUTION_MODE = "full"
 else:
     config = None
+    settings = None
+    Q1_EXECUTION_MODE = "full"
     import logging
     logger = logging.getLogger(__name__)
     logger.warning(f"Arquivo config.py não encontrado em {_config_py_path}")

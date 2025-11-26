@@ -17,10 +17,8 @@ from dotenv import load_dotenv
 # Carrega variáveis de ambiente do arquivo .env
 load_dotenv()
 
-# ✅ Q1 EXECUTION MODE: Configuração para modo de execução da Q1
-# "light" = sempre usa query light (LIMIT 100) - recomendado para produção
-# "full" = tenta query completa com fallback (futuro)
-Q1_EXECUTION_MODE = os.getenv("Q1_EXECUTION_MODE", "light").lower()
+# ✅ Q1 EXECUTION MODE: Removido daqui - agora está na classe Config
+# Mantido apenas para referência histórica
 
 
 @dataclass
@@ -202,6 +200,11 @@ class Config:
     # Log level
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     
+    # ✅ Q1 EXECUTION MODE: Configuração para modo de execução da Q1
+    # "light" = sempre usa query light (LIMIT 100) - recomendado para produção
+    # "full" = tenta query completa com fallback (futuro)
+    q1_execution_mode: str = os.getenv("Q1_EXECUTION_MODE", "full").lower()
+    
     # Configurações
     database: DatabaseConfig = None
     paths: PathsConfig = None
@@ -223,12 +226,22 @@ class Config:
 # Importar este objeto em outros módulos: from src.config import config
 config = Config()
 
+# ✅ Q1 EXECUTION MODE: Constante para backwards compatibility
+# Permite importar como: from src.config import Q1_EXECUTION_MODE
+Q1_EXECUTION_MODE = config.q1_execution_mode
+
+# ✅ ALIAS: settings é um alias de config para padronização
+# Permite importar como: from src.config import settings
+settings = config
+
 
 # Exemplo de uso:
-# from src.config import config
+# from src.config import config, settings, Q1_EXECUTION_MODE
 # print(config.database.connection_string)
 # print(config.paths.data_raw_dir)
 # print(config.ml.random_seed)
+# print(settings.q1_execution_mode)  # ou config.q1_execution_mode
+# print(Q1_EXECUTION_MODE)  # constante legada
 
 
 

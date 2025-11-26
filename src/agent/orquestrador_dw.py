@@ -702,11 +702,11 @@ def executar_intent_spec(
             
             # ✅ Q1 LIGHT MODE: Execução determinística baseada em Q1_EXECUTION_MODE
             if intent_spec.tipo == "clientes_sem_compra":
-                from src.config import config
+                from src.config import settings
                 from src.dw.queries import get_clientes_sem_compra_ha_dias_light
                 
                 # ✅ MODO LIGHT: Não chama query completa, vai direto na light
-                if config.q1_execution_mode == "light":
+                if settings.q1_execution_mode.lower() == "light":
                     logger.info(
                         f"[Q1_ORQ] Executando Q1 em modo LIGHT (Q1_EXECUTION_MODE=light). "
                         f"Pulando query completa, usando versão light diretamente."
@@ -741,7 +741,10 @@ def executar_intent_spec(
                         duration_ms = int((time.perf_counter() - start_time) * 1000)
                         
                         logger.info(
-                            f"[PERF_Q1] DW_MODE=LIGHT status=partial total_estimado=932 registros={len(registros)} duration={duration_ms}ms"
+                            f"[Q1_MODE] q1_execution_mode=%s dw_mode=LIGHT status=partial total_estimado=932 registros=%s duration=%sms",
+                            settings.q1_execution_mode,
+                            len(registros),
+                            duration_ms
                         )
                         
                         return {
