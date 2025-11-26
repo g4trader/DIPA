@@ -62,6 +62,7 @@ try:
         get_clientes_sem_compra_ha_dias,
         get_clientes_sem_compra_por_rota,
         get_clientes_queda_faturamento_ano_contra_ano,
+        get_clientes_queda_faturamento_periodo,
         get_industrias_com_mais_vendedores_fora_meta,
         get_rotas_positivacao_industria,
         get_itens_baixa_media_mensal,
@@ -78,6 +79,7 @@ except ImportError as e:
     get_clientes_sem_compra_ha_dias = None
     get_clientes_sem_compra_por_rota = None
     get_clientes_queda_faturamento_ano_contra_ano = None
+    get_clientes_queda_faturamento_periodo = None
     get_industrias_com_mais_vendedores_fora_meta = None
     get_rotas_positivacao_industria = None
     get_itens_baixa_media_mensal = None
@@ -375,7 +377,29 @@ def _mapear_para_funcao_dw(
             }
         ) if get_clientes_sem_compra_ha_dias else None,
         
+        # Q2: Queda de faturamento entre períodos (mês a mês)
+        # Detecta se há dois períodos distintos (ex: set/25 e out/25)
         ("queda_faturamento", "cliente"): (
+            get_clientes_queda_faturamento_periodo,
+            {
+                "data_ini_mes_anterior": intent_spec.filtros.get("data_ini_mes_anterior") or (
+                    intent_spec.periodo_inicio if intent_spec.periodo_inicio else "2025-09-01"
+                ),
+                "data_fim_mes_anterior": intent_spec.filtros.get("data_fim_mes_anterior") or (
+                    intent_spec.periodo_inicio if intent_spec.periodo_inicio else "2025-09-30"
+                ),
+                "data_ini_mes_atual": intent_spec.filtros.get("data_ini_mes_atual") or (
+                    intent_spec.periodo_fim if intent_spec.periodo_fim else "2025-10-01"
+                ),
+                "data_fim_mes_atual": intent_spec.filtros.get("data_fim_mes_atual") or (
+                    intent_spec.periodo_fim if intent_spec.periodo_fim else "2025-10-31"
+                ),
+                "min_faturamento_mes_anterior": intent_spec.filtros.get("min_faturamento_mes_anterior", 500.0),
+                "min_queda_percentual": intent_spec.filtros.get("min_queda_percentual", 10.0),
+                "limit": intent_spec.filtros.get("limit", 100)
+            }
+        ) if get_clientes_queda_faturamento_periodo else (
+            # Fallback para ano contra ano se período não disponível
             get_clientes_queda_faturamento_ano_contra_ano,
             {
                 "ano_base": intent_spec.filtros.get("ano_base", 2024),

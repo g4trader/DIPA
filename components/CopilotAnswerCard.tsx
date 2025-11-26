@@ -1,4 +1,4 @@
-import React, { useState, forwardRef } from "react";
+import React, { useState, forwardRef, useMemo } from "react";
 import { ChevronDown, Download } from "lucide-react";
 import { clsx } from "clsx";
 import { CopilotAnswerPayload } from "@/types/agent";
@@ -6,6 +6,8 @@ import { ResponseDashboard } from "./ResponseDashboard";
 import { ResponseDashboardOptimized } from "./ResponseDashboardOptimized";
 import { generateExecutivePdf } from "./pdf/generateExecutivePdf";
 import { formatCurrencyBR } from "@/lib/formatters";
+import { Q2QuedaFaturamentoResultCard } from "./Q2QuedaFaturamentoResultCard";
+import { Q2Response } from "@/types/q2";
 
 type Props = {
   payload: CopilotAnswerPayload;
@@ -66,6 +68,76 @@ export const CopilotAnswerCard = forwardRef<HTMLDivElement, Props>(({ payload },
     
     generateExecutivePdf(pdfData);
   };
+
+  // ✅ Q2: Detecta se é Q2 (queda de faturamento) pelo contexto
+  const isQ2 = useMemo(() => {
+    const payloadAny = payload as any;
+    // Verifica se o contexto indica Q2
+    if (payloadAny.contexto?.tipo === "Q2_QUEDA_FATURAMENTO") {
+      return true;
+    }
+    // Verifica se o intent é queda_faturamento
+    if (intent === "queda_faturamento") {
+      return true;
+    }
+    return false;
+  }, [payload, intent]);
+
+  // ✅ Q2: Converte contexto do backend para Q2Response
+  const q2Data = useMemo<Q2Response | null>(() => {
+    if (!isQ2) return null;
+    
+    const payloadAny = payload as any;
+    const contexto = payloadAny.contexto || {};
+    
+    // Se já vier como Q2Response completo, usa diretamente
+    if (contexto.tipo === "Q2_QUEDA_FATURAMENTO" && contexto.resumo && contexto.top_clientes) {
+      return {
+        tipo: "Q2_QUEDA_FATURAMENTO",
+        periodo: contexto.periodo || { descricao: "Período não especificado" },
+        texto_executivo: resumoExecutivo || "",
+        resumo: contexto.resumo,
+        top_clientes: contexto.top_clientes || [],
+        rotas: contexto.rotas || [],
+        dados_brutos: contexto,
+      };
+    }
+    
+    return null;
+  }, [isQ2, payload, resumoExecutivo]);
+
+  // ✅ Q2: Se for Q2, renderiza componente específico
+  if (isQ2 && q2Data) {
+    return (
+      <div ref={ref} id="dipam-card-resposta-principal" className="relative rounded-3xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-slate-950/95 shadow-2xl overflow-hidden">
+        {/* Header do card */}
+        <div id="dipam-card-header" className="flex items-center gap-2 px-6 pt-5 pb-4 border-b border-slate-800/70 bg-slate-950/70">
+          <div id="dipam-card-header-icon" className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-sky-500/10 border border-sky-500/40 text-sky-300 text-xs font-semibold">
+            ⚡
+          </div>
+          <div id="dipam-card-header-brand" className="flex flex-col">
+            <span id="dipam-card-header-brand-name" className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+              DIPAM COPILOT™
+            </span>
+            <span id="dipam-card-header-brand-tagline" className="text-xs text-slate-400">Inteligência comercial em tempo real</span>
+          </div>
+          <div id="dipam-card-header-badges" className="ml-auto inline-flex items-center gap-2">
+            <span id="dipam-card-header-badge-intent" className="rounded-full bg-slate-800/80 px-3 py-1 text-[11px] text-slate-300">
+              {intentLabel || "Queda de Faturamento"}
+            </span>
+            <span id="dipam-card-header-badge-confidence" className="rounded-full bg-emerald-500/10 border border-emerald-400/40 px-3 py-1 text-[11px] text-emerald-300">
+              {Math.round(confidence * 100)}% confiança
+            </span>
+          </div>
+        </div>
+
+        {/* Conteúdo principal - Q2 Result Card */}
+        <div id="dipam-card-content" className="px-6 pt-4 pb-6">
+          <Q2QuedaFaturamentoResultCard data={q2Data} />
+        </div>
+      </div>
+    );
+  }
 
   // NOVO: Se houver resposta estruturada, renderiza dashboard diretamente
   if (payload.structured) {

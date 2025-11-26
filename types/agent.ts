@@ -272,6 +272,9 @@ export interface CopilotAnswerPayload {
 
   /** Campo bruto opcional, se precisar renderizar markdown completo */
   respostaMarkdown?: string;
+  
+  /** Contexto adicional retornado pelo agente (ex.: Q2_QUEDA_FATURAMENTO) */
+  contexto?: Record<string, any>;
 }
 
 /**

@@ -14,7 +14,7 @@ ARQUITETURA:
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func, and_, or_, case, desc, asc, text, extract, cast, String, select
 import logging
 import time
@@ -673,6 +673,186 @@ def get_clientes_sem_compra_por_rota(
     resultados.sort(key=lambda x: x["total_clientes_sem_compra"], reverse=True)
     
     return resultados
+
+
+# ============================================================================
+# Q2: CLIENTES COM QUEDA DE FATURAMENTO ENTRE PERÍODOS (MÊS A MÊS)
+# ============================================================================
+
+@performance_guard(timeout_seconds=20.0)
+@profile_query("Q2")
+def get_clientes_queda_faturamento_periodo(
+    session: Session,
+    data_ini_mes_anterior: str,
+    data_fim_mes_anterior: str,
+    data_ini_mes_atual: str,
+    data_fim_mes_atual: str,
+    min_faturamento_mes_anterior: float = 500.0,
+    min_queda_percentual: float = 10.0,
+    limit: int = 100,
+    query_id: str = "Q2"
+) -> List[Dict[str, Any]]:
+    """
+    Retorna clientes ativos com maior queda de faturamento entre dois períodos.
+    
+    Args:
+        session: Sessão SQLAlchemy
+        data_ini_mes_anterior: Data inicial do mês anterior (YYYY-MM-DD)
+        data_fim_mes_anterior: Data final do mês anterior (YYYY-MM-DD)
+        data_ini_mes_atual: Data inicial do mês atual (YYYY-MM-DD)
+        data_fim_mes_atual: Data final do mês atual (YYYY-MM-DD)
+        min_faturamento_mes_anterior: Faturamento mínimo no mês anterior (padrão: 500.0)
+        min_queda_percentual: Queda percentual mínima (padrão: 10.0)
+        limit: Número máximo de registros a retornar (padrão: 100)
+        query_id: ID da query para logging
+        
+    Returns:
+        Lista de dicts com:
+        - cliente_id
+        - cliente_nome
+        - faturamento_mes_anterior
+        - faturamento_mes_atual
+        - queda_absoluta
+        - queda_percentual
+        - rota
+        - vendedor_nome
+        - supervisor_nome
+    """
+    logger.info(
+        f"[get_clientes_queda_faturamento_periodo] Executando Q2: "
+        f"mes_anterior={data_ini_mes_anterior} a {data_fim_mes_anterior}, "
+        f"mes_atual={data_ini_mes_atual} a {data_fim_mes_atual}, "
+        f"min_faturamento={min_faturamento_mes_anterior}, min_queda%={min_queda_percentual}, limit={limit}"
+    )
+    
+    # Converte strings para date se necessário
+    from datetime import datetime
+    if isinstance(data_ini_mes_anterior, str):
+        data_ini_mes_anterior = datetime.strptime(data_ini_mes_anterior, "%Y-%m-%d").date()
+    if isinstance(data_fim_mes_anterior, str):
+        data_fim_mes_anterior = datetime.strptime(data_fim_mes_anterior, "%Y-%m-%d").date()
+    if isinstance(data_ini_mes_atual, str):
+        data_ini_mes_atual = datetime.strptime(data_ini_mes_atual, "%Y-%m-%d").date()
+    if isinstance(data_fim_mes_atual, str):
+        data_fim_mes_atual = datetime.strptime(data_fim_mes_atual, "%Y-%m-%d").date()
+    
+    # Subquery: faturamento no mês anterior
+    faturamento_mes_anterior_subq = (
+        session.query(
+            Venda.cliente_id,
+            func.sum(Venda.valor_total_liquido).label('faturamento_mes_anterior')
+        )
+        .filter(
+            and_(
+                Venda.data_venda >= data_ini_mes_anterior,
+                Venda.data_venda <= data_fim_mes_anterior
+            )
+        )
+        .group_by(Venda.cliente_id)
+        .subquery()
+    )
+    
+    # Subquery: faturamento no mês atual
+    faturamento_mes_atual_subq = (
+        session.query(
+            Venda.cliente_id,
+            func.sum(Venda.valor_total_liquido).label('faturamento_mes_atual')
+        )
+        .filter(
+            and_(
+                Venda.data_venda >= data_ini_mes_atual,
+                Venda.data_venda <= data_fim_mes_atual
+            )
+        )
+        .group_by(Venda.cliente_id)
+        .subquery()
+    )
+    
+    # Aliases para Supervisor (via Cliente e via Vendedor)
+    SupervisorViaVendedor = aliased(Supervisor, name='supervisor_via_vendedor')
+    
+    # CTE com cálculos de queda
+    queda_cte = (
+        session.query(
+            Cliente.id.label('cliente_id'),
+            Cliente.nome.label('cliente_nome'),
+            func.coalesce(faturamento_mes_anterior_subq.c.faturamento_mes_anterior, 0).label('faturamento_mes_anterior'),
+            func.coalesce(faturamento_mes_atual_subq.c.faturamento_mes_atual, 0).label('faturamento_mes_atual'),
+            (
+                func.coalesce(faturamento_mes_anterior_subq.c.faturamento_mes_anterior, 0) - 
+                func.coalesce(faturamento_mes_atual_subq.c.faturamento_mes_atual, 0)
+            ).label('queda_absoluta'),
+            case(
+                (
+                    func.coalesce(faturamento_mes_anterior_subq.c.faturamento_mes_anterior, 0) > 0,
+                    (
+                        (func.coalesce(faturamento_mes_anterior_subq.c.faturamento_mes_anterior, 0) - 
+                         func.coalesce(faturamento_mes_atual_subq.c.faturamento_mes_atual, 0)) /
+                        func.coalesce(faturamento_mes_anterior_subq.c.faturamento_mes_anterior, 1) * 100
+                    )
+                ),
+                else_=0
+            ).label('queda_percentual'),
+            Cliente.rota_rca.label('rota'),
+            Vendedor.nome.label('vendedor_nome'),
+            func.coalesce(
+                Supervisor.nome,
+                SupervisorViaVendedor.nome
+            ).label('supervisor_nome')
+        )
+        .outerjoin(faturamento_mes_anterior_subq, Cliente.id == faturamento_mes_anterior_subq.c.cliente_id)
+        .outerjoin(faturamento_mes_atual_subq, Cliente.id == faturamento_mes_atual_subq.c.cliente_id)
+        .outerjoin(Vendedor, Cliente.rota_rca == Vendedor.codigo)
+        .outerjoin(Supervisor, Cliente.supervisor_id == Supervisor.id)
+        .outerjoin(
+            SupervisorViaVendedor,
+            Vendedor.supervisor_id == SupervisorViaVendedor.id
+        )
+        .filter(Cliente.ativo == True)
+        .cte(name='queda_faturamento')
+    )
+    
+    # Query final com filtros aplicados
+    query = (
+        session.query(queda_cte)
+        .filter(
+            and_(
+                queda_cte.c.faturamento_mes_anterior >= min_faturamento_mes_anterior,
+                queda_cte.c.queda_absoluta > 0,  # Apenas quedas (não aumentos)
+                queda_cte.c.queda_percentual >= min_queda_percentual
+            )
+        )
+        .order_by(
+            desc(queda_cte.c.queda_absoluta),
+            desc(queda_cte.c.queda_percentual)
+        )
+        .limit(limit)
+    )
+    
+    # Executa query
+    resultados = list(query.all())
+    
+    logger.info(
+        f"[get_clientes_queda_faturamento_periodo] Query Q2 retornou {len(resultados)} registros "
+        f"(limit={limit}, min_faturamento={min_faturamento_mes_anterior}, min_queda%={min_queda_percentual})"
+    )
+    
+    # Converte para formato dict
+    registros = []
+    for r in resultados:
+        registros.append({
+            "cliente_id": r.cliente_id,
+            "cliente_nome": r.cliente_nome,
+            "faturamento_mes_anterior": float(r.faturamento_mes_anterior) if r.faturamento_mes_anterior else 0.0,
+            "faturamento_mes_atual": float(r.faturamento_mes_atual) if r.faturamento_mes_atual else 0.0,
+            "queda_absoluta": float(r.queda_absoluta) if r.queda_absoluta else 0.0,
+            "queda_percentual": float(r.queda_percentual) if r.queda_percentual else 0.0,
+            "rota": r.rota or "N/A",
+            "vendedor_nome": r.vendedor_nome or r.rota or "N/A",
+            "supervisor_nome": r.supervisor_nome or "N/A"
+        })
+    
+    return registros
 
 
 # ============================================================================

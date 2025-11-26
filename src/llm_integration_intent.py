@@ -25,6 +25,17 @@ call_openai_llm = call_llm
 OpenAIError = LLMError
 from src.agent.intent_spec import IntentSpec
 
+# Importa integração Q2 (detecção baseada em regras)
+try:
+    from src.llm_integration_intent_q2 import (
+        detectar_intent_q2,
+        processar_pergunta_q2
+    )
+    Q2_INTEGRATION_AVAILABLE = True
+except ImportError:
+    Q2_INTEGRATION_AVAILABLE = False
+    logger.warning("Integração Q2 não disponível. Usando apenas LLM para detecção.")
+
 # Importa GROQ Guard para proteção contra limites
 try:
     from src.api.groq_client import (
@@ -160,6 +171,9 @@ def gerar_intent_spec_via_llm(pergunta: str, papel: Optional[str] = None) -> Int
     
     O LLM analisa a pergunta e retorna um JSON estruturado com IntentSpec.
     
+    NOTA: Se a pergunta for sobre Q2 (queda de faturamento), usa detecção
+    baseada em regras antes de chamar o LLM.
+    
     Args:
         pergunta: Pergunta do usuário em linguagem natural
         papel: Papel do usuário (diretor, supervisor, vendedor)
@@ -170,6 +184,16 @@ def gerar_intent_spec_via_llm(pergunta: str, papel: Optional[str] = None) -> Int
     Raises:
         ValueError: Se o JSON retornado pelo LLM for inválido
     """
+    # ✅ DETECÇÃO Q2: Tenta detectar Q2 antes de chamar LLM
+    if Q2_INTEGRATION_AVAILABLE:
+        try:
+            if detectar_intent_q2(pergunta):
+                logger.info(f"[gerar_intent_spec_via_llm] Q2 detectada, usando detecção baseada em regras")
+                from src.llm_integration_intent_q2 import gerar_intent_spec_q2
+                return gerar_intent_spec_q2(pergunta)
+        except Exception as e:
+            logger.warning(f"[gerar_intent_spec_via_llm] Erro na detecção Q2, usando LLM: {e}")
+    
     system_prompt = _get_system_prompt_intent_spec()
     
     prompt = f"""Pergunta do usuário: {pergunta}

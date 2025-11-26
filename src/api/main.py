@@ -28,6 +28,18 @@ from src.dw.models import InteracaoAgent
 from sqlalchemy.orm import Session
 import json
 
+# Importa endpoint Q2
+try:
+    from src.api.q2_endpoint import (
+        Q2Request,
+        Q2Response,
+        processar_q2_endpoint
+    )
+    Q2_ENDPOINT_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Endpoint Q2 não disponível: {e}")
+    Q2_ENDPOINT_AVAILABLE = False
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -1426,6 +1438,54 @@ def _resumir_contexto(contexto: Dict[str, Any]) -> Dict[str, Any]:
     return resumo
 
 
+# ============================================================================
+# ENDPOINT Q2: QUEDA DE FATURAMENTO
+# ============================================================================
+
+@app.post("/api/copilot/q2", response_model=Q2Response)
+async def q2_queda_faturamento(
+    request: Q2Request
+):
+    """
+    Endpoint específico para perguntas sobre queda de faturamento (Q2).
+    
+    Recebe uma pergunta em linguagem natural sobre queda de faturamento
+    e retorna texto executivo formatado + dados estruturados.
+    
+    Exemplo:
+        POST /api/copilot/q2
+        {
+            "pergunta": "Quais clientes tiveram queda de faturamento de setembro para outubro?"
+        }
+    
+    Returns:
+        Q2Response com:
+        - texto_executivo: texto formatado pronto para exibição
+        - resumo: métricas agregadas
+        - top_clientes: lista dos principais clientes com queda
+        - rotas: agregação por rota
+        - dados_brutos: dados completos do DW
+    """
+    if not Q2_ENDPOINT_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Endpoint Q2 não está disponível no momento."
+        )
+    
+    try:
+        return await processar_q2_endpoint(request.pergunta)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Q2_ENDPOINT] Erro inesperado: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail="Erro interno ao processar pergunta sobre queda de faturamento."
+        )
+
+
 @app.post("/ask", response_model=AskResponse)
 async def ask_question(
     request: AskRequest,
@@ -1454,6 +1514,35 @@ async def ask_question(
             "papel": "supervisor"
         }
     """
+    # ✅ DETECÇÃO Q2: Tenta detectar Q2 antes do fluxo padrão
+    if Q2_ENDPOINT_AVAILABLE:
+        try:
+            from src.llm_integration_intent_q2 import detectar_intent_q2
+            if detectar_intent_q2(request.pergunta):
+                logger.info(f"[ASK] Q2 detectada, redirecionando para processamento Q2")
+                # Processa via Q2
+                resultado_q2 = await processar_q2_endpoint(request.pergunta)
+                
+                # Converte Q2Response para AskResponse (compatibilidade)
+                # Nota: Isso é um fallback, o ideal é usar /api/copilot/q2 diretamente
+                from src.api.mapper_handler_refatorado import map_handler_refatorado_to_ask_response
+                return AskResponse(
+                    question=request.pergunta,
+                    intent="queda_faturamento",
+                    confidence=0.95,
+                    resumoExecutivo=resultado_q2.texto_executivo,
+                    contexto={
+                        "tipo": "Q2_QUEDA_FATURAMENTO",
+                        "resumo": resultado_q2.resumo.dict(),
+                        "top_clientes": [c.dict() for c in resultado_q2.top_clientes],
+                        "rotas": [r.dict() for r in resultado_q2.rotas],
+                        "periodo": resultado_q2.periodo.dict()
+                    },
+                    timestamp=datetime.now().isoformat()
+                )
+        except Exception as e:
+            logger.warning(f"[ASK] Erro na detecção Q2, usando fluxo padrão: {e}")
+    
     # ✅ TIMEOUT: Timeout total configurável via env (padrão: 18s)
     ASK_TOTAL_TIMEOUT = int(os.getenv("ASK_TOTAL_TIMEOUT", "18"))
     

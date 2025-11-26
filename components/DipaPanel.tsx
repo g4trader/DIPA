@@ -1383,6 +1383,8 @@ export default function DipaPanel() {
           ? "Consulta de Meta" 
           : response.intent === "consulta_vendedores_performance"
           ? "Consulta Vendedores Performance"
+          : response.intent === "queda_faturamento"
+          ? "Queda de Faturamento"
           : "Consulta Geral",
         confidence: response.confidence,
         question: response.question,
@@ -1397,6 +1399,8 @@ export default function DipaPanel() {
           : (typeof response.observacoes === "string" ? response.observacoes : undefined),
         // FASE 5: Inclui structured se disponível diretamente na resposta
         structured: response.structured,
+        // ✅ Q2: Inclui contexto se disponível (para detecção Q2)
+        contexto: (response as any).contexto,
       };
       
       // Se não houver structured no payload mas houver no response, adiciona
