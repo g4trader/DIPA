@@ -716,11 +716,23 @@ def executar_intent_spec(
                         import time
                         start_time = time.perf_counter()
                         
+                        # ✅ CORREÇÃO: Garante que data_referencia seja calculado corretamente
+                        # Usa a mesma lógica do mapeamento: periodo_fim or periodo_inicio
+                        data_referencia = kwargs.get("data_referencia")
+                        if not data_referencia:
+                            data_referencia = intent_spec.periodo_fim or intent_spec.periodo_inicio
+                        
+                        logger.info(
+                            f"[Q1_ORQ] Parâmetros Q1 light: dias={kwargs.get('dias', 60)}, "
+                            f"data_referencia={data_referencia}, "
+                            f"filtros_behavior={'presente' if kwargs.get('filtros_behavior') else 'None'}"
+                        )
+                        
                         # Executa query light diretamente (sem timeout wrapper)
                         registros = get_clientes_sem_compra_ha_dias_light(
                             session=session,
                             dias=kwargs.get("dias", 60),
-                            data_referencia=kwargs.get("data_referencia"),
+                            data_referencia=data_referencia,
                             filtros_behavior=kwargs.get("filtros_behavior"),
                             query_id="Q1_LIGHT",
                             limit=100

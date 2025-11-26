@@ -421,9 +421,19 @@ def processar_pergunta_com_dw(
         logger.info(f"[PERF_STEP] START_ASSEMBLY - query_id=Q1")
         assembly_start = time.perf_counter()
         
-        # Para Q1 (clientes_sem_compra), monta tabela_principal com estrutura correta
+        # ✅ Q1 LIGHT MODE: Para Q1 (clientes_sem_compra), monta tabela_principal com estrutura correta
+        # IMPORTANTE: Monta tabela mesmo quando is_partial=True (modo light)
         if intent_spec.tipo == "clientes_sem_compra" and dados_dw.get("dados"):
             dados_clientes = dados_dw.get("dados", [])
+            is_partial = dados_dw.get("is_partial", False)
+            
+            logger.info(
+                f"[processar_pergunta_com_dw] Montando tabela Q1: "
+                f"registros={len(dados_clientes) if isinstance(dados_clientes, list) else 0}, "
+                f"is_partial={is_partial}, "
+                f"dw_mode={dados_dw.get('dw_mode', 'N/A')}"
+            )
+            
             if dados_clientes and isinstance(dados_clientes, list) and len(dados_clientes) > 0:
                 # Monta tabela_principal com colunas: Cliente ID, Nome, Dias sem Compra, Vendedor, Supervisor
                 resposta_executiva["tabela_principal"] = [{
@@ -439,7 +449,16 @@ def processar_pergunta_com_dw(
                         for cliente in dados_clientes
                     ]
                 }]
-                logger.info(f"[processar_pergunta_com_dw] Tabela principal montada para Q1: {len(dados_clientes)} clientes")
+                logger.info(
+                    f"[processar_pergunta_com_dw] ✅ Tabela principal montada para Q1: "
+                    f"{len(dados_clientes)} clientes, is_partial={is_partial}"
+                )
+            else:
+                logger.warning(
+                    f"[processar_pergunta_com_dw] ⚠️  Q1 sem dados para montar tabela: "
+                    f"dados_clientes={type(dados_clientes)}, "
+                    f"len={len(dados_clientes) if isinstance(dados_clientes, list) else 'N/A'}"
+                )
     
     except Exception as e:
         logger.error(f"[processar_pergunta_com_dw] Erro ao processar resposta: {e}")
@@ -463,7 +482,9 @@ def processar_pergunta_com_dw(
     # Adiciona metadados e detalhes técnicos
     resposta_executiva["intent_spec"] = intent_spec
     resposta_executiva["dados_dw"] = dados_dw
-    resposta_executiva["tem_dados"] = True
+    # ✅ Q1 LIGHT MODE: tem_dados deve ser True mesmo quando is_partial=True
+    # (resposta parcial ainda tem dados, apenas limitados)
+    resposta_executiva["tem_dados"] = dados_dw.get("tem_dados", True)
     
     # Adiciona resposta estruturada do pós-processador
     if 'resposta_estruturada' in locals():

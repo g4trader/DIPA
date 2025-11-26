@@ -602,13 +602,17 @@ def get_clientes_sem_compra_ha_dias_light(
             .group_by(base_cte.c.cliente_id)
         )
     
-    # ✅ FALLBACK: Ordena e limita a N registros
-    query = query.order_by(asc(text('dias_sem_compra'))).limit(limit)
+    # ✅ Q1 LIGHT: Ordena por dias_sem_compra DESC (maior primeiro) e limita a N registros
+    # IMPORTANTE: Usa DESC para trazer os clientes com mais dias sem compra primeiro (mais críticos)
+    query = query.order_by(desc(text('dias_sem_compra'))).limit(limit)
     
     # Executa query limitada
     resultados = list(query.all())
     
-    logger.info(f"[get_clientes_sem_compra_ha_dias_light] Query light retornou {len(resultados)} registros")
+    logger.info(
+        f"[get_clientes_sem_compra_ha_dias_light] Query light retornou {len(resultados)} registros "
+        f"(limit={limit}, dias={dias}, data_referencia={data_referencia or 'hoje'})"
+    )
     
     # Processa resultados usando a mesma função auxiliar
     return _processar_resultados_q1(resultados, dias, dias_minimo, query_id)
