@@ -73,26 +73,25 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     });
     
     // ✅ T3: Para Q1, ordena em ordem crescente de "DIAS SEM COMPRA"
-    if (isQ1) {
-      // Encontra o índice da coluna "DIAS SEM COMPRA" (pode ter variações no nome)
-      const diasColName = primeiraTabela.colunas.find((col: string) => 
-        col.toLowerCase().includes("dias") && col.toLowerCase().includes("compra")
-      ) || primeiraTabela.colunas.find((col: string) => 
-        col.toLowerCase().includes("dias")
-      );
-      
-      if (diasColName) {
-        rows = [...rows].sort((a, b) => {
-          const diasA = Number(a[diasColName] ?? 0);
-          const diasB = Number(b[diasColName] ?? 0);
-          // Ordem crescente (menor primeiro)
-          return diasA - diasB;
-        });
-      }
+    // Detecta se é Q1 pela presença da coluna "dias sem compra"
+    const diasColName = primeiraTabela.colunas.find((col: string) => 
+      col.toLowerCase().includes("dias") && col.toLowerCase().includes("compra")
+    ) || primeiraTabela.colunas.find((col: string) => 
+      col.toLowerCase().includes("dias")
+    );
+    
+    if (diasColName) {
+      rows = [...rows].sort((a, b) => {
+        const diasA = Number(a[diasColName] ?? 0);
+        const diasB = Number(b[diasColName] ?? 0);
+        // Ordem crescente (menor primeiro)
+        return diasA - diasB;
+      });
     }
     
     return {
       rows,
+      columns: primeiraTabela.colunas, // ✅ Adiciona colunas para detecção de Q1-light
       title: primeiraTabela.titulo || "Dados Analíticos — Consulta Geral",
     };
   }, [data, isQ1]);
@@ -152,9 +151,44 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     return tabelaPrincipal?.rows.length || 0;
   }, [tabelaPrincipal]);
   
+  // ✅ Helper: Normaliza string (minúsculas, sem acentos, trim)
+  const normalizar = (str: string): string => {
+    return str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+      .trim();
+  };
+  
+  // ✅ Detecção de Q1-light mode baseada em dados (não IDs)
+  const isQ1LightMode = useMemo(() => {
+    const dataAny = data as any;
+    const metricsTotal = dataAny.metrics?.total_clientes;
+    
+    // Verifica condições para Q1-light
+    if (
+      typeof metricsTotal === "number" &&
+      metricsTotal > 0 &&
+      tabelaPrincipal &&
+      tabelaPrincipal.rows.length > 0 &&
+      metricsTotal > tabelaPrincipal.rows.length
+    ) {
+      // Verifica se há coluna de "dias sem compra"
+      if (tabelaPrincipal.columns && Array.isArray(tabelaPrincipal.columns)) {
+        const hasDiasSemCompraColumn = tabelaPrincipal.columns.some((col: string) => {
+          const normalized = normalizar(col);
+          return normalized.includes("dias") && normalized.includes("compra");
+        });
+        return hasDiasSemCompraColumn;
+      }
+    }
+    
+    return false;
+  }, [data, tabelaPrincipal]);
+  
   // ✅ T2: Calcula texto "Mostrando X de Y clientes em foco" para Q1
   const tabelaSubtitle = useMemo(() => {
-    if (!isQ1 || !tabelaPrincipal) return undefined;
+    if (!isQ1LightMode || !tabelaPrincipal) return undefined;
     
     // Só mostra se totalClientes > totalExibidos (modo LIGHT/partial)
     if (totalClientes > totalExibidos && totalExibidos > 0) {
@@ -162,27 +196,37 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
     }
     
     return undefined;
-  }, [isQ1, tabelaPrincipal, totalClientes, totalExibidos]);
+  }, [isQ1LightMode, tabelaPrincipal, totalClientes, totalExibidos]);
 
   // Resumo executivo
   // ✅ Q1 LIGHT MODE: Ajusta resumo para mencionar total real (932) e amostra (100)
+  // Detecta Q1-light baseado em dados (não IDs), concatena com resumo do LLM removendo duplicatas
   const resumoExecutivo = useMemo(() => {
-    const resumoOriginal = data.resumo_executivo || data.resumoExecutivo || "";
+    const resumoLLM = (data.resumo_executivo || data.resumoExecutivo || "").trim();
     
-    // Se for Q1 e houver dados, substitui o resumo por versão dinâmica
-    if (isQ1 && totalClientes > 0 && totalExibidos > 0) {
-      // Se totalClientes > totalExibidos, estamos em modo LIGHT/partial
-      if (totalClientes > totalExibidos) {
-        return `Foram identificados ${formatNumberBR(totalClientes)} clientes ativos que não compram há mais de 60 dias. Nesta visão executiva, você está visualizando os ${formatNumberBR(totalExibidos)} clientes mais quentes, com maior potencial de negócios e prioridade de reativação. As rotas mais afetadas são destacadas abaixo para apoiar o plano de ação imediato.`;
-      } else {
-        // Se forem iguais, usa o texto original ou versão simplificada
-        return resumoOriginal || `Foram identificados ${formatNumberBR(totalClientes)} clientes ativos que não compram há mais de 60 dias. As rotas mais afetadas são destacadas abaixo para apoiar o plano de ação imediato.`;
+    // Se for Q1-light mode, substitui o cabeçalho e concatena com o restante do LLM
+    if (isQ1LightMode && totalClientes > 0 && totalExibidos > 0) {
+      const cabecalho = `Foram identificados ${formatNumberBR(totalClientes)} clientes ativos que não compram há mais de 60 dias. Nesta visão executiva, você está visualizando os ${formatNumberBR(totalExibidos)} clientes mais quentes, com maior potencial de negócios e prioridade de reativação.`;
+      
+      if (!resumoLLM) {
+        return cabecalho;
       }
+      
+      // Remove frases que começam com "Foram identificados" do resumo do LLM para evitar duplicação
+      const resumoSemCabecalhoDuplicado = resumoLLM.replace(
+        /^Foram identificados.*?\.\s*/i,
+        ""
+      ).trim();
+      
+      // Concatena cabeçalho com o restante do resumo do LLM
+      return resumoSemCabecalhoDuplicado 
+        ? `${cabecalho} ${resumoSemCabecalhoDuplicado}`
+        : cabecalho;
     }
     
-    // Para outras intents, mantém o resumo original
-    return resumoOriginal;
-  }, [data, isQ1, totalClientes, totalExibidos]);
+    // Para outras intents, mantém o resumo original do LLM
+    return resumoLLM;
+  }, [data, isQ1LightMode, totalClientes, totalExibidos]);
 
   // Blocos complementares (insights, etc.) - ✅ CORREÇÃO: Renderização defensiva
   const blocosComplementares = useMemo(() => {
