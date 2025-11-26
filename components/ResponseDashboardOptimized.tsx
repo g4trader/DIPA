@@ -165,9 +165,24 @@ export const ResponseDashboardOptimized: React.FC<Props> = ({
   }, [isQ1, tabelaPrincipal, totalClientes, totalExibidos]);
 
   // Resumo executivo
+  // ✅ Q1 LIGHT MODE: Ajusta resumo para mencionar total real (932) e amostra (100)
   const resumoExecutivo = useMemo(() => {
-    return data.resumo_executivo || data.resumoExecutivo || "";
-  }, [data]);
+    const resumoOriginal = data.resumo_executivo || data.resumoExecutivo || "";
+    
+    // Se for Q1 e houver dados, substitui o resumo por versão dinâmica
+    if (isQ1 && totalClientes > 0 && totalExibidos > 0) {
+      // Se totalClientes > totalExibidos, estamos em modo LIGHT/partial
+      if (totalClientes > totalExibidos) {
+        return `Foram identificados ${formatNumberBR(totalClientes)} clientes ativos que não compram há mais de 60 dias. Nesta visão executiva, você está visualizando os ${formatNumberBR(totalExibidos)} clientes mais quentes, com maior potencial de negócios e prioridade de reativação. As rotas mais afetadas são destacadas abaixo para apoiar o plano de ação imediato.`;
+      } else {
+        // Se forem iguais, usa o texto original ou versão simplificada
+        return resumoOriginal || `Foram identificados ${formatNumberBR(totalClientes)} clientes ativos que não compram há mais de 60 dias. As rotas mais afetadas são destacadas abaixo para apoiar o plano de ação imediato.`;
+      }
+    }
+    
+    // Para outras intents, mantém o resumo original
+    return resumoOriginal;
+  }, [data, isQ1, totalClientes, totalExibidos]);
 
   // Blocos complementares (insights, etc.) - ✅ CORREÇÃO: Renderização defensiva
   const blocosComplementares = useMemo(() => {
