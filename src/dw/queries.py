@@ -602,9 +602,11 @@ def get_clientes_sem_compra_ha_dias_light(
             .group_by(base_cte.c.cliente_id)
         )
     
-    # ✅ Q1 LIGHT: Ordena por dias_sem_compra DESC (maior primeiro) e limita a N registros
-    # IMPORTANTE: Usa DESC para trazer os clientes com mais dias sem compra primeiro (mais críticos)
-    query = query.order_by(desc(text('dias_sem_compra'))).limit(limit)
+    # ✅ Q1 LIGHT: Ordena por dias_sem_compra ASC (menor primeiro) e limita a N registros
+    # IMPORTANTE: Usa ASC para priorizar clientes que acabaram de entrar na faixa de risco (61, 62, 63 dias)
+    # Esses são mais reativáveis e mais "vendáveis" em reuniões executivas
+    # cliente_id ASC como desempate para garantir ordem estável
+    query = query.order_by(asc(text('dias_sem_compra')), asc(text('cliente_id'))).limit(limit)
     
     # Executa query limitada
     resultados = list(query.all())

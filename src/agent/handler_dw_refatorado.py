@@ -540,8 +540,9 @@ def processar_pergunta_com_dw(
         resposta_executiva["contexto"]["dw_mode"] = dados_dw.get("dw_mode", "LIGHT")
         resposta_executiva["contexto"]["total_estimado"] = dados_dw.get("total_estimado", None)
         resposta_executiva["contexto"]["partial_message"] = (
-            "Esta visão utiliza uma amostra representativa de clientes "
-            "e um total estimado com base na última carga do DW (932 clientes)."
+            "Esta visão utiliza uma amostra representativa de 100 clientes ativos com mais de 60 dias sem compra, "
+            "priorizando aqueles que acabaram de entrar na faixa de risco (61, 62, 63 dias), "
+            "que são mais reativáveis. O total estimado é de 932 clientes com base na última carga do DW."
         )
         logger.info(
             f"[PERF_Q1] Resposta parcial marcada no handler: "
