@@ -281,10 +281,22 @@ def processar_pergunta_com_dw(
                         f"[Q1_ORQ] ✅ Payload: {clientes_unicos} clientes únicos"
                     )
         
+        # ✅ FALLBACK: Verifica se resposta é parcial
+        status_orquestrador = resultado_orquestrador.get("status")
+        is_partial = status_orquestrador == "partial"
+        
+        if is_partial:
+            logger.info(
+                f"[PERF_Q1] Resposta parcial detectada: {len(dados_orquestrador)} registros, "
+                f"total_estimado={resultado_orquestrador.get('total_estimado', 'N/A')}"
+            )
+        
         dados_dw = {
-            "status": resultado_orquestrador.get("status"),
+            "status": status_orquestrador,
             "dados": dados_orquestrador,
-            "tem_dados": resultado_orquestrador.get("status") == "ok" and len(dados_orquestrador) > 0,
+            "tem_dados": (status_orquestrador in ["ok", "partial"]) and len(dados_orquestrador) > 0,
+            "is_partial": is_partial,
+            "total_estimado": resultado_orquestrador.get("total_estimado", None),
             "analise_causas": resultado_orquestrador.get("analise_causas", {}),
             "causas_detector": resultado_orquestrador.get("causas_detector", {}),
             "tabela_por_rota": resultado_orquestrador.get("tabela_por_rota"),  # Tabela agregada por rota (Q1)
@@ -497,10 +509,28 @@ def processar_pergunta_com_dw(
         resposta_executiva["contexto"] = {}
     resposta_executiva["contexto"]["performance_metrics"] = perf_metrics
     
-    # ✅ PERFORMANCE: Cacheia resposta Q1 completa
-    if intent_spec.tipo == "clientes_sem_compra":
+    # ✅ FALLBACK: Adiciona informações de resposta parcial se aplicável
+    if dados_dw.get("is_partial"):
+        resposta_executiva["status"] = "partial"
+        resposta_executiva["contexto"]["is_partial"] = True
+        resposta_executiva["contexto"]["total_estimado"] = dados_dw.get("total_estimado", None)
+        resposta_executiva["contexto"]["partial_message"] = "Esta resposta é parcial e está sendo processada em background."
+        logger.info(
+            f"[PERF_Q1] Resposta parcial marcada no handler: "
+            f"total_estimado={dados_dw.get('total_estimado', 'N/A')}, "
+            f"registros={len(dados_dw.get('dados', []))}"
+        )
+    else:
+        resposta_executiva["status"] = "ok"
+        resposta_executiva["contexto"]["is_partial"] = False
+    
+    # ✅ PERFORMANCE: Cacheia resposta Q1 completa (apenas se não for parcial)
+    if intent_spec.tipo == "clientes_sem_compra" and not dados_dw.get("is_partial"):
         _set_q1_cached_response(cache_key, resposta_executiva, perf_metrics["total_ms"])
         resposta_executiva["contexto"]["q1_cached"] = False  # Esta resposta foi calculada, não veio do cache
+    elif intent_spec.tipo == "clientes_sem_compra" and dados_dw.get("is_partial"):
+        # Não cacheia respostas parciais
+        resposta_executiva["contexto"]["q1_cached"] = False
     
     # LOG CRÍTICO: Verifica se texto_completo_post_processor está presente
     texto_completo = resposta_executiva.get("texto_completo_post_processor", "")

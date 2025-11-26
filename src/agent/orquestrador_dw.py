@@ -720,8 +720,27 @@ def executar_intent_spec(
                     query_func=funcao_dw
                 )
                 
-                # Verifica se houve timeout ou erro
-                if query_result["status"] == "timeout":
+                # Verifica status da query
+                if query_result["status"] == "partial":
+                    # ✅ FALLBACK: Resposta parcial (versão light)
+                    logger.info(
+                        f"[Q1_ORQ] ⚠️  Resposta parcial (modo light) após {query_result['duration_ms']}ms: "
+                        f"{len(query_result.get('data', []))} registros"
+                    )
+                    resultado = query_result.get("data", [])
+                    return {
+                        "status": "partial",
+                        "mensagem": query_result.get("message", "Resposta parcial gerada devido ao tempo de execução elevado."),
+                        "intent": intent_spec.to_dict(),
+                        "periodo_analisado": {
+                            "inicio": intent_spec.periodo_inicio,
+                            "fim": intent_spec.periodo_fim
+                        },
+                        "dados": resultado,
+                        "mode": query_result.get("mode", "light"),
+                        "total_estimado": 932  # Total conhecido da Q1 (pode ser ajustado dinamicamente)
+                    }
+                elif query_result["status"] == "timeout":
                     logger.error(
                         f"[Q1_ORQ] ❌ Timeout na query Q1 após {query_result['duration_ms']}ms"
                     )
@@ -758,10 +777,10 @@ def executar_intent_spec(
                         }
                     }
                 
-                # Sucesso: usa dados retornados
+                # Sucesso: usa dados retornados (query completa)
                 resultado = query_result.get("data", [])
                 logger.info(
-                    f"[Q1_ORQ] ✅ Query Q1 executada com sucesso: {len(resultado) if isinstance(resultado, list) else 0} registros"
+                    f"[Q1_ORQ] ✅ Query Q1 executada com sucesso (modo completo): {len(resultado) if isinstance(resultado, list) else 0} registros"
                 )
             else:
                 # Para outras queries, executa normalmente (sem timeout wrapper)

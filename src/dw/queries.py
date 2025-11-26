@@ -334,11 +334,19 @@ def get_clientes_sem_compra_ha_dias(
     # Usa yield_per para otimizar memória
     resultados = list(query.yield_per(500))
     
+    return _processar_resultados_q1(resultados, dias, dias_minimo, query_id)
+
+
+def _processar_resultados_q1(resultados: List, dias: int, dias_minimo: int, query_id: str = "Q1") -> List[Dict[str, Any]]:
+    """
+    Processa resultados brutos da query Q1, convertendo para list[dict] e filtrando.
+    
+    Esta função é separada para permitir reutilização na versão light.
+    """
     start_time = time.time()
     
     # Converte para list[dict] e filtra para garantir >= 61 dias
     # IMPORTANTE: Filtro adicional para garantir que nenhum cliente com 0 dias seja retornado
-    dias_minimo = dias + 1  # "mais de 60 dias" = >= 61 dias
     clientes_filtrados = []
     
     # ✅ LOG CRÍTICO: Antes de filtrar
@@ -412,6 +420,198 @@ def get_clientes_sem_compra_ha_dias(
     logger.info(f"[get_clientes_sem_compra_ha_dias] Retornando {len(clientes_filtrados)} clientes filtrados (>= {dias_minimo} dias)")
     
     return clientes_filtrados
+
+
+@performance_guard(timeout_seconds=10.0)  # ✅ FALLBACK: Timeout menor para versão light
+@profile_query("Q1_LIGHT")
+def get_clientes_sem_compra_ha_dias_light(
+    session: Session,
+    dias: int = 60,
+    data_referencia: Optional[str] = None,
+    filtros_behavior: Optional[Dict[str, Any]] = None,
+    query_id: str = "Q1_LIGHT",
+    limit: int = 100
+) -> List[Dict[str, Any]]:
+    """
+    Versão light da query Q1 que retorna apenas os primeiros N registros.
+    
+    Usada como fallback quando a query completa demora mais de 8s.
+    Retorna amostra representativa para resposta executiva parcial.
+    
+    Args:
+        session: Sessão SQLAlchemy
+        dias: Número de dias sem compra (padrão: 60)
+        data_referencia: Data de referência (YYYY-MM-DD) ou None para hoje
+        filtros_behavior: Filtros adicionais do Behavior Memory
+        query_id: ID da query para logging
+        limit: Número máximo de registros a retornar (padrão: 100)
+        
+    Returns:
+        Lista de dicts com até `limit` clientes (mesma estrutura de get_clientes_sem_compra_ha_dias)
+    """
+    logger.info(f"[get_clientes_sem_compra_ha_dias_light] Executando versão light (limit={limit})")
+    
+    # Reutiliza a mesma lógica da query completa até o ponto de ordenação
+    # Data de referência
+    if data_referencia:
+        ref_date = datetime.strptime(data_referencia, "%Y-%m-%d").date()
+    else:
+        ref_date = datetime.now().date()
+    
+    # Subquery de última compra (mesma da query completa)
+    ultima_compra_subq = (
+        session.query(
+            Venda.cliente_id,
+            func.max(Venda.data_venda).label('data_ultima_compra')
+        )
+        .group_by(Venda.cliente_id)
+        .subquery()
+    )
+    
+    # Expressão de dias sem compra
+    if config.database.db_type == "sqlite":
+        dias_sem_compra_expr = case(
+            (ultima_compra_subq.c.data_ultima_compra.is_(None), None),
+            else_=func.julianday(text(f"DATE('{ref_date}')")) - func.julianday(ultima_compra_subq.c.data_ultima_compra)
+        )
+    else:  # PostgreSQL
+        dias_sem_compra_expr = case(
+            (ultima_compra_subq.c.data_ultima_compra.is_(None), None),
+            else_=func.extract('day', text(f"DATE('{ref_date}')") - ultima_compra_subq.c.data_ultima_compra)
+        )
+    
+    # Query base (mesma da query completa)
+    from sqlalchemy.orm import aliased
+    SupervisorViaVendedor = aliased(Supervisor, name='supervisor_via_vendedor')
+    
+    base_query = (
+        session.query(
+            Cliente.id.label('cliente_id'),
+            Cliente.nome,
+            Cliente.segmento_venda.label('segmento'),
+            Cliente.rota_rca.label('rota_id'),
+            Vendedor.nome.label('vendedor_nome'),
+            Vendedor.codigo.label('vendedor_codigo'),
+            func.coalesce(
+                Supervisor.nome,
+                SupervisorViaVendedor.nome
+            ).label('supervisor_nome'),
+            func.coalesce(
+                Supervisor.codigo,
+                SupervisorViaVendedor.codigo
+            ).label('supervisor_codigo'),
+            ultima_compra_subq.c.data_ultima_compra,
+            dias_sem_compra_expr.label('dias_sem_compra')
+        )
+        .outerjoin(ultima_compra_subq, Cliente.id == ultima_compra_subq.c.cliente_id)
+        .outerjoin(Vendedor, Cliente.rota_rca == Vendedor.nome)
+        .outerjoin(Supervisor, Cliente.supervisor_id == Supervisor.id)
+        .outerjoin(
+            SupervisorViaVendedor,
+            Vendedor.supervisor_id == SupervisorViaVendedor.id
+        )
+        .filter(Cliente.ativo == True)
+    )
+    
+    # Aplica filtros do Behavior Memory
+    if filtros_behavior:
+        if "excluir_pastas" in filtros_behavior:
+            pastas_excluir = filtros_behavior["excluir_pastas"]
+            if isinstance(pastas_excluir, list) and pastas_excluir:
+                base_query = base_query.join(Supervisor, Cliente.supervisor_id == Supervisor.id)
+                base_query = base_query.filter(~Supervisor.pasta.in_(pastas_excluir))
+        
+        if "excluir_segmentos" in filtros_behavior:
+            segmentos_excluir = filtros_behavior["excluir_segmentos"]
+            if isinstance(segmentos_excluir, list) and segmentos_excluir:
+                base_query = base_query.filter(~Cliente.segmento_venda.in_(segmentos_excluir))
+    
+    # Filtra por dias sem compra
+    dias_minimo = dias + 1
+    
+    if config.database.db_type == "sqlite":
+        diff_expr = func.julianday(text(f"DATE('{ref_date}')")) - func.julianday(ultima_compra_subq.c.data_ultima_compra)
+    else:
+        diff_expr = func.extract('day', text(f"DATE('{ref_date}')") - ultima_compra_subq.c.data_ultima_compra)
+    
+    base_query = base_query.filter(
+        and_(
+            ultima_compra_subq.c.data_ultima_compra.isnot(None),
+            diff_expr >= dias_minimo
+        )
+    )
+    
+    # CTE base
+    base_cte = base_query.cte(name='base_clientes_light')
+    
+    # Agrega por cliente (mesma lógica da query completa)
+    if config.database.db_type == "sqlite":
+        query = (
+            session.query(
+                base_cte.c.cliente_id,
+                func.max(base_cte.c.nome).label('nome'),
+                func.max(base_cte.c.segmento).label('segmento'),
+                func.max(base_cte.c.rota_id).label('rota_id'),
+                func.group_concat(
+                    base_cte.c.vendedor_nome,
+                    text("'\n'")
+                ).label('vendedor_nome'),
+                func.group_concat(
+                    base_cte.c.vendedor_codigo,
+                    text("'\n'")
+                ).label('vendedor_codigo'),
+                func.group_concat(
+                    base_cte.c.supervisor_nome,
+                    text("'\n'")
+                ).label('supervisor_nome'),
+                func.group_concat(
+                    base_cte.c.supervisor_codigo,
+                    text("'\n'")
+                ).label('supervisor_codigo'),
+                func.max(base_cte.c.data_ultima_compra).label('data_ultima_compra'),
+                func.max(base_cte.c.dias_sem_compra).label('dias_sem_compra')
+            )
+            .group_by(base_cte.c.cliente_id)
+        )
+    else:  # PostgreSQL
+        query = (
+            session.query(
+                base_cte.c.cliente_id,
+                func.max(base_cte.c.nome).label('nome'),
+                func.max(base_cte.c.segmento).label('segmento'),
+                func.max(base_cte.c.rota_id).label('rota_id'),
+                func.string_agg(
+                    func.distinct(base_cte.c.vendedor_nome),
+                    text("E'\\n'")
+                ).label('vendedor_nome'),
+                func.string_agg(
+                    func.distinct(base_cte.c.vendedor_codigo),
+                    text("E'\\n'")
+                ).label('vendedor_codigo'),
+                func.string_agg(
+                    func.distinct(base_cte.c.supervisor_nome),
+                    text("E'\\n'")
+                ).label('supervisor_nome'),
+                func.string_agg(
+                    func.distinct(base_cte.c.supervisor_codigo),
+                    text("E'\\n'")
+                ).label('supervisor_codigo'),
+                func.max(base_cte.c.data_ultima_compra).label('data_ultima_compra'),
+                func.max(base_cte.c.dias_sem_compra).label('dias_sem_compra')
+            )
+            .group_by(base_cte.c.cliente_id)
+        )
+    
+    # ✅ FALLBACK: Ordena e limita a N registros
+    query = query.order_by(asc(text('dias_sem_compra'))).limit(limit)
+    
+    # Executa query limitada
+    resultados = list(query.all())
+    
+    logger.info(f"[get_clientes_sem_compra_ha_dias_light] Query light retornou {len(resultados)} registros")
+    
+    # Processa resultados usando a mesma função auxiliar
+    return _processar_resultados_q1(resultados, dias, dias_minimo, query_id)
 
 
 def get_clientes_sem_compra_por_rota(
