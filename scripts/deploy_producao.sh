@@ -109,7 +109,7 @@ DEPLOY_CMD="gcloud run deploy ${SERVICE_NAME} \
   --allow-unauthenticated \
   --min-instances 1 \
   --max-instances 3 \
-  --memory 4Gi \
+  --memory 8Gi \
   --cpu 2 \
   --timeout=300 \
   --port 8080 \
